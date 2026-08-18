@@ -1,0 +1,216 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../apps/api/src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum WorkspaceType {
+  PERSONAL
+  TEAM
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+enum FormStatus {
+  DRAFT
+  PENDING_REVIEW
+  CHANGES_REQUESTED
+  APPROVED
+  PUBLISHED
+  CLOSED
+  ARCHIVED
+}
+
+model User {
+  id                  String    @id @default(cuid())
+  name                String
+  email               String    @unique
+  passwordHash        String
+  avatarUrl           String?
+  emailVerified       Boolean   @default(false)
+  verifyToken         String?
+  verifyTokenExpiry   DateTime?
+  resetToken          String?
+  resetTokenExpiry    DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  sessions      Session[]
+  memberships   WorkspaceMember[]
+  workspaces    Workspace[]       @relation("WorkspaceOwner")
+  forms         Form[]
+  responses     FormResponse[]
+  notifications Notification[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Workspace {
+  id        String        @id @default(cuid())
+  name      String
+  slug      String        @unique
+  type      WorkspaceType @default(PERSONAL)
+  ownerId   String
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  owner   User              @relation("WorkspaceOwner", fields: [ownerId], references: [id])
+  members WorkspaceMember[]
+  folders Folder[]
+  forms   Form[]
+
+  @@index([ownerId])
+}
+
+model WorkspaceMember {
+  id          String        @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        WorkspaceRole @default(VIEWER)
+  joinedAt    DateTime      @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+}
+
+model Folder {
+  id          String   @id @default(cuid())
+  workspaceId String
+  parentId    String?
+  name        String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  parent    Folder?   @relation("FolderTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children  Folder[]  @relation("FolderTree")
+  forms     Form[]
+
+  @@index([workspaceId])
+  @@index([parentId])
+}
+
+model Form {
+  id          String     @id @default(cuid())
+  workspaceId String
+  folderId    String?
+  ownerId     String
+  title       String
+  description String?
+  slug        String     @unique
+  status      FormStatus @default(DRAFT)
+  schema      Json
+  version     Int        @default(1)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  deletedAt   DateTime?
+
+  workspace Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  folder    Folder?        @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  owner     User           @relation(fields: [ownerId], references: [id])
+  responses FormResponse[]
+  versions  FormVersion[]
+
+  @@index([workspaceId])
+  @@index([folderId])
+  @@index([ownerId])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+model FormVersion {
+  id            String   @id @default(cuid())
+  formId        String
+  versionNumber Int
+  schema        Json
+  title         String
+  description   String?
+  createdBy     String
+  createdAt     DateTime @default(now())
+  publishedAt   DateTime?
+
+  form Form @relation(fields: [formId], references: [id], onDelete: Cascade)
+
+  @@unique([formId, versionNumber])
+  @@index([formId])
+}
+
+model FormResponse {
+  id           String   @id @default(cuid())
+  formId       String
+  respondentId String?
+  answers      Json
+  metadata     Json?
+  submittedAt  DateTime @default(now())
+
+  form       Form  @relation(fields: [formId], references: [id], onDelete: Cascade)
+  respondent User? @relation(fields: [respondentId], references: [id], onDelete: SetNull)
+
+  @@index([formId])
+  @@index([respondentId])
+  @@index([submittedAt])
+}
+
+enum NotificationType {
+  FORM_SUBMITTED_FOR_REVIEW
+  FORM_APPROVED
+  FORM_CHANGES_REQUESTED
+  FORM_REJECTED
+  FORM_PUBLISHED
+  MEMBER_INVITED
+  MEMBER_REMOVED
+  RESPONSE_MILESTONE
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String
+  read      Boolean          @default(false)
+  metadata  Json?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+  @@index([userId, createdAt])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  workspaceId String
+  userId      String
+  action      String
+  entityType  String
+  entityId    String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, createdAt])
+  @@index([userId])
+  @@index([entityType, entityId])
+}

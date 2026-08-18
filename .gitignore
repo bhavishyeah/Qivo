@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+apps/web/dist/
+apps/api/dist/
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Generated
+apps/api/src/generated/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Misc
+pwa-search-results.txt

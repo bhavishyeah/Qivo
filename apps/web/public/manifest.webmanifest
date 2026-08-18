@@ -1,0 +1,10 @@
+﻿{
+  "name": "Qivo Forms",
+  "short_name": "Qivo",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f7fb",
+  "theme_color": "#2563eb",
+  "description": "Create, publish, and manage Qivo forms.",
+  "icons": []
+}
