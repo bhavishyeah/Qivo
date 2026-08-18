@@ -343,7 +343,6 @@ export default function FormEditorPage() {
   if (!form) return null;
 
   // Determine which action buttons to show based on form status
-  const canEdit = form.status === "DRAFT" || form.status === "CHANGES_REQUESTED";
   const canSubmitForReview = form.status === "DRAFT" || form.status === "CHANGES_REQUESTED";
   const canReview = form.status === "PENDING_REVIEW";
   const canPublish = form.status === "APPROVED" || form.status === "DRAFT";

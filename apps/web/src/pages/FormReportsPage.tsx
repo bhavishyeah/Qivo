@@ -8,23 +8,9 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
 } from "recharts";
 import { api, ApiRequestError } from "../lib/api";
 import type { FormRecord, Question, ResponseRecord } from "../types";
-
-const COLORS = [
-  "#2563eb",
-  "#16a34a",
-  "#f59e0b",
-  "#ef4444",
-  "#8b5cf6",
-  "#06b6d4",
-  "#ec4899",
-  "#84cc16",
-];
 
 export default function FormReportsPage() {
   const { formId } = useParams<{ formId: string }>();
@@ -265,7 +251,6 @@ function QuestionAnalytics({
 function ChoiceChart({
   question,
   answers,
-  totalResponses,
   skipCount,
 }: {
   question: Question;
@@ -291,7 +276,7 @@ function ChoiceChart({
     .map(([name, count]) => ({
       name: name.length > 25 ? name.slice(0, 22) + "..." : name,
       count,
-      percentage: totalResponses > 0 ? Math.round((count / answers.length) * 100) : 0,
+      percentage: answers.length > 0 ? Math.round((count / answers.length) * 100) : 0,
     }))
     .sort((a, b) => b.count - a.count);
 
@@ -315,7 +300,7 @@ function ChoiceChart({
               <XAxis type="number" />
               <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 12 }} />
               <Tooltip
-                formatter={(value: number) => [`${value} responses`, "Count"]}
+                formatter={(value) => [`${value} responses`, "Count"]}
               />
               <Bar dataKey="count" fill="#2563eb" radius={[0, 6, 6, 0]} />
             </BarChart>
@@ -349,7 +334,6 @@ function ChoiceChart({
 function RatingChart({
   question,
   answers,
-  totalResponses,
   skipCount,
 }: {
   question: Question;
@@ -404,7 +388,7 @@ function RatingChart({
               <XAxis dataKey="rating" />
               <YAxis allowDecimals={false} />
               <Tooltip
-                formatter={(value: number) => [`${value} responses`, "Count"]}
+                formatter={(value) => [`${value} responses`, "Count"]}
               />
               <Bar dataKey="count" fill="#2563eb" radius={[6, 6, 0, 0]} />
             </BarChart>
