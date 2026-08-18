@@ -1,4 +1,13 @@
-﻿import "dotenv/config";
+﻿import { config } from "dotenv";
+import { resolve } from "node:path";
+import { existsSync } from "node:fs";
+
+const envPath = existsSync(resolve(process.cwd(), ".env"))
+  ? resolve(process.cwd(), ".env")
+  : resolve(process.cwd(), "../../.env");
+
+config({ path: envPath });
+
 import app from "./app.js";
 
 const port = Number(process.env.PORT ?? 3000);

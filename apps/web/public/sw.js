@@ -41,7 +41,11 @@ self.addEventListener("fetch", (event) => {
   // For navigation requests, serve index.html (SPA routing)
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request).catch(() => caches.match("/") || new Response("Offline")),
+      fetch(request).catch(() =>
+        caches.match("/").then((cached) =>
+          cached || new Response("Offline", { status: 503, headers: { "Content-Type": "text/html" } })
+        )
+      ),
     );
     return;
   }
@@ -57,7 +61,11 @@ self.addEventListener("fetch", (event) => {
         }
         return response;
       })
-      .catch(() => caches.match(request)),
+      .catch(() =>
+        caches.match(request).then((cached) =>
+          cached || new Response("Offline", { status: 503 })
+        )
+      ),
   );
 });
 
