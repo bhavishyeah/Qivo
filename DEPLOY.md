@@ -29,8 +29,8 @@ git push origin main
 3. Select your `Qivo` repository
 4. In the service settings:
    - **Root Directory**: leave empty (deploy from repo root)
-   - **Build Command**: `pnpm install && pnpm exec prisma generate && cd apps/api && pnpm exec tsc --outDir dist`
-   - **Start Command**: `pnpm exec prisma migrate deploy && cd apps/api && node dist/server.js`
+   - **Build Command**: `pnpm install && pnpm exec prisma generate && pnpm --filter api exec tsc`
+   - **Start Command**: `pnpm exec prisma migrate deploy && node apps/api/dist/server.js`
 5. Click **"New"** → **"Database"** → **"Add PostgreSQL"**
 6. Railway auto-sets `DATABASE_URL`. Add these **additional variables**:
 
