@@ -2,11 +2,16 @@
 import { resolve } from "node:path";
 import { existsSync } from "node:fs";
 
-const envPath = existsSync(resolve(process.cwd(), ".env"))
-  ? resolve(process.cwd(), ".env")
-  : resolve(process.cwd(), "../../.env");
+// Only load .env file in development (Railway injects env vars directly)
+if (!process.env.DATABASE_URL) {
+  const envPath = existsSync(resolve(process.cwd(), ".env"))
+    ? resolve(process.cwd(), ".env")
+    : resolve(process.cwd(), "../../.env");
 
-config({ path: envPath });
+  if (existsSync(envPath)) {
+    config({ path: envPath });
+  }
+}
 
 import app from "./app.js";
 
