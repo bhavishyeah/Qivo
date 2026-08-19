@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api, ApiRequestError } from "../lib/api";
+import { api, ApiRequestError, setToken } from "../lib/api";
 
 export default function SignupPage() {
   const navigate = useNavigate();
@@ -17,12 +17,12 @@ export default function SignupPage() {
     setLoading(true);
 
     try {
-      await api.post("/api/auth/signup", {
+      const data = await api.post<{ token: string }>("/api/auth/signup", {
         name: name.trim(),
         email: email.trim().toLowerCase(),
         password,
       });
-
+      setToken(data.token);
       navigate("/dashboard");
     } catch (err) {
       setError(

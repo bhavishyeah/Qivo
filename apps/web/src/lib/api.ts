@@ -26,16 +26,37 @@ export class ApiRequestError extends Error {
   }
 }
 
+// Session token stored in memory + localStorage for persistence
+let sessionToken: string | null = localStorage.getItem("qivo_token");
+
+export function setToken(token: string | null) {
+  sessionToken = token;
+  if (token) {
+    localStorage.setItem("qivo_token", token);
+  } else {
+    localStorage.removeItem("qivo_token");
+  }
+}
+
+export function getToken(): string | null {
+  return sessionToken;
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(options.headers as Record<string, string> ?? {}),
+  };
+
+  if (sessionToken) {
+    headers["Authorization"] = `Bearer ${sessionToken}`;
+  }
+
   const response = await fetch(`${API_BASE_URL}${path}`, {
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...options.headers,
-    },
+    headers,
     ...options,
   });
 
@@ -43,6 +64,12 @@ async function request<T>(
 
   if (!response.ok || !body.success) {
     const err = body as ApiError;
+
+    // If 401, clear the token
+    if (response.status === 401) {
+      setToken(null);
+    }
+
     throw new ApiRequestError(
       err.error?.code ?? "UNKNOWN",
       err.error?.message ?? "Something went wrong.",
@@ -76,7 +103,7 @@ export const api = {
   },
 };
 
-// Public API (no auth cookie needed, no content-type default)
+// Public API (no auth token needed)
 export async function publicGet<T>(path: string): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: "GET",

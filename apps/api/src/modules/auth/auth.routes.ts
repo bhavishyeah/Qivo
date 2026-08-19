@@ -61,6 +61,7 @@ authRouter.post("/signup", async (req, res, next) => {
     res.status(201).json({
       success: true,
       data: {
+        token: result.sessionToken,
         user: result.user,
         workspace: result.workspace,
       },
@@ -80,6 +81,7 @@ authRouter.post("/login", async (req, res, next) => {
     res.json({
       success: true,
       data: {
+        token: result.sessionToken,
         user: result.user,
         workspace: result.workspace,
       },

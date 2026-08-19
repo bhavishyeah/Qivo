@@ -22,7 +22,15 @@ export async function requireAuth(
   next: NextFunction,
 ) {
   try {
-    const token = req.cookies?.qivo_session;
+    // Accept token from cookie OR Authorization header
+    let token = req.cookies?.qivo_session;
+
+    if (!token) {
+      const authHeader = req.get("Authorization");
+      if (authHeader?.startsWith("Bearer ")) {
+        token = authHeader.slice(7);
+      }
+    }
 
     if (!token) {
       res.status(401).json({
