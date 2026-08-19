@@ -1,7 +1,5 @@
 import type { CookieOptions } from "express";
 
-const isProduction = process.env.NODE_ENV === "production";
-
 /**
  * Cookie configuration for session tokens.
  *
@@ -11,6 +9,7 @@ const isProduction = process.env.NODE_ENV === "production";
  * In development (same localhost), sameSite: "lax" is fine.
  */
 export function getSessionCookieOptions(): CookieOptions {
+  const isProduction = process.env.NODE_ENV === "production";
   const maxAge = Number(process.env.SESSION_DAYS || 30) * 24 * 60 * 60 * 1000;
 
   if (isProduction) {
@@ -33,6 +32,8 @@ export function getSessionCookieOptions(): CookieOptions {
 }
 
 export function getClearCookieOptions(): CookieOptions {
+  const isProduction = process.env.NODE_ENV === "production";
+
   if (isProduction) {
     return {
       httpOnly: true,
