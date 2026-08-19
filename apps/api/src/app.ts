@@ -23,6 +23,11 @@ import workspaceRouter from "./modules/workspaces/workspace.routes.js";
 
 const app: Express = express();
 
+// Trust proxy in production (Railway, Render, etc. sit behind a reverse proxy)
+if (process.env.NODE_ENV === "production") {
+  app.set("trust proxy", 1);
+}
+
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 100,
