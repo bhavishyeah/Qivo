@@ -35,6 +35,9 @@ self.addEventListener("fetch", (event) => {
   // Skip non-GET requests
   if (request.method !== "GET") return;
 
+  // Skip cross-origin requests (API calls to different domain)
+  if (url.origin !== self.location.origin) return;
+
   // Skip API calls — always go to network
   if (url.pathname.startsWith("/api")) return;
 
