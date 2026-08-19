@@ -1179,3 +1179,157 @@ form {
   color: #dc2626;
   background: #fef2f2;
 }
+
+
+/* App Navigation */
+.app-layout {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.app-nav-inner {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 12px 24px;
+}
+
+.app-nav-brand {
+  color: #2563eb;
+  font-size: 1.2rem;
+  font-weight: 900;
+  text-decoration: none;
+  letter-spacing: -0.03em;
+}
+
+.app-nav-links {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+}
+
+.app-nav-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 8px;
+  color: #64748b;
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.app-nav-link:hover {
+  background: #f1f5f9;
+  color: #1e293b;
+}
+
+.app-nav-link.active {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.app-nav-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ef4444;
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+}
+
+.app-nav-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.app-nav-logout {
+  border: 0;
+  background: none;
+  color: #64748b;
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 6px;
+}
+
+.app-nav-logout:hover {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.app-content {
+  flex: 1;
+}
+
+/* Skeleton loading */
+.skeleton-block {
+  background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s infinite;
+  border-radius: 8px;
+  height: 16px;
+}
+
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.skeleton-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  padding: 24px;
+  background: #ffffff;
+}
+
+/* Mobile nav */
+@media (max-width: 768px) {
+  .app-nav-inner {
+    padding: 10px 16px;
+    gap: 12px;
+  }
+
+  .app-nav-links {
+    gap: 2px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .app-nav-links::-webkit-scrollbar {
+    display: none;
+  }
+
+  .app-nav-link {
+    padding: 6px 10px;
+    font-size: 0.82rem;
+    white-space: nowrap;
+  }
+
+  .app-nav-user {
+    display: none;
+  }
+}

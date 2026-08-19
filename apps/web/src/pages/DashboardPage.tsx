@@ -17,7 +17,6 @@ export default function DashboardPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [sortBy, setSortBy] = useState<SortOption>("updatedAt");
-  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     async function loadDashboard() {
@@ -39,16 +38,6 @@ export default function DashboardPage() {
         );
 
         setForms(formsData.forms);
-
-        // Fetch unread notification count
-        try {
-          const notifData = await api.get<{ count: number }>(
-            "/api/notifications/unread-count",
-          );
-          setUnreadCount(notifData.count);
-        } catch {
-          // Non-critical
-        }
       } catch (err) {
         setError(
           err instanceof ApiRequestError
@@ -126,49 +115,14 @@ export default function DashboardPage() {
           <p className="muted">Create and manage your Qivo forms.</p>
         </div>
 
-        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-          <Link
-            className="secondary-button"
-            to="/notifications"
-            style={{ position: "relative" }}
-          >
-            Notifications
-            {unreadCount > 0 ? (
-              <span
-                style={{
-                  position: "absolute",
-                  top: -6,
-                  right: -6,
-                  width: 20,
-                  height: 20,
-                  borderRadius: "50%",
-                  background: "#ef4444",
-                  color: "#fff",
-                  fontSize: "0.7rem",
-                  fontWeight: 800,
-                  display: "grid",
-                  placeItems: "center",
-                }}
-              >
-                {unreadCount > 9 ? "9+" : unreadCount}
-              </span>
-            ) : null}
-          </Link>
-          <Link className="secondary-button" to="/folders">
-            Folders
-          </Link>
-          <Link className="secondary-button" to="/team">
-            Team
-          </Link>
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={() => navigate("/forms/new")}
-            style={{ background: "#2563eb", color: "#fff", border: "none" }}
-          >
-            + New form
-          </button>
-        </div>
+        <button
+          className="secondary-button"
+          type="button"
+          onClick={() => navigate("/forms/new")}
+          style={{ background: "#2563eb", color: "#fff", border: "none" }}
+        >
+          + New form
+        </button>
       </header>
 
       {error ? (
