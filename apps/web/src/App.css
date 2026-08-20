@@ -1333,3 +1333,19 @@ form {
     display: none;
   }
 }
+
+
+/* Drag and drop */
+.editor-question[draggable="true"] {
+  transition: transform 150ms ease, box-shadow 150ms ease;
+}
+
+.editor-question[draggable="true"]:hover {
+  box-shadow: 0 4px 20px rgb(37 99 235 / 12%);
+}
+
+.editor-question.drag-over {
+  border: 2px dashed #2563eb !important;
+  background: #eff6ff !important;
+  transform: scale(1.01);
+}
