@@ -26,10 +26,12 @@ import {
   createForm,
   createQuestion,
   deleteForm,
+  deleteFormResponse,
   deleteQuestion,
   duplicateForm,
   getForm,
   getFormResponse,
+  getFormResponseCount,
   getPublicForm,
   listFormResponses,
   listFormVersions,
@@ -709,43 +711,60 @@ formRouter.get(
   async (req: AuthenticatedRequest, res, next) => {
     try {
       if (!req.user) {
-        res.status(401).json({
-          success: false,
-          error: {
-            code: "UNAUTHENTICATED",
-            message: "Authentication is required.",
-          },
-        });
+        res.status(401).json({ success: false, error: { code: "UNAUTHENTICATED", message: "Authentication is required." } });
         return;
       }
-
       const { formId, responseId } = req.params;
-
-      if (
-        typeof formId !== "string" ||
-        typeof responseId !== "string"
-      ) {
-        res.status(400).json({
-          success: false,
-          error: {
-            code: "INVALID_RESPONSE_ID",
-            message:
-              "Valid form and response IDs are required.",
-          },
-        });
+      if (typeof formId !== "string" || typeof responseId !== "string") {
+        res.status(400).json({ success: false, error: { code: "INVALID_RESPONSE_ID", message: "Valid form and response IDs are required." } });
         return;
       }
+      const response = await getFormResponse(formId, responseId, req.user.id);
+      res.json({ success: true, data: { response } });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
-      const response = await getFormResponse(
-        formId,
-        responseId,
-        req.user.id,
-      );
+formRouter.delete(
+  "/:formId/responses/:responseId",
+  requireAuth,
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: { code: "UNAUTHENTICATED", message: "Authentication is required." } });
+        return;
+      }
+      const { formId, responseId } = req.params;
+      if (typeof formId !== "string" || typeof responseId !== "string") {
+        res.status(400).json({ success: false, error: { code: "INVALID_RESPONSE_ID", message: "Valid form and response IDs are required." } });
+        return;
+      }
+      await deleteFormResponse(formId, responseId, req.user.id);
+      res.json({ success: true, data: { message: "Response deleted." } });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
-      res.json({
-        success: true,
-        data: { response },
-      });
+formRouter.get(
+  "/:formId/responses-count",
+  requireAuth,
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: { code: "UNAUTHENTICATED", message: "Authentication is required." } });
+        return;
+      }
+      const formId = req.params.formId;
+      if (typeof formId !== "string") {
+        res.status(400).json({ success: false, error: { code: "INVALID_FORM_ID", message: "A valid form ID is required." } });
+        return;
+      }
+      const count = await getFormResponseCount(formId, req.user.id);
+      res.json({ success: true, data: { count } });
     } catch (error) {
       next(error);
     }

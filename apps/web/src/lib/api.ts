@@ -65,9 +65,10 @@ async function request<T>(
   if (!response.ok || !body.success) {
     const err = body as ApiError;
 
-    // If 401, clear the token
+    // If 401, clear the token and dispatch a custom event
     if (response.status === 401) {
       setToken(null);
+      window.dispatchEvent(new CustomEvent("qivo:session-expired"));
     }
 
     throw new ApiRequestError(

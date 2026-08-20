@@ -1349,3 +1349,176 @@ form {
   background: #eff6ff !important;
   transform: scale(1.01);
 }
+
+
+/* ── Public Form Shell ─────────────────────────────────────────────────────── */
+
+.public-form-shell {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, #dbeafe, transparent 40%),
+    radial-gradient(circle at bottom right, #f0fdf4, transparent 40%),
+    #f4f7fb;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 40px 16px 80px;
+}
+
+.public-form-wrap {
+  width: min(100%, 680px);
+}
+
+.public-form-loading {
+  width: min(100%, 680px);
+  background: #ffffff;
+  border-radius: 20px;
+  padding: 40px;
+  box-shadow: 0 16px 60px rgb(30 64 175 / 8%);
+}
+
+/* Progress bar */
+.public-progress-bar {
+  height: 6px;
+  background: #e2e8f0;
+  border-radius: 999px;
+  margin-bottom: 28px;
+  overflow: hidden;
+}
+
+.public-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #2563eb, #3b82f6);
+  border-radius: 999px;
+  transition: width 400ms ease;
+}
+
+/* Header */
+.public-form-header {
+  margin-bottom: 8px;
+}
+
+.public-form-title {
+  margin: 8px 0 12px;
+  color: #111827;
+  font-size: clamp(1.6rem, 5vw, 2.5rem);
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+}
+
+.public-form-description {
+  color: #64748b;
+  font-size: 1rem;
+  line-height: 1.65;
+  margin: 0 0 8px;
+}
+
+.public-section-counter {
+  color: #2563eb;
+  font-size: 0.82rem;
+  font-weight: 700;
+  margin: 0 0 20px;
+}
+
+/* Form body */
+.public-form-body {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  padding: 32px;
+  box-shadow: 0 16px 60px rgb(30 64 175 / 8%);
+  margin-bottom: 16px;
+}
+
+.public-section {
+  display: grid;
+  gap: 4px;
+}
+
+/* Navigation buttons */
+.public-form-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+/* Status cards */
+.public-status-card {
+  width: min(100%, 520px);
+  margin: 80px auto;
+  background: #ffffff;
+  border-radius: 24px;
+  padding: 48px 40px;
+  box-shadow: 0 24px 80px rgb(30 64 175 / 10%);
+  border: 1px solid #e2e8f0;
+  text-align: center;
+}
+
+.public-status-icon {
+  font-size: 3rem;
+  margin-bottom: 16px;
+  line-height: 1;
+}
+
+.public-status-card h1 {
+  margin: 0 0 12px;
+  color: #111827;
+  font-size: clamp(1.6rem, 4vw, 2.2rem);
+  letter-spacing: -0.04em;
+}
+
+.public-status-card p {
+  color: #64748b;
+  line-height: 1.65;
+  margin: 0 0 8px;
+}
+
+.public-status-error {
+  border-color: #fecaca;
+}
+
+.public-status-success {
+  border-color: #bbf7d0;
+}
+
+.public-status-brand,
+.public-form-brand {
+  color: #cbd5e1;
+  font-size: 0.75rem;
+  text-align: center;
+  margin: 0;
+}
+
+/* Rating labels */
+.rating-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  color: #94a3b8;
+  font-size: 0.75rem;
+}
+
+/* Mobile adjustments */
+@media (max-width: 640px) {
+  .public-form-shell {
+    padding: 20px 12px 60px;
+  }
+
+  .public-form-body {
+    padding: 24px 20px;
+    border-radius: 16px;
+  }
+
+  .public-status-card {
+    margin: 40px auto;
+    padding: 32px 24px;
+    border-radius: 18px;
+  }
+
+  .public-form-nav {
+    flex-direction: row;
+    gap: 10px;
+  }
+}

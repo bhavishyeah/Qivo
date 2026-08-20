@@ -54,14 +54,14 @@ export default function ResponseDashboardPage() {
 
   const [form, setForm] = useState<FormRecord | null>(null);
   const [responses, setResponses] = useState<ResponseRecord[]>([]);
-  const [selectedResponse, setSelectedResponse] = useState<ResponseRecord | null>(
-    null,
-  );
+  const [totalCount, setTotalCount] = useState<number | null>(null);
+  const [selectedResponse, setSelectedResponse] = useState<ResponseRecord | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [cursorHistory, setCursorHistory] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Derive questions from form state (fixed — was using form before declaration)
   const questions =
@@ -92,7 +92,13 @@ export default function ResponseDashboardPage() {
         ),
       ]);
 
-      if (formData) setForm(formData.form);
+      if (formData) {
+        setForm(formData.form);
+        // Fetch total count alongside form load
+        api.get<{ count: number }>(`/api/forms/${formId}/responses-count`)
+          .then((data) => setTotalCount(data.count))
+          .catch(() => { /* non-critical */ });
+      }
       setResponses(responsesData.responses);
       setNextCursor(responsesData.nextCursor ?? null);
     } catch (err) {
@@ -140,6 +146,21 @@ export default function ResponseDashboardPage() {
         : undefined;
     setCursorHistory(previousHistory);
     await loadResponses(previousCursor);
+  }
+
+  async function deleteResponse(responseId: string) {
+    if (!formId) return;
+    setDeletingId(responseId);
+    try {
+      await api.delete(`/api/forms/${formId}/responses/${responseId}`);
+      setResponses((current) => current.filter((r) => r.id !== responseId));
+      setTotalCount((c) => (c !== null ? c - 1 : c));
+      if (selectedResponse?.id === responseId) setSelectedResponse(null);
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : "Unable to delete response.");
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   if (loading) {
@@ -207,7 +228,11 @@ export default function ResponseDashboardPage() {
 
       <section className="response-summary">
         <div>
-          <span className="summary-label">Responses on this page</span>
+          <span className="summary-label">Total responses</span>
+          <strong>{totalCount ?? "—"}</strong>
+        </div>
+        <div>
+          <span className="summary-label">Showing</span>
           <strong>{responses.length}</strong>
         </div>
         <div>
@@ -226,20 +251,35 @@ export default function ResponseDashboardPage() {
         ) : (
           <div className="response-list">
             {responses.map((response) => (
-              <button
-                className="response-row"
-                type="button"
+              <div
                 key={response.id}
-                onClick={() => void openResponse(response.id)}
+                style={{ display: "flex", alignItems: "center", gap: 8 }}
               >
-                <span>
-                  <strong>
-                    {new Date(response.submittedAt).toLocaleString()}
-                  </strong>
-                  <small>{response.id}</small>
-                </span>
-                <span className="response-arrow">View →</span>
-              </button>
+                <button
+                  className="response-row"
+                  type="button"
+                  style={{ flex: 1 }}
+                  onClick={() => void openResponse(response.id)}
+                >
+                  <span>
+                    <strong>
+                      {new Date(response.submittedAt).toLocaleString()}
+                    </strong>
+                    <small>{response.id}</small>
+                  </span>
+                  <span className="response-arrow">View →</span>
+                </button>
+                <button
+                  type="button"
+                  className="danger-button"
+                  style={{ flexShrink: 0, padding: "8px 10px", fontSize: "0.78rem" }}
+                  disabled={deletingId === response.id}
+                  onClick={() => void deleteResponse(response.id)}
+                  title="Delete response"
+                >
+                  {deletingId === response.id ? "..." : "Delete"}
+                </button>
+              </div>
             ))}
           </div>
         )}

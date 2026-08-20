@@ -3,13 +3,15 @@ import { Link, useNavigate } from "react-router-dom";
 import { api, ApiRequestError } from "../lib/api";
 import type { FormRecord, WorkspaceRecord } from "../types";
 
+type FormWithCount = FormRecord & { responseCount?: number };
+
 type SortOption = "updatedAt" | "createdAt" | "title";
 type StatusFilter = "ALL" | "DRAFT" | "PENDING_REVIEW" | "PUBLISHED" | "CLOSED" | "ARCHIVED";
 
 export default function DashboardPage() {
   const navigate = useNavigate();
 
-  const [forms, setForms] = useState<FormRecord[]>([]);
+  const [forms, setForms] = useState<FormWithCount[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -38,6 +40,17 @@ export default function DashboardPage() {
         );
 
         setForms(formsData.forms);
+
+        // Load response counts in background (non-blocking)
+        formsData.forms.forEach((form) => {
+          api.get<{ count: number }>(`/api/forms/${form.id}/responses-count`)
+            .then((data) => {
+              setForms((current) =>
+                current.map((f) => f.id === form.id ? { ...f, responseCount: data.count } : f)
+              );
+            })
+            .catch(() => { /* non-critical */ });
+        });
       } catch (err) {
         setError(
           err instanceof ApiRequestError
@@ -248,8 +261,10 @@ export default function DashboardPage() {
 
               <p className="muted">
                 Updated {new Date(form.updatedAt).toLocaleDateString()}
+                {form.responseCount !== undefined ? (
+                  <> · <strong style={{ color: "#2563eb" }}>{form.responseCount}</strong> response{form.responseCount !== 1 ? "s" : ""}</>
+                ) : null}
               </p>
-
               <div className="form-tile-actions">
                 <Link className="secondary-link" to={`/forms/${form.id}/edit`}>
                   Edit

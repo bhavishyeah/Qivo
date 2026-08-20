@@ -1224,3 +1224,48 @@ export async function listFormVersions(
     },
   });
 }
+
+export async function deleteFormResponse(
+  formId: string,
+  responseId: string,
+  userId: string,
+) {
+  // Only admins/owners/editors can delete responses
+  const form = await prisma.form.findFirst({
+    where: {
+      id: formId,
+      deletedAt: null,
+      workspace: {
+        members: {
+          some: { userId, role: { not: "VIEWER" } },
+        },
+      },
+    },
+  });
+
+  if (!form) {
+    const error = new Error("Form not found.");
+    error.name = "FORM_NOT_FOUND";
+    throw error;
+  }
+
+  const response = await prisma.formResponse.findFirst({
+    where: { id: responseId, formId },
+  });
+
+  if (!response) {
+    const error = new Error("Response not found.");
+    error.name = "RESPONSE_NOT_FOUND";
+    throw error;
+  }
+
+  return prisma.formResponse.delete({ where: { id: responseId } });
+}
+
+export async function getFormResponseCount(
+  formId: string,
+  userId: string,
+) {
+  await getForm(formId, userId);
+  return prisma.formResponse.count({ where: { formId } });
+}

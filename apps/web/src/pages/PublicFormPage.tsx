@@ -7,7 +7,9 @@ import {
 } from "react";
 import { useParams } from "react-router-dom";
 import { publicGet, publicPost, ApiRequestError } from "../lib/api";
-import type { AnswerValue, PublicForm, Question } from "../types";
+import type { AnswerValue, PublicForm, Question, Section } from "../types";
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function PublicFormPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -18,8 +20,10 @@ export default function PublicFormPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [errorCode, setErrorCode] = useState("");
   const [submitError, setSubmitError] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
 
   useEffect(() => {
     async function loadForm() {
@@ -28,30 +32,46 @@ export default function PublicFormPage() {
         setLoading(false);
         return;
       }
-
       try {
-        const data = await publicGet<{ form: PublicForm }>(
-          `/api/forms/public/${slug}`,
-        );
+        const data = await publicGet<{ form: PublicForm }>(`/api/forms/public/${slug}`);
         setForm(data.form);
       } catch (err) {
-        setError(
-          err instanceof ApiRequestError
-            ? err.message
-            : "Unable to load this form.",
-        );
+        if (err instanceof ApiRequestError) {
+          setError(err.message);
+          setErrorCode(err.code);
+        } else {
+          setError("Unable to load this form.");
+        }
       } finally {
         setLoading(false);
       }
     }
-
     void loadForm();
   }, [slug]);
 
-  const questions = useMemo(
-    () => form?.schema.sections.flatMap((section) => section.questions) ?? [],
-    [form],
+  // Sections with email as section 0 if needed
+  const sections = useMemo((): Section[] => {
+    if (!form) return [];
+    return form.schema.sections;
+  }, [form]);
+
+  const totalSections = sections.length;
+  const isMultiSection = totalSections > 1;
+  const currentSection = sections[currentSectionIndex];
+
+  // All questions flattened (for validation)
+  const allQuestions = useMemo(
+    () => sections.flatMap((s) => s.questions),
+    [sections],
   );
+
+  // Questions in current section
+  const currentQuestions = currentSection?.questions ?? [];
+
+  // Progress: email counts as part of first section
+  const progressPercent = totalSections > 0
+    ? Math.round(((currentSectionIndex) / totalSections) * 100)
+    : 0;
 
   function updateAnswer(questionId: string, value: AnswerValue) {
     setAnswers((current) => ({ ...current, [questionId]: value }));
@@ -68,27 +88,54 @@ export default function PublicFormPage() {
     );
   }
 
-  function validateAnswers() {
-    if (!form) return "Form is unavailable.";
-
-    const missing = questions.find((question) => {
-      if (!question.required) return false;
-      const answer = answers[question.id];
+  function validateSection(questions: Question[]): string {
+    const missing = questions.find((q) => {
+      if (!q.required) return false;
+      const answer = answers[q.id];
       if (Array.isArray(answer)) return answer.length === 0;
       return answer === undefined || answer === null || answer === "";
     });
-
     if (missing) return `Please answer: ${missing.label}`;
-    if (form.schema.settings.collectEmail && !email.trim())
-      return "Please enter your email address.";
     return "";
+  }
+
+  function validateAll(): string {
+    // Check email
+    if (form?.schema.settings.collectEmail && !email.trim()) {
+      return "Please enter your email address.";
+    }
+    // Check all questions
+    for (const q of allQuestions) {
+      if (!q.required) continue;
+      const answer = answers[q.id];
+      if (Array.isArray(answer) && answer.length === 0) return `Please answer: ${q.label}`;
+      if (answer === undefined || answer === null || answer === "") return `Please answer: ${q.label}`;
+    }
+    return "";
+  }
+
+  function handleNext() {
+    setSubmitError("");
+    const validationError = validateSection(currentQuestions);
+    if (validationError) {
+      setSubmitError(validationError);
+      return;
+    }
+    setCurrentSectionIndex((i) => Math.min(i + 1, totalSections - 1));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function handleBack() {
+    setSubmitError("");
+    setCurrentSectionIndex((i) => Math.max(i - 1, 0));
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitError("");
 
-    const validationError = validateAnswers();
+    const validationError = validateAll();
     if (validationError) {
       setSubmitError(validationError);
       return;
@@ -100,16 +147,14 @@ export default function PublicFormPage() {
     }
 
     setSubmitting(true);
-
     try {
       await publicPost(`/api/forms/public/${slug}/responses`, {
         answers,
-        ...(form?.schema.settings.collectEmail
-          ? { email: email.trim().toLowerCase() }
-          : {}),
+        ...(form?.schema.settings.collectEmail ? { email: email.trim().toLowerCase() } : {}),
         metadata: { source: "qivo-web" },
       });
       setSubmitted(true);
+      window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err) {
       setSubmitError(
         err instanceof ApiRequestError
@@ -121,11 +166,34 @@ export default function PublicFormPage() {
     }
   }
 
+  // ─── Loading ───────────────────────────────────────────────────────────────
+
   if (loading) {
     return (
-      <main className="page-shell">
-        <div className="status-card">
-          <p>Loading form...</p>
+      <main className="public-form-shell">
+        <div className="public-form-loading">
+          <div className="skeleton-block" style={{ width: "60%", height: 36, marginBottom: 16 }} />
+          <div className="skeleton-block" style={{ width: "80%", height: 18, marginBottom: 32 }} />
+          {[1, 2, 3].map((i) => (
+            <div key={i} style={{ marginBottom: 24 }}>
+              <div className="skeleton-block" style={{ width: "40%", height: 16, marginBottom: 10 }} />
+              <div className="skeleton-block" style={{ height: 44 }} />
+            </div>
+          ))}
+        </div>
+      </main>
+    );
+  }
+
+  // ─── Error states ──────────────────────────────────────────────────────────
+
+  if (errorCode === "PUBLIC_FORM_NOT_FOUND" || (!form && !error)) {
+    return (
+      <main className="public-form-shell">
+        <div className="public-status-card public-status-error">
+          <div className="public-status-icon">🔒</div>
+          <h1>Form not available</h1>
+          <p>This form doesn't exist or hasn't been published yet.</p>
         </div>
       </main>
     );
@@ -133,46 +201,86 @@ export default function PublicFormPage() {
 
   if (error || !form) {
     return (
-      <main className="page-shell">
-        <div className="status-card error-card">
-          <p className="eyebrow">Unavailable</p>
-          <h1>We couldn't open this form.</h1>
-          <p>{error || "Form not found."}</p>
+      <main className="public-form-shell">
+        <div className="public-status-card public-status-error">
+          <div className="public-status-icon">⚠️</div>
+          <h1>Something went wrong</h1>
+          <p>{error || "Unable to load this form."}</p>
+          <button
+            type="button"
+            className="submit-button"
+            style={{ marginTop: 20, maxWidth: 200 }}
+            onClick={() => window.location.reload()}
+          >
+            Try again
+          </button>
         </div>
       </main>
     );
   }
+
+  // ─── Success ───────────────────────────────────────────────────────────────
 
   if (submitted) {
     return (
-      <main className="page-shell">
-        <div className="status-card success-card">
-          <p className="eyebrow">Response received</p>
-          <h1>Thank you.</h1>
+      <main className="public-form-shell">
+        <div className="public-status-card public-status-success">
+          <div className="public-status-icon">✅</div>
+          <h1>Response submitted</h1>
           <p>
             {form.schema.confirmationMessage ||
-              "Your response was submitted successfully."}
+              "Thank you! Your response has been recorded."}
           </p>
+          <p className="public-status-brand">Powered by Qivo Forms</p>
         </div>
       </main>
     );
   }
 
+  // ─── Form ─────────────────────────────────────────────────────────────────
+
+  const isLastSection = currentSectionIndex === totalSections - 1;
+  const isFirstSection = currentSectionIndex === 0;
+
   return (
-    <main className="page-shell">
-      <section className="form-card">
-        <header className="form-header">
+    <main className="public-form-shell">
+      <div className="public-form-wrap">
+        {/* Progress bar */}
+        {isMultiSection ? (
+          <div className="public-progress-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progressPercent}>
+            <div
+              className="public-progress-fill"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+        ) : null}
+
+        {/* Header */}
+        <header className="public-form-header">
           <p className="eyebrow">Qivo Form</p>
-          <h1>{form.title}</h1>
+          <h1 className="public-form-title">{form.title}</h1>
           {form.description ? (
-            <p className="form-description">{form.description}</p>
+            <p className="public-form-description">{form.description}</p>
+          ) : null}
+          {isMultiSection ? (
+            <p className="public-section-counter">
+              Section {currentSectionIndex + 1} of {totalSections}
+              {currentSection?.title ? ` — ${currentSection.title}` : ""}
+            </p>
           ) : null}
         </header>
 
-        <form onSubmit={handleSubmit} noValidate>
-          {form.schema.settings.collectEmail ? (
+        {/* Form body */}
+        <form onSubmit={handleSubmit} noValidate className="public-form-body">
+          {/* Email field — only on first section */}
+          {form.schema.settings.collectEmail && isFirstSection ? (
             <div className="question-field">
-              <label htmlFor="respondent-email">Email address</label>
+              <label htmlFor="respondent-email">
+                <span className="question-label">
+                  Email address
+                  <span className="required-mark"> *</span>
+                </span>
+              </label>
               <input
                 id="respondent-email"
                 type="email"
@@ -180,47 +288,80 @@ export default function PublicFormPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 autoComplete="email"
+                placeholder="you@example.com"
               />
             </div>
           ) : null}
 
-          {form.schema.sections.map((section) => (
-            <section className="form-section" key={section.id}>
-              {section.title ? <h2>{section.title}</h2> : null}
-              {section.questions.map((question) => (
-                <QuestionField
-                  key={question.id}
-                  question={question}
-                  value={answers[question.id]}
-                  onChange={updateAnswer}
-                  onInputChange={handleInputChange}
-                />
-              ))}
-            </section>
-          ))}
-
-          {questions.length === 0 ? (
-            <p className="empty-state">This form does not contain any questions.</p>
+          {/* Section questions */}
+          {currentSection ? (
+            <div className="public-section">
+              {currentQuestions.length === 0 ? (
+                <p className="muted" style={{ textAlign: "center", padding: "24px 0" }}>
+                  This section has no questions.
+                </p>
+              ) : (
+                currentQuestions.map((question) => (
+                  <QuestionField
+                    key={question.id}
+                    question={question}
+                    value={answers[question.id]}
+                    onChange={updateAnswer}
+                    onInputChange={handleInputChange}
+                  />
+                ))
+              )}
+            </div>
           ) : null}
 
+          {/* Error */}
           {submitError ? (
-            <p className="submit-error" role="alert">
+            <p className="submit-error" role="alert" style={{ marginBottom: 16 }}>
               {submitError}
             </p>
           ) : null}
 
-          <button
-            className="submit-button"
-            type="submit"
-            disabled={submitting || questions.length === 0}
-          >
-            {submitting ? "Submitting..." : "Submit response"}
-          </button>
+          {/* Navigation */}
+          <div className="public-form-nav">
+            {isMultiSection && !isFirstSection ? (
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={handleBack}
+              >
+                ← Back
+              </button>
+            ) : <span />}
+
+            {isMultiSection && !isLastSection ? (
+              <button
+                type="button"
+                className="submit-button"
+                style={{ flex: 1, maxWidth: 240 }}
+                onClick={handleNext}
+              >
+                Next →
+              </button>
+            ) : (
+              <button
+                className="submit-button"
+                type="submit"
+                style={{ flex: 1, maxWidth: 240 }}
+                disabled={submitting || allQuestions.length === 0}
+              >
+                {submitting ? "Submitting..." : "Submit response"}
+              </button>
+            )}
+          </div>
         </form>
-      </section>
+
+        <p className="public-form-brand">Powered by Qivo Forms</p>
+      </div>
     </main>
   );
 }
+
+// ─── Question Field ───────────────────────────────────────────────────────────
 
 function QuestionField({
   question,
@@ -256,10 +397,7 @@ function QuestionField({
   if (question.type === "SINGLE_CHOICE" || question.type === "YES_NO") {
     const options =
       question.type === "YES_NO"
-        ? [
-            { value: "yes", label: "Yes" },
-            { value: "no", label: "No" },
-          ]
+        ? [{ value: "yes", label: "Yes" }, { value: "no", label: "No" }]
         : question.options ?? [];
 
     return (
@@ -319,27 +457,32 @@ function QuestionField({
     const min = question.settings?.min ?? 1;
     const max = question.settings?.max ?? 5;
     const current = typeof value === "number" ? value : null;
+    const range = Array.from({ length: max - min + 1 }, (_, i) => min + i);
 
     return (
       <fieldset className="question-field">
         <legend>{label}</legend>
         {descriptionElement}
         <div className="rating-list" role="radiogroup" aria-label={question.label}>
-          {Array.from({ length: max - min + 1 }, (_, i) => min + i).map(
-            (rating) => (
-              <label className="rating-item" key={rating}>
-                <input
-                  type="radio"
-                  name={question.id}
-                  value={rating}
-                  checked={current === rating}
-                  onChange={() => onChange(question.id, rating)}
-                />
-                <span>{rating}</span>
-              </label>
-            ),
-          )}
+          {range.map((rating) => (
+            <label className="rating-item" key={rating}>
+              <input
+                type="radio"
+                name={question.id}
+                value={rating}
+                checked={current === rating}
+                onChange={() => onChange(question.id, rating)}
+              />
+              <span>{rating}</span>
+            </label>
+          ))}
         </div>
+        {range.length > 2 ? (
+          <div className="rating-labels">
+            <span>Low</span>
+            <span>High</span>
+          </div>
+        ) : null}
       </fieldset>
     );
   }
@@ -355,19 +498,23 @@ function QuestionField({
           onChange={(event) => onInputChange(question.id, event)}
           aria-describedby={description ? descriptionId : undefined}
           rows={5}
+          placeholder="Your answer..."
         />
       </div>
     );
   }
 
   const inputType =
-    question.type === "EMAIL"
-      ? "email"
-      : question.type === "NUMBER"
-        ? "number"
-        : question.type === "DATE"
-          ? "date"
-          : "text";
+    question.type === "EMAIL" ? "email"
+    : question.type === "NUMBER" ? "number"
+    : question.type === "DATE" ? "date"
+    : "text";
+
+  const placeholder =
+    question.type === "EMAIL" ? "your@email.com"
+    : question.type === "NUMBER" ? "Enter a number"
+    : question.type === "DATE" ? ""
+    : "Your answer...";
 
   return (
     <div className="question-field">
@@ -379,6 +526,7 @@ function QuestionField({
         value={typeof value === "string" || typeof value === "number" ? value : ""}
         onChange={(event) => onInputChange(question.id, event)}
         aria-describedby={description ? descriptionId : undefined}
+        placeholder={placeholder}
       />
     </div>
   );

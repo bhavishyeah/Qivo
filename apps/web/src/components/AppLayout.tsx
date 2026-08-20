@@ -14,6 +14,7 @@ export default function AppLayout({
   const navigate = useNavigate();
   const location = useLocation();
   const [unreadCount, setUnreadCount] = useState(0);
+  const [sessionExpired, setSessionExpired] = useState(false);
 
   useEffect(() => {
     async function fetchUnread() {
@@ -26,6 +27,14 @@ export default function AppLayout({
     }
     void fetchUnread();
   }, [location.pathname]);
+
+  useEffect(() => {
+    function handleSessionExpired() {
+      setSessionExpired(true);
+    }
+    window.addEventListener("qivo:session-expired", handleSessionExpired);
+    return () => window.removeEventListener("qivo:session-expired", handleSessionExpired);
+  }, []);
 
   async function handleLogout() {
     try {
@@ -41,6 +50,35 @@ export default function AppLayout({
 
   return (
     <div className="app-layout">
+      {sessionExpired ? (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 100,
+            background: "#fef3c7",
+            borderBottom: "2px solid #f59e0b",
+            padding: "12px 24px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 16,
+          }}
+        >
+          <span style={{ color: "#92400e", fontWeight: 600, fontSize: "0.9rem" }}>
+            Your session has expired. Please log in again.
+          </span>
+          <button
+            type="button"
+            className="secondary-button compact"
+            onClick={() => navigate("/login")}
+          >
+            Log in
+          </button>
+        </div>
+      ) : null}
       <nav className="app-nav">
         <div className="app-nav-inner">
           <Link to="/dashboard" className="app-nav-brand">
