@@ -3,9 +3,6 @@
  *
  * In development (no RESEND_API_KEY set), emails are logged to the console.
  * In production, set RESEND_API_KEY and EMAIL_FROM to send real emails via Resend.
- *
- * This design keeps business logic decoupled from the delivery mechanism —
- * swap the provider here without touching auth/notification code.
  */
 
 type EmailPayload = {
@@ -15,30 +12,52 @@ type EmailPayload = {
   text: string;
 };
 
-const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const EMAIL_FROM = process.env.EMAIL_FROM || "Qivo Forms <onboarding@resend.dev>";
-const WEB_URL = process.env.WEB_URL || "http://localhost:5173";
+// Read env at call time, not module load time
+function getResendKey(): string | undefined {
+  return process.env.RESEND_API_KEY;
+}
+
+function getEmailFrom(): string {
+  return process.env.EMAIL_FROM || "Qivo Forms <onboarding@resend.dev>";
+}
+
+function getWebUrl(): string {
+  return process.env.WEB_URL || "http://localhost:5173";
+}
 
 async function sendViaResend(payload: EmailPayload): Promise<void> {
+  const apiKey = getResendKey();
+  if (!apiKey) {
+    throw new Error("RESEND_API_KEY is not configured");
+  }
+
+  const body = JSON.stringify({
+    from: getEmailFrom(),
+    to: [payload.to],
+    subject: payload.subject,
+    html: payload.html,
+    text: payload.text,
+  });
+
+  console.log(`[email] Sending via Resend to ${payload.to}...`);
+
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${RESEND_API_KEY}`,
+      "Authorization": `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      from: EMAIL_FROM,
-      to: payload.to,
-      subject: payload.subject,
-      html: payload.html,
-      text: payload.text,
-    }),
+    body,
   });
 
+  const responseText = await response.text();
+
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Email delivery failed (${response.status}): ${body}`);
+    console.error(`[email] Resend failed (${response.status}): ${responseText}`);
+    throw new Error(`Email delivery failed (${response.status}): ${responseText}`);
   }
+
+  console.log(`[email] Sent successfully: ${responseText}`);
 }
 
 function logToConsole(payload: EmailPayload): void {
@@ -55,7 +74,7 @@ function logToConsole(payload: EmailPayload): void {
  */
 export async function sendEmail(payload: EmailPayload): Promise<void> {
   try {
-    if (RESEND_API_KEY) {
+    if (getResendKey()) {
       await sendViaResend(payload);
     } else {
       logToConsole(payload);
@@ -88,7 +107,8 @@ function button(url: string, label: string): string {
 }
 
 export async function sendPasswordResetEmail(to: string, token: string) {
-  const resetUrl = `${WEB_URL}/reset-password?token=${token}`;
+  const webUrl = getWebUrl();
+  const resetUrl = `${webUrl}/reset-password?token=${token}`;
 
   await sendEmail({
     to,
@@ -104,7 +124,8 @@ export async function sendPasswordResetEmail(to: string, token: string) {
 }
 
 export async function sendVerificationEmail(to: string, token: string) {
-  const verifyUrl = `${WEB_URL}/verify-email?token=${token}`;
+  const webUrl = getWebUrl();
+  const verifyUrl = `${webUrl}/verify-email?token=${token}`;
 
   await sendEmail({
     to,
@@ -124,14 +145,15 @@ export async function sendTeamInviteEmail(
   workspaceName: string,
   inviterName: string,
 ) {
+  const webUrl = getWebUrl();
   await sendEmail({
     to,
     subject: `${inviterName} added you to ${workspaceName} on Qivo`,
     html: layout(
       "You've been added to a team",
       `<p style="color:#475569;font-size:15px;line-height:1.6;">${inviterName} added you to the <strong>${workspaceName}</strong> workspace on Qivo Forms.</p>
-       ${button(`${WEB_URL}/login`, "Open Qivo")}`,
+       ${button(`${webUrl}/login`, "Open Qivo")}`,
     ),
-    text: `${inviterName} added you to ${workspaceName} on Qivo. Log in at ${WEB_URL}/login`,
+    text: `${inviterName} added you to ${workspaceName} on Qivo. Log in at ${webUrl}/login`,
   });
 }
