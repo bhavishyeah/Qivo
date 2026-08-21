@@ -116,6 +116,12 @@ export default function AppLayout({
                 </span>
               ) : null}
             </Link>
+            <Link
+              to="/audit"
+              className={`app-nav-link ${isActive("/audit") ? "active" : ""}`}
+            >
+              Audit
+            </Link>
           </div>
 
           <div className="app-nav-user">

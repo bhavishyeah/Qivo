@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import * as XLSX from "xlsx";
 import { api, ApiRequestError } from "../lib/api";
 import type { FormRecord, Question, ResponseRecord } from "../types";
 
@@ -46,6 +47,30 @@ function downloadResponsesCsv(
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+function downloadResponsesExcel(
+  responses: ResponseRecord[],
+  questions: Question[],
+  formTitle: string,
+) {
+  const headers = ["Submitted at", "Email", ...questions.map((q) => q.label)];
+
+  const rows = responses.map((response) => {
+    const email = typeof response.metadata?.email === "string" ? response.metadata.email : "";
+    return [
+      new Date(response.submittedAt).toLocaleString(),
+      email,
+      ...questions.map((q) => formatResponseValue(response.answers[q.id])),
+    ];
+  });
+
+  const wsData = [headers, ...rows];
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Responses");
+
+  XLSX.writeFile(wb, `${formTitle.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-responses.xlsx`);
 }
 
 export default function ResponseDashboardPage() {
@@ -209,7 +234,17 @@ export default function ResponseDashboardPage() {
               downloadResponsesCsv(responses, questions, form?.title ?? "form")
             }
           >
-            Export CSV
+            CSV
+          </button>
+          <button
+            className="secondary-button"
+            type="button"
+            disabled={responses.length === 0}
+            onClick={() =>
+              downloadResponsesExcel(responses, questions, form?.title ?? "form")
+            }
+          >
+            Excel
           </button>
           <Link className="secondary-link" to={`/forms/${formId}/reports`}>
             Reports

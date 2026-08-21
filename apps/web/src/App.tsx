@@ -22,6 +22,7 @@ import TeamPage from "./pages/TeamPage";
 import FoldersPage from "./pages/FoldersPage";
 import NotificationsPage from "./pages/NotificationsPage";
 import SettingsPage from "./pages/SettingsPage";
+import AuditLogPage from "./pages/AuditLogPage";
 import { getToken } from "./lib/api";
 
 // Lazy-loaded pages (heavy dependencies like recharts)
@@ -85,6 +86,7 @@ function App() {
         <Route path="/team" element={<Protected>{() => <TeamPage />}</Protected>} />
         <Route path="/notifications" element={<Protected>{() => <NotificationsPage />}</Protected>} />
         <Route path="/settings" element={<Protected>{(user) => <SettingsPage user={user} />}</Protected>} />
+        <Route path="/audit" element={<Protected>{() => <AuditLogPage />}</Protected>} />
 
         {/* Legacy public form route */}
         <Route path="/forms/:slug" element={<PublicFormPage />} />
