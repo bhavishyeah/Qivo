@@ -5,7 +5,7 @@ import {
   type AuthenticatedRequest,
 } from "../../middleware/auth.js";
 import prisma from "../../db/prisma.js";
-import { createWorkspaceSchema } from "./workspace.schemas.js";
+import { createWorkspaceSchema, updateWorkspaceSchema } from "./workspace.schemas.js";
 import { createWorkspace } from "./workspace.service.js";
 
 const workspaceRouter: ExpressRouter = Router();
@@ -164,6 +164,51 @@ workspaceRouter.get(
           },
         },
       });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+// Rename workspace
+workspaceRouter.patch(
+  "/:workspaceId",
+  requireAuth,
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: { code: "UNAUTHENTICATED", message: "Authentication is required." } });
+        return;
+      }
+
+      const workspaceId = req.params.workspaceId;
+      if (typeof workspaceId !== "string") {
+        res.status(400).json({ success: false, error: { code: "INVALID_WORKSPACE_ID", message: "A valid workspace ID is required." } });
+        return;
+      }
+      const input = updateWorkspaceSchema.parse(req.body);
+
+      // Only OWNER/ADMIN can rename
+      const membership = await prisma.workspaceMember.findUnique({
+        where: { workspaceId_userId: { workspaceId, userId: req.user.id } },
+      });
+
+      if (!membership) {
+        res.status(404).json({ success: false, error: { code: "WORKSPACE_NOT_FOUND", message: "Workspace not found." } });
+        return;
+      }
+
+      if (membership.role !== "OWNER" && membership.role !== "ADMIN") {
+        res.status(403).json({ success: false, error: { code: "FORBIDDEN", message: "Only owners and admins can rename the workspace." } });
+        return;
+      }
+
+      const workspace = await prisma.workspace.update({
+        where: { id: workspaceId },
+        data: { name: input.name.trim() },
+      });
+
+      res.json({ success: true, data: { workspace: { id: workspace.id, name: workspace.name, slug: workspace.slug, type: workspace.type, role: membership.role } } });
     } catch (error) {
       next(error);
     }

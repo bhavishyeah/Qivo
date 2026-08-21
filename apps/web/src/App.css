@@ -1522,3 +1522,43 @@ form {
     gap: 10px;
   }
 }
+
+
+/* ── Team Page ──────────────────────────────────────────────────────────────── */
+
+.team-member-list {
+  display: grid;
+  gap: 2px;
+}
+
+.team-member-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 4px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.team-member-row:last-child {
+  border-bottom: none;
+}
+
+.team-member-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  color: #ffffff;
+  font-size: 1rem;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .team-member-row {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+}

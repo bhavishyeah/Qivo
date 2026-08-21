@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { Prisma } from "../../generated/prisma/client.js";
 import prisma from "../../db/prisma.js";
 import { logAction } from "../audit/audit.service.js";
+import { notifyFormEvent } from "../notifications/notification.service.js";
 import type {
   UpdateFormSettingsInput,
 } from "./form.schemas.js";
@@ -1051,7 +1052,7 @@ const responseMetadata: Record<
     : {}),
 };
 
-return prisma.formResponse.create({
+const response = await prisma.formResponse.create({
   data: {
     formId: form.id,
     ...(respondentId !== undefined
@@ -1063,6 +1064,24 @@ return prisma.formResponse.create({
       responseMetadata as Prisma.InputJsonValue,
   },
 });
+
+// Check for response milestones and notify form owner
+void (async () => {
+  const MILESTONES = [10, 50, 100, 250, 500, 1000];
+  const count = await prisma.formResponse.count({ where: { formId: form.id } });
+  if (MILESTONES.includes(count)) {
+    await notifyFormEvent({
+      formId: form.id,
+      formTitle: form.title,
+      actorId: form.ownerId,
+      actorName: "Qivo",
+      type: "RESPONSE_MILESTONE",
+      targetUserIds: [form.ownerId],
+    });
+  }
+})();
+
+return response;
 }
 
 export async function listFormResponses(
