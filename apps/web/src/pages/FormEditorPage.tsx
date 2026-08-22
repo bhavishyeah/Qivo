@@ -62,6 +62,12 @@ export default function FormEditorPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
+  // Autosave
+  type SaveStatus = "idle" | "saving" | "saved" | "error" | "offline";
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingSave = useRef<{ questionId: string; question: Question } | null>(null);
+
   // Undo history (local state only, not persisted)
   const history = useRef<HistoryEntry[]>([]);
 
@@ -140,29 +146,50 @@ export default function FormEditorPage() {
   // ─── Question mutations ───────────────────────────────────────────────────
 
   function updateQuestionLocal(questionId: string, patch: Partial<Question>) {
-    setQuestions((current) =>
-      current.map((q) => (q.id === questionId ? { ...q, ...patch } : q)),
-    );
+    setQuestions((current) => {
+      const updated = current.map((q) => (q.id === questionId ? { ...q, ...patch } : q));
+      // Schedule autosave for this question
+      const question = updated.find((q) => q.id === questionId);
+      if (question) {
+        scheduleAutosave(questionId, question);
+      }
+      return updated;
+    });
   }
 
-  async function saveQuestion(question: Question) {
-    if (!formId) return;
-    setSaving(true);
-    setMessage(""); setError("");
+  function scheduleAutosave(questionId: string, question: Question) {
+    pendingSave.current = { questionId, question };
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      void performAutosave();
+    }, 1500);
+  }
+
+  async function performAutosave() {
+    const pending = pendingSave.current;
+    if (!pending || !formId) return;
+    pendingSave.current = null;
+
+    setSaveStatus("saving");
     try {
-      await api.patch(`/api/forms/${formId}/questions/${question.id}`, {
-        label: question.label,
-        description: question.description,
-        required: question.required,
-        options: question.options,
-        settings: question.settings,
-        conditions: question.conditions,
+      await api.patch(`/api/forms/${formId}/questions/${pending.questionId}`, {
+        label: pending.question.label,
+        description: pending.question.description,
+        required: pending.question.required,
+        options: pending.question.options,
+        settings: pending.question.settings,
+        conditions: pending.question.conditions,
       });
-      setMessage("Question saved.");
+      setSaveStatus("saved");
+      // Reset to idle after 3 seconds
+      setTimeout(() => setSaveStatus((s) => s === "saved" ? "idle" : s), 3000);
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : "Unable to save.");
-    } finally {
-      setSaving(false);
+      if (err instanceof ApiRequestError) {
+        setSaveStatus("error");
+        setError(err.message);
+      } else {
+        setSaveStatus("offline");
+      }
     }
   }
 
@@ -421,7 +448,10 @@ export default function FormEditorPage() {
         <div>
           <p className="eyebrow">Form editor</p>
           <h1>{form.title}</h1>
-          <p className="muted">Edit questions and publish your form.</p>
+          <p className="muted" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            Edit questions and publish your form.
+            <SaveStatusBadge status={saveStatus} />
+          </p>
         </div>
 
         <div className="editor-actions">
@@ -638,7 +668,6 @@ export default function FormEditorPage() {
                 onDrop={(e) => void handleDrop(e, index)}
                 onDragEnd={handleDragEnd}
                 onChange={updateQuestionLocal}
-                onSave={() => void saveQuestion(question)}
                 onDelete={() => void deleteEditorQuestion(question.id)}
                 onDuplicate={() => void duplicateQuestion(question)}
               />
@@ -669,7 +698,6 @@ function QuestionCard({
   onDrop,
   onDragEnd,
   onChange,
-  onSave,
   onDelete,
   onDuplicate,
 }: {
@@ -687,7 +715,6 @@ function QuestionCard({
   onDrop: (e: DragEvent<HTMLElement>) => void;
   onDragEnd: () => void;
   onChange: (id: string, patch: Partial<Question>) => void;
-  onSave: () => void;
   onDelete: () => void;
   onDuplicate: () => void;
 }) {
@@ -982,7 +1009,6 @@ function QuestionCard({
 
             {/* Actions */}
             <div className="editor-question-actions" style={{ marginTop: 16 }}>
-              <button className="secondary-button compact" type="button" disabled={saving} onClick={onSave}>Save</button>
               <button className="secondary-button compact" type="button" disabled={saving} onClick={onDuplicate}>Duplicate</button>
               <button className="danger-button" type="button" disabled={saving} onClick={onDelete}>Delete</button>
             </div>
@@ -990,6 +1016,43 @@ function QuestionCard({
         ) : null}
       </div>
     </article>
+  );
+}
+
+// ─── Save Status Badge ────────────────────────────────────────────────────────
+
+function SaveStatusBadge({ status }: { status: string }) {
+  if (status === "idle") return null;
+
+  const config: Record<string, { text: string; color: string; bg: string }> = {
+    saving: { text: "Saving…", color: "#64748b", bg: "#f1f5f9" },
+    saved: { text: "Saved ✓", color: "#16a34a", bg: "#f0fdf4" },
+    error: { text: "Error saving", color: "#dc2626", bg: "#fef2f2" },
+    offline: { text: "Offline ⚠", color: "#d97706", bg: "#fefce8" },
+  };
+
+  const c = config[status] ?? config["saving"];
+
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4,
+        padding: "3px 10px",
+        borderRadius: 6,
+        fontSize: "0.75rem",
+        fontWeight: 700,
+        color: c.color,
+        background: c.bg,
+        transition: "opacity 200ms ease",
+      }}
+    >
+      {status === "saving" ? (
+        <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", border: "2px solid currentColor", borderTopColor: "transparent", animation: "spin 600ms linear infinite" }} />
+      ) : null}
+      {c.text}
+    </span>
   );
 }
 

@@ -1947,3 +1947,9 @@ form {
 .editor-question.inactive-card:hover .editor-question-number {
   opacity: 1;
 }
+
+
+/* Save status spinner */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
