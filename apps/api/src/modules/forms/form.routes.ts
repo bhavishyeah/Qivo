@@ -30,6 +30,7 @@ import {
   deleteQuestion,
   duplicateForm,
   getForm,
+  getFormAnalytics,
   getFormResponse,
   getFormResponseCount,
   getPublicForm,
@@ -768,6 +769,28 @@ formRouter.get(
       }
       const count = await getFormResponseCount(formId, req.user.id);
       res.json({ success: true, data: { count } });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+formRouter.get(
+  "/:formId/analytics",
+  requireAuth,
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: { code: "UNAUTHENTICATED", message: "Authentication is required." } });
+        return;
+      }
+      const formId = req.params.formId;
+      if (typeof formId !== "string") {
+        res.status(400).json({ success: false, error: { code: "INVALID_FORM_ID", message: "A valid form ID is required." } });
+        return;
+      }
+      const analytics = await getFormAnalytics(formId, req.user.id);
+      res.json({ success: true, data: analytics });
     } catch (error) {
       next(error);
     }

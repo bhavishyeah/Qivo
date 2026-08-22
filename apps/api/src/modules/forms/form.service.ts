@@ -880,6 +880,11 @@ export async function getPublicForm(
     throw error;
   }
 
+  // Track view (fire-and-forget)
+  void prisma.formAnalytics.create({
+    data: { formId: form.id, event: "view" },
+  });
+
   const schema = getFormSchema(form.schema);
 
   return {
@@ -1111,6 +1116,8 @@ const response = await prisma.formResponse.create({
 
 // Check for response milestones and notify form owner
 void (async () => {
+  // Track submission
+  await prisma.formAnalytics.create({ data: { formId: form.id, event: "submission" } });
   const MILESTONES = [10, 50, 100, 250, 500, 1000];
   const count = await prisma.formResponse.count({ where: { formId: form.id } });
   if (MILESTONES.includes(count)) {
@@ -1331,4 +1338,21 @@ export async function getFormResponseCount(
 ) {
   await getForm(formId, userId);
   return prisma.formResponse.count({ where: { formId } });
+}
+
+export async function getFormAnalytics(
+  formId: string,
+  userId: string,
+) {
+  await getForm(formId, userId);
+
+  const [views, submissions] = await Promise.all([
+    prisma.formAnalytics.count({ where: { formId, event: "view" } }),
+    prisma.formAnalytics.count({ where: { formId, event: "submission" } }),
+  ]);
+
+  // Conversion rate
+  const conversionRate = views > 0 ? Math.round((submissions / views) * 100) : 0;
+
+  return { views, submissions, conversionRate };
 }

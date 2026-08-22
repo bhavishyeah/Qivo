@@ -246,6 +246,15 @@ export default function ResponseDashboardPage() {
           >
             Excel
           </button>
+          <a
+            className="secondary-button"
+            href="https://docs.google.com/spreadsheets/create"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ textDecoration: "none", fontSize: "0.88rem" }}
+          >
+            Sheets ↗
+          </a>
           <Link className="secondary-link" to={`/forms/${formId}/reports`}>
             Reports
           </Link>

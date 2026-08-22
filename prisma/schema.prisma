@@ -216,3 +216,14 @@ model AuditLog {
   @@index([userId])
   @@index([entityType, entityId])
 }
+
+model FormAnalytics {
+  id        String   @id @default(cuid())
+  formId    String
+  event     String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([formId, event])
+  @@index([formId, createdAt])
+}
