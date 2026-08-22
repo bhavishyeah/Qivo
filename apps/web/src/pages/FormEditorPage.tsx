@@ -41,10 +41,14 @@ const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
   MULTIPLE_CHOICE: "Multiple choice",
   RATING: "Rating",
   YES_NO: "Yes / No",
+  PHONE: "Phone number",
+  URL: "URL",
+  FILE_UPLOAD: "File upload",
+  LINEAR_SCALE: "Linear scale",
 };
 
 const CHOICE_TYPES = new Set<QuestionType>(["SINGLE_CHOICE", "MULTIPLE_CHOICE"]);
-const RATING_TYPES = new Set<QuestionType>(["RATING"]);
+const RATING_TYPES = new Set<QuestionType>(["RATING", "LINEAR_SCALE"]);
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
@@ -213,9 +217,11 @@ export default function FormEditorPage() {
           type: newQuestionType,
           required: false,
           ...(RATING_TYPES.has(newQuestionType) ? { settings: { min: 1, max: 5 } } : {}),
+          ...(newQuestionType === "LINEAR_SCALE" ? { settings: { min: 1, max: 10, minLabel: "Low", maxLabel: "High" } } : {}),
           ...(CHOICE_TYPES.has(newQuestionType)
             ? { options: [{ value: "option_1", label: "Option 1" }] }
             : {}),
+          ...(newQuestionType === "FILE_UPLOAD" ? { settings: { maxFileSizeMB: 5, allowedFileTypes: ["image/*", "application/pdf"] } } : {}),
         },
       );
       setQuestions((current) => [...current, data.question]);
@@ -803,7 +809,7 @@ function QuestionCard({
 
             {/* Rating range editor */}
             {isRating ? (
-              <div style={{ display: "flex", gap: 16, marginTop: 14, alignItems: "center" }}>
+              <div style={{ display: "flex", gap: 16, marginTop: 14, alignItems: "center", flexWrap: "wrap" }}>
                 <div>
                   <label style={{ display: "block", fontSize: "0.82rem", fontWeight: 750, marginBottom: 4 }}>Min</label>
                   <input
@@ -826,6 +832,63 @@ function QuestionCard({
                     style={{ width: 64, border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px", textAlign: "center" }}
                   />
                 </div>
+                {question.type === "LINEAR_SCALE" ? (
+                  <>
+                    <div>
+                      <label style={{ display: "block", fontSize: "0.82rem", fontWeight: 750, marginBottom: 4 }}>Low label</label>
+                      <input
+                        type="text"
+                        value={question.settings?.minLabel ?? ""}
+                        onChange={(e) => onChange(question.id, { settings: { ...question.settings, minLabel: e.target.value } })}
+                        placeholder="e.g. Not at all"
+                        style={{ width: 120, border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px" }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: "block", fontSize: "0.82rem", fontWeight: 750, marginBottom: 4 }}>High label</label>
+                      <input
+                        type="text"
+                        value={question.settings?.maxLabel ?? ""}
+                        onChange={(e) => onChange(question.id, { settings: { ...question.settings, maxLabel: e.target.value } })}
+                        placeholder="e.g. Extremely"
+                        style={{ width: 120, border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px" }}
+                      />
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
+
+            {/* File upload settings */}
+            {question.type === "FILE_UPLOAD" ? (
+              <div style={{ marginTop: 14 }}>
+                <label style={{ display: "block", fontSize: "0.82rem", fontWeight: 750, marginBottom: 8 }}>File upload settings</label>
+                <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center" }}>
+                  <div>
+                    <label style={{ display: "block", fontSize: "0.75rem", color: "#64748b", marginBottom: 4 }}>Max size (MB)</label>
+                    <input
+                      type="number"
+                      value={question.settings?.maxFileSizeMB ?? 5}
+                      min={1}
+                      max={50}
+                      onChange={(e) => onChange(question.id, { settings: { ...question.settings, maxFileSizeMB: Number(e.target.value) } })}
+                      style={{ width: 80, border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px" }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: "block", fontSize: "0.75rem", color: "#64748b", marginBottom: 4 }}>Allowed types</label>
+                    <input
+                      type="text"
+                      value={(question.settings?.allowedFileTypes ?? []).join(", ")}
+                      onChange={(e) => onChange(question.id, { settings: { ...question.settings, allowedFileTypes: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) } })}
+                      placeholder="image/*, application/pdf"
+                      style={{ width: 220, border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px", fontSize: "0.82rem" }}
+                    />
+                  </div>
+                </div>
+                <p className="muted" style={{ marginTop: 6, fontSize: "0.75rem" }}>
+                  Comma-separated MIME types. E.g. image/*, application/pdf, .docx
+                </p>
               </div>
             ) : null}
 

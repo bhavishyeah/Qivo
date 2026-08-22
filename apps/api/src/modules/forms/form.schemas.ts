@@ -33,6 +33,10 @@ const questionTypeSchema = z.enum([
   "MULTIPLE_CHOICE",
   "RATING",
   "YES_NO",
+  "PHONE",
+  "URL",
+  "FILE_UPLOAD",
+  "LINEAR_SCALE",
 ]);
 
 const questionOptionSchema = z.object({

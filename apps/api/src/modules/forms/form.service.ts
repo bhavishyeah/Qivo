@@ -17,7 +17,11 @@ type QuestionType =
   | "SINGLE_CHOICE"
   | "MULTIPLE_CHOICE"
   | "RATING"
-  | "YES_NO";
+  | "YES_NO"
+  | "PHONE"
+  | "URL"
+  | "FILE_UPLOAD"
+  | "LINEAR_SCALE";
 
 type FormQuestionOption = {
   value: string;
@@ -857,6 +861,15 @@ export async function getPublicForm(
       status: "PUBLISHED",
       deletedAt: null,
     },
+    include: {
+      workspace: {
+        select: {
+          name: true,
+          logoUrl: true,
+          primaryColor: true,
+        },
+      },
+    },
   });
 
   if (!form) {
@@ -874,6 +887,11 @@ export async function getPublicForm(
     slug: form.slug,
     title: form.title,
     description: form.description,
+    branding: {
+      workspaceName: form.workspace.name,
+      logoUrl: form.workspace.logoUrl,
+      primaryColor: form.workspace.primaryColor,
+    },
     schema: {
       version: schema.version,
       sections: schema.sections,

@@ -260,7 +260,16 @@ export default function PublicFormPage() {
 
         {/* Header */}
         <header className="public-form-header">
-          <p className="eyebrow">Qivo Form</p>
+          {form.branding?.logoUrl ? (
+            <img
+              src={form.branding.logoUrl}
+              alt={form.branding.workspaceName}
+              style={{ height: 40, width: "auto", borderRadius: 8, marginBottom: 12 }}
+            />
+          ) : null}
+          <p className="eyebrow" style={form.branding?.primaryColor ? { color: form.branding.primaryColor } : undefined}>
+            {form.branding?.workspaceName ?? "Qivo Form"}
+          </p>
           <h1 className="public-form-title">{form.title}</h1>
           {form.description ? (
             <p className="public-form-description">{form.description}</p>
@@ -342,7 +351,7 @@ export default function PublicFormPage() {
               <button
                 type="button"
                 className="submit-button"
-                style={{ flex: 1, maxWidth: 240 }}
+                style={{ flex: 1, maxWidth: 240, ...(form.branding?.primaryColor ? { background: form.branding.primaryColor } : {}) }}
                 onClick={handleNext}
               >
                 Next →
@@ -351,7 +360,7 @@ export default function PublicFormPage() {
               <button
                 className="submit-button"
                 type="submit"
-                style={{ flex: 1, maxWidth: 240 }}
+                style={{ flex: 1, maxWidth: 240, ...(form.branding?.primaryColor ? { background: form.branding.primaryColor } : {}) }}
                 disabled={submitting || allQuestions.length === 0}
               >
                 {submitting ? "Submitting..." : "Submit response"}
@@ -509,15 +518,117 @@ function QuestionField({
     );
   }
 
+  // Linear scale
+  if (question.type === "LINEAR_SCALE") {
+    const min = question.settings?.min ?? 1;
+    const max = question.settings?.max ?? 10;
+    const minLabel = question.settings?.minLabel ?? "";
+    const maxLabel = question.settings?.maxLabel ?? "";
+    const current = typeof value === "number" ? value : null;
+    const range = Array.from({ length: max - min + 1 }, (_, i) => min + i);
+
+    return (
+      <fieldset className="question-field">
+        <legend>{label}</legend>
+        {descriptionElement}
+        <div className="rating-list" role="radiogroup" aria-label={question.label}>
+          {range.map((rating) => (
+            <label className="rating-item" key={rating}>
+              <input
+                type="radio"
+                name={question.id}
+                value={rating}
+                checked={current === rating}
+                onChange={() => onChange(question.id, rating)}
+              />
+              <span>{rating}</span>
+            </label>
+          ))}
+        </div>
+        {(minLabel || maxLabel) ? (
+          <div className="rating-labels">
+            <span>{minLabel}</span>
+            <span>{maxLabel}</span>
+          </div>
+        ) : null}
+      </fieldset>
+    );
+  }
+
+  // File upload
+  if (question.type === "FILE_UPLOAD") {
+    const maxSize = question.settings?.maxFileSizeMB ?? 5;
+    const allowedTypes = question.settings?.allowedFileTypes ?? [];
+    const fileName = typeof value === "string" && value ? value : "";
+
+    return (
+      <div className="question-field">
+        <label htmlFor={inputId}>{label}</label>
+        {descriptionElement}
+        <div
+          style={{
+            border: "2px dashed #cbd5e1",
+            borderRadius: 12,
+            padding: "24px 16px",
+            textAlign: "center",
+            background: "#f8fafc",
+            cursor: "pointer",
+          }}
+          onClick={() => document.getElementById(inputId)?.click()}
+          onKeyDown={(e) => { if (e.key === "Enter") document.getElementById(inputId)?.click(); }}
+          role="button"
+          tabIndex={0}
+        >
+          <input
+            id={inputId}
+            type="file"
+            accept={allowedTypes.join(",")}
+            style={{ display: "none" }}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) {
+                if (file.size > maxSize * 1024 * 1024) {
+                  alert(`File too large. Maximum ${maxSize}MB allowed.`);
+                  return;
+                }
+                // Store file name as value (actual upload would go to S3 in production)
+                onChange(question.id, `[file:${file.name}:${file.size}]`);
+              }
+            }}
+          />
+          {fileName ? (
+            <p style={{ margin: 0, color: "#16a34a", fontWeight: 600 }}>
+              ✓ {fileName.replace("[file:", "").replace(/:\d+\]$/, "")}
+            </p>
+          ) : (
+            <>
+              <p style={{ margin: "0 0 4px", color: "#475569", fontWeight: 600 }}>
+                Click to upload a file
+              </p>
+              <p style={{ margin: 0, color: "#94a3b8", fontSize: "0.82rem" }}>
+                Max {maxSize}MB
+                {allowedTypes.length > 0 ? ` · ${allowedTypes.join(", ")}` : ""}
+              </p>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   const inputType =
     question.type === "EMAIL" ? "email"
     : question.type === "NUMBER" ? "number"
     : question.type === "DATE" ? "date"
+    : question.type === "URL" ? "url"
+    : question.type === "PHONE" ? "tel"
     : "text";
 
   const placeholder =
     question.type === "EMAIL" ? "your@email.com"
     : question.type === "NUMBER" ? "Enter a number"
+    : question.type === "URL" ? "https://example.com"
+    : question.type === "PHONE" ? "+91 98765 43210"
     : question.type === "DATE" ? ""
     : "Your answer...";
 

@@ -5,7 +5,7 @@ import {
   type AuthenticatedRequest,
 } from "../../middleware/auth.js";
 import prisma from "../../db/prisma.js";
-import { createWorkspaceSchema, updateWorkspaceSchema } from "./workspace.schemas.js";
+import { createWorkspaceSchema, updateWorkspaceSchema, updateWorkspaceBrandingSchema } from "./workspace.schemas.js";
 import { createWorkspace } from "./workspace.service.js";
 
 const workspaceRouter: ExpressRouter = Router();
@@ -209,6 +209,49 @@ workspaceRouter.patch(
       });
 
       res.json({ success: true, data: { workspace: { id: workspace.id, name: workspace.name, slug: workspace.slug, type: workspace.type, role: membership.role } } });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+// Update workspace branding
+workspaceRouter.patch(
+  "/:workspaceId/branding",
+  requireAuth,
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: { code: "UNAUTHENTICATED", message: "Authentication is required." } });
+        return;
+      }
+
+      const workspaceId = req.params.workspaceId;
+      if (typeof workspaceId !== "string") {
+        res.status(400).json({ success: false, error: { code: "INVALID_WORKSPACE_ID", message: "A valid workspace ID is required." } });
+        return;
+      }
+
+      const input = updateWorkspaceBrandingSchema.parse(req.body);
+
+      const membership = await prisma.workspaceMember.findUnique({
+        where: { workspaceId_userId: { workspaceId, userId: req.user.id } },
+      });
+
+      if (!membership || (membership.role !== "OWNER" && membership.role !== "ADMIN")) {
+        res.status(403).json({ success: false, error: { code: "FORBIDDEN", message: "Only owners and admins can update branding." } });
+        return;
+      }
+
+      const workspace = await prisma.workspace.update({
+        where: { id: workspaceId },
+        data: {
+          ...(input.logoUrl !== undefined ? { logoUrl: input.logoUrl } : {}),
+          ...(input.primaryColor !== undefined ? { primaryColor: input.primaryColor } : {}),
+        },
+      });
+
+      res.json({ success: true, data: { workspace: { id: workspace.id, name: workspace.name, logoUrl: workspace.logoUrl, primaryColor: workspace.primaryColor } } });
     } catch (error) {
       next(error);
     }

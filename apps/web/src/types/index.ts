@@ -7,7 +7,11 @@ export type QuestionType =
   | "SINGLE_CHOICE"
   | "MULTIPLE_CHOICE"
   | "RATING"
-  | "YES_NO";
+  | "YES_NO"
+  | "PHONE"
+  | "URL"
+  | "FILE_UPLOAD"
+  | "LINEAR_SCALE";
 
 export type QuestionOption = {
   value: string;
@@ -17,6 +21,10 @@ export type QuestionOption = {
 export type QuestionSettings = {
   min?: number;
   max?: number;
+  minLabel?: string;
+  maxLabel?: string;
+  maxFileSizeMB?: number;
+  allowedFileTypes?: string[];
 };
 
 export type ConditionRule = {
@@ -71,6 +79,11 @@ export type PublicForm = {
   slug: string;
   title: string;
   description?: string | null;
+  branding?: {
+    workspaceName: string;
+    logoUrl?: string | null;
+    primaryColor?: string | null;
+  };
   schema: FormSchema;
 };
 
