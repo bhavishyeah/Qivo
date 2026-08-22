@@ -19,6 +19,12 @@ export type QuestionSettings = {
   max?: number;
 };
 
+export type ConditionRule = {
+  questionId: string;
+  operator: "equals" | "not_equals" | "contains" | "not_empty";
+  value?: string;
+};
+
 export type Question = {
   id: string;
   label: string;
@@ -27,6 +33,7 @@ export type Question = {
   required: boolean;
   options?: QuestionOption[];
   settings?: QuestionSettings;
+  conditions?: ConditionRule[];
 };
 
 export type Section = {
@@ -41,6 +48,8 @@ export type FormSchema = {
   settings: {
     collectEmail: boolean;
     allowMultipleResponses: boolean;
+    scheduledPublishAt?: string | null;
+    scheduledCloseAt?: string | null;
   };
   confirmationMessage?: string;
 };

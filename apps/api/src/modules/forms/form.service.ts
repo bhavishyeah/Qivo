@@ -46,6 +46,8 @@ type FormSchema = {
   settings: {
     collectEmail: boolean;
     allowMultipleResponses: boolean;
+    scheduledPublishAt?: string | null;
+    scheduledCloseAt?: string | null;
   };
   confirmationMessage?: string;
 };
@@ -366,6 +368,12 @@ export async function updateFormSettings(
               input.allowMultipleResponses,
           }
         : {}),
+      ...(input.scheduledPublishAt !== undefined
+        ? { scheduledPublishAt: input.scheduledPublishAt }
+        : {}),
+      ...(input.scheduledCloseAt !== undefined
+        ? { scheduledCloseAt: input.scheduledCloseAt }
+        : {}),
     },
     ...(input.confirmationMessage !== undefined
       ? {
@@ -556,6 +564,10 @@ export async function updateQuestion(
     settings?:
       | Record<string, unknown>
       | undefined;
+    conditions?:
+      | Array<{ questionId: string; operator: string; value?: string | undefined }>
+      | null
+      | undefined;
   },
 ) {
   const form = await getEditableForm(
@@ -605,6 +617,10 @@ export async function updateQuestion(
 
     if (input.settings !== undefined) {
       question.settings = input.settings;
+    }
+
+    if (input.conditions !== undefined) {
+      (question as any).conditions = input.conditions;
     }
 
     break;
@@ -901,6 +917,16 @@ export async function submitFormResponse(
   }
 
   const schema = getFormSchema(form.schema);
+
+  // Check if form has been closed by schedule
+  if (schema.settings.scheduledCloseAt) {
+    const closeDate = new Date(schema.settings.scheduledCloseAt);
+    if (closeDate <= new Date()) {
+      const error = new Error("This form is no longer accepting responses.");
+      error.name = "FORM_CLOSED";
+      throw error;
+    }
+  }
 
   if (schema.settings.collectEmail) {
     if (!input.email?.trim()) {

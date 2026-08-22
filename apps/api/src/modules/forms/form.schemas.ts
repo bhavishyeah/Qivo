@@ -4,6 +4,8 @@ export const updateFormSettingsSchema = z.object({
   collectEmail: z.boolean(),
   allowMultipleResponses: z.boolean(),
   confirmationMessage: z.string().trim().max(1000),
+  scheduledPublishAt: z.string().nullable().optional(),
+  scheduledCloseAt: z.string().nullable().optional(),
 });
 
 export type UpdateFormSettingsInput = z.infer<
@@ -54,6 +56,11 @@ export const updateQuestionSchema = z.object({
   required: z.boolean().optional(),
   options: z.array(questionOptionSchema).max(100).nullable().optional(),
   settings: z.record(z.string(), z.unknown()).optional(),
+  conditions: z.array(z.object({
+    questionId: z.string().min(1),
+    operator: z.enum(["equals", "not_equals", "contains", "not_empty"]),
+    value: z.string().optional(),
+  })).max(10).nullable().optional(),
 });
 
 export const reorderQuestionsSchema = z.object({

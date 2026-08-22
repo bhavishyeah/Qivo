@@ -366,6 +366,16 @@ const errorHandler: ErrorRequestHandler = (
       });
       return;
 
+    case "FORM_CLOSED":
+      res.status(410).json({
+        success: false,
+        error: {
+          code: "FORM_CLOSED",
+          message: error.message,
+        },
+      });
+      return;
+
     default:
       res.status(500).json({
         success: false,

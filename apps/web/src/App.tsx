@@ -15,6 +15,7 @@ import DashboardPage from "./pages/DashboardPage";
 import CreateFormPage from "./pages/CreateFormPage";
 import FormEditorPage from "./pages/FormEditorPage";
 import FormSharePage from "./pages/FormSharePage";
+import FormPreviewPage from "./pages/FormPreviewPage";
 import ResponseDashboardPage from "./pages/ResponseDashboardPage";
 import PublicFormPage from "./pages/PublicFormPage";
 import QRDisplayPage from "./pages/QRDisplayPage";
@@ -79,6 +80,7 @@ function App() {
         <Route path="/dashboard" element={<Protected>{() => <DashboardPage />}</Protected>} />
         <Route path="/forms/new" element={<Protected>{() => <CreateFormPage />}</Protected>} />
         <Route path="/forms/:formId/edit" element={<Protected>{() => <FormEditorPage />}</Protected>} />
+        <Route path="/forms/:formId/preview" element={<Protected>{() => <FormPreviewPage />}</Protected>} />
         <Route path="/forms/:formId/responses" element={<Protected>{() => <ResponseDashboardPage />}</Protected>} />
         <Route path="/forms/:formId/reports" element={<Protected>{() => <Suspense fallback={<LazyFallback />}><FormReportsPage /></Suspense>}</Protected>} />
         <Route path="/forms/:formId/share" element={<Protected>{() => <FormSharePage />}</Protected>} />

@@ -7,6 +7,7 @@ import {
 } from "react";
 import { useParams } from "react-router-dom";
 import { publicGet, publicPost, ApiRequestError } from "../lib/api";
+import { evaluateConditions } from "../lib/conditions";
 import type { AnswerValue, PublicForm, Question, Section } from "../types";
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
@@ -104,9 +105,11 @@ export default function PublicFormPage() {
     if (form?.schema.settings.collectEmail && !email.trim()) {
       return "Please enter your email address.";
     }
-    // Check all questions
+    // Check all visible questions only
     for (const q of allQuestions) {
       if (!q.required) continue;
+      // Skip questions hidden by conditional logic
+      if (!evaluateConditions(q.conditions, answers)) continue;
       const answer = answers[q.id];
       if (Array.isArray(answer) && answer.length === 0) return `Please answer: ${q.label}`;
       if (answer === undefined || answer === null || answer === "") return `Please answer: ${q.label}`;
@@ -301,15 +304,17 @@ export default function PublicFormPage() {
                   This section has no questions.
                 </p>
               ) : (
-                currentQuestions.map((question) => (
-                  <QuestionField
-                    key={question.id}
-                    question={question}
-                    value={answers[question.id]}
-                    onChange={updateAnswer}
-                    onInputChange={handleInputChange}
-                  />
-                ))
+                currentQuestions
+                  .filter((question) => evaluateConditions(question.conditions, answers))
+                  .map((question) => (
+                    <QuestionField
+                      key={question.id}
+                      question={question}
+                      value={answers[question.id]}
+                      onChange={updateAnswer}
+                      onInputChange={handleInputChange}
+                    />
+                  ))
               )}
             </div>
           ) : null}

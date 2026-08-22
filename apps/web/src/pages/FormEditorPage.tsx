@@ -8,7 +8,7 @@ import {
 } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, ApiRequestError } from "../lib/api";
-import type { FormRecord, Question, QuestionOption, QuestionType } from "../types";
+import type { FormRecord, Question, QuestionOption, QuestionType, ConditionRule } from "../types";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -71,6 +71,8 @@ export default function FormEditorPage() {
   const [collectEmail, setCollectEmail] = useState(false);
   const [allowMultipleResponses, setAllowMultipleResponses] = useState(true);
   const [confirmationMessage, setConfirmationMessage] = useState("");
+  const [scheduledPublishAt, setScheduledPublishAt] = useState("");
+  const [scheduledCloseAt, setScheduledCloseAt] = useState("");
   const [savingSettings, setSavingSettings] = useState(false);
 
   // Approval workflow
@@ -102,6 +104,8 @@ export default function FormEditorPage() {
         setCollectEmail(schema.settings?.collectEmail ?? false);
         setAllowMultipleResponses(schema.settings?.allowMultipleResponses ?? true);
         setConfirmationMessage(schema.confirmationMessage ?? "");
+        setScheduledPublishAt(schema.settings?.scheduledPublishAt ?? "");
+        setScheduledCloseAt(schema.settings?.scheduledCloseAt ?? "");
       } catch (err) {
         setError(err instanceof ApiRequestError ? err.message : "Unable to load editor.");
       } finally {
@@ -141,6 +145,7 @@ export default function FormEditorPage() {
         required: question.required,
         options: question.options,
         settings: question.settings,
+        conditions: question.conditions,
       });
       setMessage("Question saved.");
     } catch (err) {
@@ -319,7 +324,13 @@ export default function FormEditorPage() {
     try {
       const data = await api.patch<{ form: FormRecord }>(
         `/api/forms/${formId}/settings`,
-        { collectEmail, allowMultipleResponses, confirmationMessage },
+        {
+          collectEmail,
+          allowMultipleResponses,
+          confirmationMessage,
+          scheduledPublishAt: scheduledPublishAt || null,
+          scheduledCloseAt: scheduledCloseAt || null,
+        },
       );
       setForm(data.form); setMessage("Settings saved.");
     } catch (err) {
@@ -408,6 +419,10 @@ export default function FormEditorPage() {
               ↩ Undo
             </button>
           ) : null}
+
+          <Link className="secondary-button compact" to={`/forms/${formId}/preview`}>
+            👁 Preview
+          </Link>
 
           {isPublished ? (
             <>
@@ -515,6 +530,18 @@ export default function FormEditorPage() {
             <label htmlFor="confirmation-message">Confirmation message</label>
             <textarea id="confirmation-message" rows={3} value={confirmationMessage} onChange={(e) => setConfirmationMessage(e.target.value)} placeholder="Thanks for your response." />
           </div>
+          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
+            <div className="question-field" style={{ flex: 1, minWidth: 200 }}>
+              <label htmlFor="scheduled-publish">Scheduled publish (optional)</label>
+              <input id="scheduled-publish" type="datetime-local" value={scheduledPublishAt} onChange={(e) => setScheduledPublishAt(e.target.value)} style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }} />
+              <small className="muted">Form will become public at this time.</small>
+            </div>
+            <div className="question-field" style={{ flex: 1, minWidth: 200 }}>
+              <label htmlFor="scheduled-close">Scheduled close (optional)</label>
+              <input id="scheduled-close" type="datetime-local" value={scheduledCloseAt} onChange={(e) => setScheduledCloseAt(e.target.value)} style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }} />
+              <small className="muted">Form will stop accepting responses at this time.</small>
+            </div>
+          </div>
           <button className="secondary-button" type="submit" disabled={savingSettings}>{savingSettings ? "Saving..." : "Save settings"}</button>
         </form>
       </section>
@@ -577,6 +604,7 @@ export default function FormEditorPage() {
                 total={questions.length}
                 saving={saving}
                 isDragOver={dragOverIndex === index}
+                allQuestions={questions}
                 onDragStart={() => handleDragStart(index)}
                 onDragOver={(e) => handleDragOver(e, index)}
                 onDrop={(e) => void handleDrop(e, index)}
@@ -604,6 +632,7 @@ function QuestionCard({
   index,
   saving,
   isDragOver,
+  allQuestions,
   onDragStart,
   onDragOver,
   onDrop,
@@ -618,6 +647,7 @@ function QuestionCard({
   total: number;
   saving: boolean;
   isDragOver: boolean;
+  allQuestions: Question[];
   onDragStart: () => void;
   onDragOver: (e: DragEvent<HTMLElement>) => void;
   onDrop: (e: DragEvent<HTMLElement>) => void;
@@ -799,6 +829,13 @@ function QuestionCard({
               </div>
             ) : null}
 
+            {/* Conditional logic */}
+            <ConditionEditor
+              question={question}
+              allQuestions={allQuestions}
+              onChange={onChange}
+            />
+
             {/* Actions */}
             <div className="editor-question-actions" style={{ marginTop: 16 }}>
               <button className="secondary-button compact" type="button" disabled={saving} onClick={onSave}>Save</button>
@@ -809,6 +846,154 @@ function QuestionCard({
         ) : null}
       </div>
     </article>
+  );
+}
+
+// ─── Condition Editor ─────────────────────────────────────────────────────────
+
+function ConditionEditor({
+  question,
+  allQuestions,
+  onChange,
+}: {
+  question: Question;
+  allQuestions: Question[];
+  onChange: (id: string, patch: Partial<Question>) => void;
+}) {
+  const conditions = question.conditions ?? [];
+  const [showEditor, setShowEditor] = useState(false);
+
+  // Only questions that appear BEFORE this one can be used as conditions
+  const availableQuestions = allQuestions.filter(
+    (q) => q.id !== question.id && allQuestions.indexOf(q) < allQuestions.indexOf(question),
+  );
+
+  function addCondition() {
+    if (availableQuestions.length === 0) return;
+    const newRule: ConditionRule = {
+      questionId: availableQuestions[0].id,
+      operator: "equals",
+      value: "",
+    };
+    onChange(question.id, { conditions: [...conditions, newRule] });
+  }
+
+  function updateCondition(idx: number, patch: Partial<ConditionRule>) {
+    const updated = conditions.map((c, i) => (i === idx ? { ...c, ...patch } : c));
+    onChange(question.id, { conditions: updated });
+  }
+
+  function removeCondition(idx: number) {
+    const updated = conditions.filter((_, i) => i !== idx);
+    onChange(question.id, { conditions: updated.length > 0 ? updated : undefined });
+  }
+
+  if (!showEditor && conditions.length === 0) {
+    return (
+      <div style={{ marginTop: 14 }}>
+        <button
+          type="button"
+          className="back-button inline-button"
+          style={{ fontSize: "0.78rem", color: "#94a3b8" }}
+          onClick={() => setShowEditor(true)}
+          disabled={availableQuestions.length === 0}
+          title={availableQuestions.length === 0 ? "Add questions above first" : ""}
+        >
+          + Add condition
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginTop: 14, padding: "12px 14px", background: "#fefce8", border: "1px solid #fde68a", borderRadius: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <span style={{ fontSize: "0.78rem", fontWeight: 750, color: "#92400e" }}>
+          Conditional logic — show this question when:
+        </span>
+        {conditions.length === 0 ? (
+          <button
+            type="button"
+            className="back-button inline-button"
+            style={{ fontSize: "0.75rem" }}
+            onClick={() => setShowEditor(false)}
+          >
+            Cancel
+          </button>
+        ) : null}
+      </div>
+
+      {conditions.map((rule, idx) => {
+        const refQuestion = allQuestions.find((q) => q.id === rule.questionId);
+        return (
+          <div key={idx} style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <select
+              value={rule.questionId}
+              onChange={(e) => updateCondition(idx, { questionId: e.target.value })}
+              style={{ border: "1px solid #fde68a", borderRadius: 6, padding: "6px 8px", fontSize: "0.8rem", maxWidth: 180 }}
+            >
+              {availableQuestions.map((q) => (
+                <option key={q.id} value={q.id}>{q.label.slice(0, 30)}</option>
+              ))}
+            </select>
+
+            <select
+              value={rule.operator}
+              onChange={(e) => updateCondition(idx, { operator: e.target.value as ConditionRule["operator"] })}
+              style={{ border: "1px solid #fde68a", borderRadius: 6, padding: "6px 8px", fontSize: "0.8rem" }}
+            >
+              <option value="equals">equals</option>
+              <option value="not_equals">not equals</option>
+              <option value="contains">contains</option>
+              <option value="not_empty">is answered</option>
+            </select>
+
+            {rule.operator !== "not_empty" ? (
+              refQuestion?.options ? (
+                <select
+                  value={rule.value ?? ""}
+                  onChange={(e) => updateCondition(idx, { value: e.target.value })}
+                  style={{ border: "1px solid #fde68a", borderRadius: 6, padding: "6px 8px", fontSize: "0.8rem" }}
+                >
+                  <option value="">Select...</option>
+                  {refQuestion.options.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={rule.value ?? ""}
+                  onChange={(e) => updateCondition(idx, { value: e.target.value })}
+                  placeholder="value"
+                  style={{ border: "1px solid #fde68a", borderRadius: 6, padding: "6px 8px", fontSize: "0.8rem", width: 120 }}
+                />
+              )
+            ) : null}
+
+            <button
+              type="button"
+              onClick={() => removeCondition(idx)}
+              style={{ border: "none", background: "none", color: "#dc2626", cursor: "pointer", fontSize: "1rem", padding: "2px 6px" }}
+              title="Remove condition"
+            >
+              ×
+            </button>
+          </div>
+        );
+      })}
+
+      {availableQuestions.length > 0 ? (
+        <button
+          type="button"
+          className="back-button inline-button"
+          style={{ fontSize: "0.75rem", marginTop: 4 }}
+          onClick={addCondition}
+        >
+          + Add another condition
+        </button>
+      ) : null}
+    </div>
   );
 }
 

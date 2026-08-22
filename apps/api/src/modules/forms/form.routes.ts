@@ -420,6 +420,9 @@ formRouter.patch(
           ...(input.settings !== undefined
             ? { settings: input.settings }
             : {}),
+          ...(input.conditions !== undefined
+            ? { conditions: input.conditions }
+            : {}),
         },
       );
 
