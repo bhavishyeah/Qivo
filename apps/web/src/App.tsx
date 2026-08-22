@@ -24,6 +24,7 @@ import FoldersPage from "./pages/FoldersPage";
 import NotificationsPage from "./pages/NotificationsPage";
 import SettingsPage from "./pages/SettingsPage";
 import AuditLogPage from "./pages/AuditLogPage";
+import EventsPage from "./pages/EventsPage";
 import { getToken } from "./lib/api";
 
 // Lazy-loaded pages (heavy dependencies like recharts)
@@ -89,6 +90,7 @@ function App() {
         <Route path="/notifications" element={<Protected>{() => <NotificationsPage />}</Protected>} />
         <Route path="/settings" element={<Protected>{(user) => <SettingsPage user={user} />}</Protected>} />
         <Route path="/audit" element={<Protected>{() => <AuditLogPage />}</Protected>} />
+        <Route path="/events" element={<Protected>{() => <EventsPage />}</Protected>} />
 
         {/* Legacy public form route */}
         <Route path="/forms/:slug" element={<PublicFormPage />} />

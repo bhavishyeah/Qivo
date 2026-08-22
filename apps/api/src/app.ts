@@ -19,6 +19,7 @@ import memberRouter from "./modules/members/member.routes.js";
 import approvalRouter from "./modules/approvals/approval.routes.js";
 import notificationRouter from "./modules/notifications/notification.routes.js";
 import auditRouter from "./modules/audit/audit.routes.js";
+import eventRouter from "./modules/events/event.routes.js";
 import workspaceRouter from "./modules/workspaces/workspace.routes.js";
 
 const app: Express = express();
@@ -85,6 +86,7 @@ app.use("/api/members", memberRouter);
 app.use("/api/approvals", approvalRouter);
 app.use("/api/notifications", notificationRouter);
 app.use("/api/audit", auditRouter);
+app.use("/api/events", eventRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/workspaces", workspaceRouter);
 

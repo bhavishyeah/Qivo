@@ -79,6 +79,7 @@ model Workspace {
   members WorkspaceMember[]
   folders Folder[]
   forms   Form[]
+  events  Event[]
 
   @@index([ownerId])
 }
@@ -118,6 +119,7 @@ model Form {
   id          String     @id @default(cuid())
   workspaceId String
   folderId    String?
+  eventId     String?
   ownerId     String
   title       String
   description String?
@@ -131,15 +133,33 @@ model Form {
 
   workspace Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   folder    Folder?        @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  event     Event?         @relation(fields: [eventId], references: [id], onDelete: SetNull)
   owner     User           @relation(fields: [ownerId], references: [id])
   responses FormResponse[]
   versions  FormVersion[]
 
   @@index([workspaceId])
   @@index([folderId])
+  @@index([eventId])
   @@index([ownerId])
   @@index([status])
   @@index([deletedAt])
+}
+
+model Event {
+  id          String    @id @default(cuid())
+  workspaceId String
+  name        String
+  description String?
+  startDate   DateTime?
+  endDate     DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  forms     Form[]
+
+  @@index([workspaceId])
 }
 
 model FormVersion {
