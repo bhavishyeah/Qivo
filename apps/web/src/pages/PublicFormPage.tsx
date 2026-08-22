@@ -24,6 +24,7 @@ export default function PublicFormPage() {
   const [errorCode, setErrorCode] = useState("");
   const [submitError, setSubmitError] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [quizScore, setQuizScore] = useState<{ earned: number; total: number; percentage: number } | null>(null);
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
 
   useEffect(() => {
@@ -155,6 +156,8 @@ export default function PublicFormPage() {
         answers,
         ...(form?.schema.settings.collectEmail ? { email: email.trim().toLowerCase() } : {}),
         metadata: { source: "qivo-web" },
+      }).then((data: any) => {
+        if (data?.quizScore) setQuizScore(data.quizScore);
       });
       setSubmitted(true);
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -230,6 +233,17 @@ export default function PublicFormPage() {
         <div className="public-status-card public-status-success">
           <div className="public-status-icon">✅</div>
           <h1>Response submitted</h1>
+          {quizScore && form.schema.settings.showScore ? (
+            <div style={{ margin: "20px 0", padding: "20px", background: "#f0fdf4", borderRadius: 14, border: "1px solid #bbf7d0" }}>
+              <p style={{ margin: "0 0 8px", color: "#166534", fontWeight: 700, fontSize: "0.9rem" }}>Your score</p>
+              <p style={{ margin: 0, fontSize: "2.5rem", fontWeight: 900, color: "#111827" }}>
+                {quizScore.earned}/{quizScore.total}
+              </p>
+              <p style={{ margin: "4px 0 0", color: "#64748b", fontSize: "0.9rem" }}>
+                {quizScore.percentage}% correct
+              </p>
+            </div>
+          ) : null}
           <p>
             {form.schema.confirmationMessage ||
               "Thank you! Your response has been recorded."}

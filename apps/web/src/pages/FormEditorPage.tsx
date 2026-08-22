@@ -77,6 +77,8 @@ export default function FormEditorPage() {
   const [confirmationMessage, setConfirmationMessage] = useState("");
   const [scheduledPublishAt, setScheduledPublishAt] = useState("");
   const [scheduledCloseAt, setScheduledCloseAt] = useState("");
+  const [quizMode, setQuizMode] = useState(false);
+  const [showScore, setShowScore] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
 
   // Approval workflow
@@ -110,6 +112,8 @@ export default function FormEditorPage() {
         setConfirmationMessage(schema.confirmationMessage ?? "");
         setScheduledPublishAt(schema.settings?.scheduledPublishAt ?? "");
         setScheduledCloseAt(schema.settings?.scheduledCloseAt ?? "");
+        setQuizMode(schema.settings?.quizMode ?? false);
+        setShowScore(schema.settings?.showScore ?? false);
       } catch (err) {
         setError(err instanceof ApiRequestError ? err.message : "Unable to load editor.");
       } finally {
@@ -336,6 +340,8 @@ export default function FormEditorPage() {
           confirmationMessage,
           scheduledPublishAt: scheduledPublishAt || null,
           scheduledCloseAt: scheduledCloseAt || null,
+          quizMode,
+          showScore,
         },
       );
       setForm(data.form); setMessage("Settings saved.");
@@ -548,6 +554,16 @@ export default function FormEditorPage() {
               <small className="muted">Form will stop accepting responses at this time.</small>
             </div>
           </div>
+          <label className="settings-toggle">
+            <input type="checkbox" checked={quizMode} onChange={(e) => setQuizMode(e.target.checked)} />
+            <span><strong>Quiz mode</strong><small>Enable scoring — set correct answers on each question.</small></span>
+          </label>
+          {quizMode ? (
+            <label className="settings-toggle">
+              <input type="checkbox" checked={showScore} onChange={(e) => setShowScore(e.target.checked)} />
+              <span><strong>Show score to respondent</strong><small>Display score after submission.</small></span>
+            </label>
+          ) : null}
           <button className="secondary-button" type="submit" disabled={savingSettings}>{savingSettings ? "Saving..." : "Save settings"}</button>
         </form>
       </section>
@@ -611,6 +627,7 @@ export default function FormEditorPage() {
                 saving={saving}
                 isDragOver={dragOverIndex === index}
                 allQuestions={questions}
+                isQuizMode={quizMode}
                 onDragStart={() => handleDragStart(index)}
                 onDragOver={(e) => handleDragOver(e, index)}
                 onDrop={(e) => void handleDrop(e, index)}
@@ -639,6 +656,7 @@ function QuestionCard({
   saving,
   isDragOver,
   allQuestions,
+  isQuizMode,
   onDragStart,
   onDragOver,
   onDrop,
@@ -654,6 +672,7 @@ function QuestionCard({
   saving: boolean;
   isDragOver: boolean;
   allQuestions: Question[];
+  isQuizMode: boolean;
   onDragStart: () => void;
   onDragOver: (e: DragEvent<HTMLElement>) => void;
   onDrop: (e: DragEvent<HTMLElement>) => void;
@@ -889,6 +908,49 @@ function QuestionCard({
                 <p className="muted" style={{ marginTop: 6, fontSize: "0.75rem" }}>
                   Comma-separated MIME types. E.g. image/*, application/pdf, .docx
                 </p>
+              </div>
+            ) : null}
+
+            {/* Quiz mode: correct answer + points */}
+            {isQuizMode ? (
+              <div style={{ marginTop: 14, padding: "12px 14px", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 10 }}>
+                <span style={{ fontSize: "0.78rem", fontWeight: 750, color: "#166534", display: "block", marginBottom: 10 }}>
+                  Quiz scoring
+                </span>
+                <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center" }}>
+                  <div style={{ flex: 1, minWidth: 160 }}>
+                    <label style={{ display: "block", fontSize: "0.75rem", color: "#64748b", marginBottom: 4 }}>Correct answer</label>
+                    {question.options ? (
+                      <select
+                        value={question.settings?.correctAnswer ?? ""}
+                        onChange={(e) => onChange(question.id, { settings: { ...question.settings, correctAnswer: e.target.value || undefined } })}
+                        style={{ width: "100%", border: "1px solid #bbf7d0", borderRadius: 8, padding: "8px 10px", fontSize: "0.85rem" }}
+                      >
+                        <option value="">Not set</option>
+                        {question.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        value={question.settings?.correctAnswer ?? ""}
+                        onChange={(e) => onChange(question.id, { settings: { ...question.settings, correctAnswer: e.target.value || undefined } })}
+                        placeholder="Correct value..."
+                        style={{ width: "100%", border: "1px solid #bbf7d0", borderRadius: 8, padding: "8px 10px", fontSize: "0.85rem" }}
+                      />
+                    )}
+                  </div>
+                  <div style={{ width: 80 }}>
+                    <label style={{ display: "block", fontSize: "0.75rem", color: "#64748b", marginBottom: 4 }}>Points</label>
+                    <input
+                      type="number"
+                      value={question.settings?.points ?? 1}
+                      min={0}
+                      max={100}
+                      onChange={(e) => onChange(question.id, { settings: { ...question.settings, points: Number(e.target.value) } })}
+                      style={{ width: "100%", border: "1px solid #bbf7d0", borderRadius: 8, padding: "8px 10px", textAlign: "center" }}
+                    />
+                  </div>
+                </div>
               </div>
             ) : null}
 

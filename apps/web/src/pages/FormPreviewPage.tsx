@@ -256,12 +256,50 @@ function PreviewQuestion({
     );
   }
 
-  const inputType = question.type === "EMAIL" ? "email" : question.type === "NUMBER" ? "number" : question.type === "DATE" ? "date" : "text";
+  if (question.type === "LINEAR_SCALE") {
+    const min = question.settings?.min ?? 1;
+    const max = question.settings?.max ?? 10;
+    const current = typeof value === "number" ? value : null;
+    return (
+      <fieldset className="question-field">
+        <legend>{label}</legend>
+        {desc}
+        <div className="rating-list">
+          {Array.from({ length: max - min + 1 }, (_, i) => min + i).map((r) => (
+            <label className="rating-item" key={r}>
+              <input type="radio" name={question.id} checked={current === r} onChange={() => onChange(question.id, r)} />
+              <span>{r}</span>
+            </label>
+          ))}
+        </div>
+        <div className="rating-labels">
+          <span>{question.settings?.minLabel ?? ""}</span>
+          <span>{question.settings?.maxLabel ?? ""}</span>
+        </div>
+      </fieldset>
+    );
+  }
+
+  if (question.type === "FILE_UPLOAD") {
+    return (
+      <div className="question-field">
+        <label>{label}</label>
+        {desc}
+        <div style={{ border: "2px dashed #cbd5e1", borderRadius: 12, padding: "24px 16px", textAlign: "center", background: "#f8fafc" }}>
+          <p style={{ margin: 0, color: "#475569", fontWeight: 600 }}>Click to upload (preview only)</p>
+          <p style={{ margin: "4px 0 0", color: "#94a3b8", fontSize: "0.82rem" }}>Max {question.settings?.maxFileSizeMB ?? 5}MB</p>
+        </div>
+      </div>
+    );
+  }
+
+  const inputType = question.type === "EMAIL" ? "email" : question.type === "NUMBER" ? "number" : question.type === "DATE" ? "date" : question.type === "URL" ? "url" : question.type === "PHONE" ? "tel" : "text";
+  const placeholder = question.type === "PHONE" ? "+91 98765 43210" : question.type === "URL" ? "https://example.com" : "Your answer...";
   return (
     <div className="question-field">
       <label>{label}</label>
       {desc}
-      <input type={inputType} value={typeof value === "string" || typeof value === "number" ? value : ""} onChange={(e) => onInputChange(question.id, e)} placeholder="Your answer..." />
+      <input type={inputType} value={typeof value === "string" || typeof value === "number" ? value : ""} onChange={(e) => onInputChange(question.id, e)} placeholder={placeholder} />
     </div>
   );
 }

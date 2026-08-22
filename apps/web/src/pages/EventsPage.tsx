@@ -21,7 +21,7 @@ type EventForm = {
   _count: { responses: number };
 };
 
-type EventDetail = EventRecord & { forms: EventForm[] };
+type EventDetail = EventRecord & { forms: EventForm[]; workspaceId: string };
 
 export default function EventsPage() {
   const [events, setEvents] = useState<EventRecord[]>([]);
@@ -142,10 +142,11 @@ export default function EventsPage() {
         <section className="editor-card" style={{ maxWidth: 980, margin: "0 auto" }}>
           <div className="editor-card-header">
             <div><p className="eyebrow">Forms</p><h2>{selectedEvent.forms.length} forms in this event</h2></div>
+            <AddFormToEvent eventId={selectedEvent.id} workspaceId={selectedEvent.workspaceId} existingFormIds={selectedEvent.forms.map((f) => f.id)} onAdded={() => void openEvent(selectedEvent.id)} />
           </div>
 
           {selectedEvent.forms.length === 0 ? (
-            <p className="muted" style={{ padding: "16px 0" }}>No forms added to this event yet. Add forms from the form editor.</p>
+            <p className="muted" style={{ padding: "16px 0" }}>No forms yet. Click "Add form" above to link forms to this event.</p>
           ) : (
             <div className="editor-question-list">
               {selectedEvent.forms.map((form) => (
@@ -238,5 +239,56 @@ export default function EventsPage() {
         )}
       </section>
     </main>
+  );
+}
+
+
+function AddFormToEvent({ eventId, workspaceId, existingFormIds, onAdded }: { eventId: string; workspaceId: string; existingFormIds: string[]; onAdded: () => void }) {
+  const [showPicker, setShowPicker] = useState(false);
+  const [forms, setForms] = useState<{ id: string; title: string }[]>([]);
+  const [loadingForms, setLoadingForms] = useState(false);
+
+  async function loadForms() {
+    setLoadingForms(true);
+    try {
+      const data = await api.get<{ forms: { id: string; title: string }[] }>(`/api/forms?workspaceId=${encodeURIComponent(workspaceId)}`);
+      setForms(data.forms.filter((f) => !existingFormIds.includes(f.id)));
+    } catch { /* silent */ }
+    finally { setLoadingForms(false); }
+  }
+
+  async function addForm(formId: string) {
+    try {
+      await api.post(`/api/events/${eventId}/forms`, { formId });
+      setShowPicker(false);
+      onAdded();
+    } catch { /* silent */ }
+  }
+
+  function handleOpen() {
+    setShowPicker(true);
+    void loadForms();
+  }
+
+  if (!showPicker) {
+    return <button className="secondary-button compact" type="button" onClick={handleOpen}>+ Add form</button>;
+  }
+
+  return (
+    <div style={{ position: "relative" }}>
+      <div style={{ position: "absolute", top: "110%", right: 0, zIndex: 20, background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, boxShadow: "0 8px 32px rgb(0 0 0 / 12%)", minWidth: 260, maxHeight: 300, overflow: "auto", padding: 4 }}>
+        <div style={{ padding: "8px 12px", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between" }}>
+          <span style={{ fontWeight: 700, fontSize: "0.85rem" }}>Select a form</span>
+          <button type="button" style={{ border: "none", background: "none", cursor: "pointer", color: "#64748b" }} onClick={() => setShowPicker(false)}>×</button>
+        </div>
+        {loadingForms ? <p className="muted" style={{ padding: 12 }}>Loading...</p> : null}
+        {!loadingForms && forms.length === 0 ? <p className="muted" style={{ padding: 12 }}>No available forms to add.</p> : null}
+        {forms.map((form) => (
+          <button key={form.id} type="button" onClick={() => void addForm(form.id)} style={{ display: "block", width: "100%", padding: "10px 12px", textAlign: "left", border: "none", background: "#fff", cursor: "pointer", fontSize: "0.88rem", borderBottom: "1px solid #f8fafc" }}>
+            {form.title}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }

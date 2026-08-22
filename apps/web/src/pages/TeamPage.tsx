@@ -46,6 +46,12 @@ export default function TeamPage() {
   const [renameName, setRenameName] = useState("");
   const [renaming, setRenaming] = useState(false);
 
+  // Branding
+  const [showBranding, setShowBranding] = useState(false);
+  const [brandLogoUrl, setBrandLogoUrl] = useState("");
+  const [brandColor, setBrandColor] = useState("");
+  const [savingBrand, setSavingBrand] = useState(false);
+
   useEffect(() => {
     void load();
   }, []);
@@ -190,6 +196,24 @@ export default function TeamPage() {
     }
   }
 
+  async function handleSaveBranding(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedWorkspace) return;
+    setSavingBrand(true); setError(""); setMessage("");
+    try {
+      await api.patch(`/api/workspaces/${selectedWorkspace}/branding`, {
+        logoUrl: brandLogoUrl.trim() || null,
+        primaryColor: brandColor.trim() || null,
+      });
+      setShowBranding(false);
+      setMessage("Branding updated! It will appear on your public forms.");
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : "Unable to update branding.");
+    } finally {
+      setSavingBrand(false);
+    }
+  }
+
   if (loading) {
     return (
       <main className="dashboard-shell">
@@ -244,6 +268,15 @@ export default function TeamPage() {
               onClick={() => { setShowRename(true); setRenameName(selectedWsData?.name ?? ""); }}
             >
               Rename
+            </button>
+          ) : null}
+          {canManage ? (
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => setShowBranding((v) => !v)}
+            >
+              {showBranding ? "Cancel" : "🎨 Branding"}
             </button>
           ) : null}
           <button
@@ -348,6 +381,36 @@ export default function TeamPage() {
             </div>
             <button className="secondary-button" type="submit" disabled={renaming || !renameName.trim()}>
               {renaming ? "Saving..." : "Save"}
+            </button>
+          </form>
+        </section>
+      ) : null}
+
+      {/* Branding */}
+      {showBranding ? (
+        <section className="editor-card" style={{ maxWidth: 980, margin: "0 auto 20px" }}>
+          <div className="editor-card-header">
+            <div><p className="eyebrow">Branding</p><h2>Public form appearance</h2></div>
+          </div>
+          <p className="muted" style={{ marginBottom: 16, fontSize: "0.88rem" }}>
+            Your workspace name, logo, and accent color appear on all public forms.
+          </p>
+          <form onSubmit={handleSaveBranding} style={{ display: "grid", gap: 14 }}>
+            <div className="question-field">
+              <label>Logo URL (optional)</label>
+              <input type="url" value={brandLogoUrl} onChange={(e) => setBrandLogoUrl(e.target.value)} placeholder="https://example.com/logo.png" style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }} />
+              <small className="muted">Direct URL to your logo image. 200px wide recommended.</small>
+            </div>
+            <div className="question-field">
+              <label>Accent color (optional)</label>
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                <input type="color" value={brandColor || "#2563eb"} onChange={(e) => setBrandColor(e.target.value)} style={{ width: 44, height: 44, border: "1px solid #cbd5e1", borderRadius: 8, padding: 2, cursor: "pointer" }} />
+                <input type="text" value={brandColor} onChange={(e) => setBrandColor(e.target.value)} placeholder="#2563eb" style={{ width: 120, border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px", fontFamily: "monospace" }} />
+              </div>
+              <small className="muted">Used for buttons and links on your public forms.</small>
+            </div>
+            <button className="secondary-button" type="submit" disabled={savingBrand}>
+              {savingBrand ? "Saving..." : "Save branding"}
             </button>
           </form>
         </section>
