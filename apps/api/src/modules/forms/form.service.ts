@@ -36,6 +36,7 @@ type FormQuestion = {
   required: boolean;
   options?: FormQuestionOption[];
   settings?: Record<string, unknown>;
+  conditions?: Array<{ questionId: string; operator: string; value?: string | undefined }>;
 };
 
 type FormSection = {
@@ -77,6 +78,18 @@ function getFormSchema(value: unknown): FormSchema {
         candidate?.settings?.collectEmail ?? false,
       allowMultipleResponses:
         candidate?.settings?.allowMultipleResponses ?? true,
+      ...(candidate?.settings?.scheduledPublishAt !== undefined
+        ? { scheduledPublishAt: candidate.settings.scheduledPublishAt }
+        : {}),
+      ...(candidate?.settings?.scheduledCloseAt !== undefined
+        ? { scheduledCloseAt: candidate.settings.scheduledCloseAt }
+        : {}),
+      ...(candidate?.settings?.quizMode !== undefined
+        ? { quizMode: candidate.settings.quizMode }
+        : {}),
+      ...(candidate?.settings?.showScore !== undefined
+        ? { showScore: candidate.settings.showScore }
+        : {}),
     },
     ...(candidate?.confirmationMessage !== undefined
       ? {
@@ -632,7 +645,11 @@ export async function updateQuestion(
     }
 
     if (input.conditions !== undefined) {
-      (question as any).conditions = input.conditions;
+      if (input.conditions === null) {
+        delete question.conditions;
+      } else {
+        question.conditions = input.conditions;
+      }
     }
 
     break;

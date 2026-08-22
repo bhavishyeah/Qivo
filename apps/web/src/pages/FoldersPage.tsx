@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api, ApiRequestError } from "../lib/api";
 import type { WorkspaceRecord } from "../types";
 
@@ -317,6 +317,9 @@ function FolderItem({
               <strong style={{ color: "#111827" }}>📁 {folder.name}</strong>
               <p className="muted" style={{ margin: "4px 0 0", fontSize: "0.82rem" }}>
                 {folder._count.forms} form{folder._count.forms === 1 ? "" : "s"}
+                {folder._count.forms > 0 ? (
+                  <> · <Link to={`/dashboard?folder=${folder.id}`} className="secondary-link" style={{ fontSize: "0.78rem" }}>View forms →</Link></>
+                ) : null}
               </p>
             </>
           )}

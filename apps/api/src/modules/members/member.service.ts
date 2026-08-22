@@ -1,4 +1,5 @@
 import prisma from "../../db/prisma.js";
+import { createNotification } from "../notifications/notification.service.js";
 
 type WorkspaceRole = "OWNER" | "ADMIN" | "EDITOR" | "VIEWER";
 
@@ -91,6 +92,18 @@ export async function inviteMember(
     include: {
       user: { select: { id: true, name: true, email: true, avatarUrl: true } },
     },
+  });
+
+  // Send notification to the invited user
+  const actor = await prisma.user.findUnique({ where: { id: actorId }, select: { name: true } });
+  const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId }, select: { name: true } });
+
+  void createNotification({
+    userId: targetUser.id,
+    type: "MEMBER_INVITED",
+    title: "Added to workspace",
+    message: `${actor?.name ?? "Someone"} added you to "${workspace?.name ?? "a workspace"}" as ${input.role}.`,
+    metadata: { workspaceId, actorId },
   });
 
   return member;

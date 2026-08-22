@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, ApiRequestError } from "../lib/api";
 import type { FormRecord, WorkspaceRecord } from "../types";
 
@@ -16,6 +16,7 @@ type FolderRecord = {
 
 export default function DashboardPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [forms, setForms] = useState<FormWithCount[]>([]);
   const [folders, setFolders] = useState<FolderRecord[]>([]);
@@ -24,10 +25,10 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // Filters
+  // Filters (read folder from URL params)
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
-  const [folderFilter, setFolderFilter] = useState<string>("ALL");
+  const [folderFilter, setFolderFilter] = useState<string>(searchParams.get("folder") ?? "ALL");
   const [sortBy, setSortBy] = useState<SortOption>("updatedAt");
 
   // Folder assignment popup
