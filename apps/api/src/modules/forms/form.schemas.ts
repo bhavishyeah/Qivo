@@ -6,6 +6,8 @@ export const updateFormSettingsSchema = z.object({
   confirmationMessage: z.string().trim().max(1000),
   scheduledPublishAt: z.string().nullable().optional(),
   scheduledCloseAt: z.string().nullable().optional(),
+  quizMode: z.boolean().optional(),
+  showScore: z.boolean().optional(),
 });
 
 export type UpdateFormSettingsInput = z.infer<

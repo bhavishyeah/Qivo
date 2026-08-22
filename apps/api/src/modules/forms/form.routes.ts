@@ -1058,6 +1058,7 @@ formRouter.post(
             id: response.id,
             submittedAt: response.submittedAt,
           },
+          ...(response.quizScore ? { quizScore: response.quizScore } : {}),
         },
       });
     } catch (error) {

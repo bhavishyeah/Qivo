@@ -52,6 +52,8 @@ type FormSchema = {
     allowMultipleResponses: boolean;
     scheduledPublishAt?: string | null;
     scheduledCloseAt?: string | null;
+    quizMode?: boolean;
+    showScore?: boolean;
   };
   confirmationMessage?: string;
 };
@@ -377,6 +379,12 @@ export async function updateFormSettings(
         : {}),
       ...(input.scheduledCloseAt !== undefined
         ? { scheduledCloseAt: input.scheduledCloseAt }
+        : {}),
+      ...(input.quizMode !== undefined
+        ? { quizMode: input.quizMode }
+        : {}),
+      ...(input.showScore !== undefined
+        ? { showScore: input.showScore }
         : {}),
     },
     ...(input.confirmationMessage !== undefined
@@ -1116,8 +1124,9 @@ const response = await prisma.formResponse.create({
 
 // Check for response milestones and notify form owner
 void (async () => {
-  // Track submission
+  // Track submission event
   await prisma.formAnalytics.create({ data: { formId: form.id, event: "submission" } });
+
   const MILESTONES = [10, 50, 100, 250, 500, 1000];
   const count = await prisma.formResponse.count({ where: { formId: form.id } });
   if (MILESTONES.includes(count)) {
@@ -1132,7 +1141,26 @@ void (async () => {
   }
 })();
 
-return response;
+// Calculate quiz score if quiz mode is enabled
+let quizScore: { earned: number; total: number; percentage: number } | null = null;
+if (schema.settings.quizMode) {
+  const questions = schema.sections.flatMap((s) => s.questions);
+  let earned = 0;
+  let total = 0;
+  for (const q of questions) {
+    if (q.settings?.correctAnswer !== undefined) {
+      const points = (q.settings as any)?.points ?? 1;
+      total += points;
+      const userAnswer = String(input.answers[q.id] ?? "");
+      if (userAnswer === q.settings.correctAnswer) {
+        earned += points;
+      }
+    }
+  }
+  quizScore = { earned, total, percentage: total > 0 ? Math.round((earned / total) * 100) : 0 };
+}
+
+return { ...response, quizScore };
 }
 
 export async function listFormResponses(

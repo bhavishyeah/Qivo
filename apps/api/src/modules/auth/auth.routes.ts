@@ -15,6 +15,7 @@ import {
   signup,
   verifyEmail,
 } from "./auth.service.js";
+import { googleSignIn } from "./google.service.js";
 const authRouter: ExpressRouter = Router();
 
 const signupSchema = z.object({
@@ -213,6 +214,28 @@ authRouter.post("/verify-email", async (req, res, next) => {
     res.json({
       success: true,
       data: { message: "Email verified successfully." },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Google OAuth
+authRouter.post("/google", async (req, res, next) => {
+  try {
+    const input = z.object({ idToken: z.string().min(1) }).parse(req.body);
+
+    const result = await googleSignIn(input.idToken);
+
+    res.cookie("qivo_session", result.sessionToken, getSessionCookieOptions());
+
+    res.json({
+      success: true,
+      data: {
+        token: result.sessionToken,
+        user: result.user,
+        workspace: result.workspace,
+      },
     });
   } catch (error) {
     next(error);

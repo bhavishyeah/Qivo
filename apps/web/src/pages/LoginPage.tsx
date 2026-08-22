@@ -1,6 +1,19 @@
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, ApiRequestError, setToken } from "../lib/api";
+
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        id: {
+          initialize: (config: { client_id: string; callback: (response: { credential: string }) => void }) => void;
+          renderButton: (parent: HTMLElement, options: Record<string, unknown>) => void;
+        };
+      };
+    };
+  }
+}
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -9,6 +22,49 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Google Sign-In
+  useEffect(() => {
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+    if (!clientId) return;
+
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.onload = () => {
+      window.google?.accounts.id.initialize({
+        client_id: clientId,
+        callback: handleGoogleCallback,
+      });
+      const container = document.getElementById("google-btn");
+      if (container) {
+        window.google?.accounts.id.renderButton(container, {
+          theme: "outline",
+          size: "large",
+          width: "100%",
+          text: "continue_with",
+        });
+      }
+    };
+    document.head.appendChild(script);
+    return () => { script.remove(); };
+  }, []);
+
+  async function handleGoogleCallback(response: { credential: string }) {
+    setError("");
+    setLoading(true);
+    try {
+      const data = await api.post<{ token: string }>("/api/auth/google", {
+        idToken: response.credential,
+      });
+      setToken(data.token);
+      navigate("/dashboard");
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : "Google sign-in failed.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -72,6 +128,18 @@ export default function LoginPage() {
             {loading ? "Logging in..." : "Log in"}
           </button>
         </form>
+
+        {/* Google Sign-In */}
+        {import.meta.env.VITE_GOOGLE_CLIENT_ID ? (
+          <div style={{ marginTop: 20 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+              <hr style={{ flex: 1, border: "none", borderTop: "1px solid #e2e8f0" }} />
+              <span className="muted" style={{ fontSize: "0.82rem" }}>or</span>
+              <hr style={{ flex: 1, border: "none", borderTop: "1px solid #e2e8f0" }} />
+            </div>
+            <div id="google-btn" style={{ display: "flex", justifyContent: "center" }} />
+          </div>
+        ) : null}
 
         <p className="muted" style={{ marginTop: 20, textAlign: "center" }}>
           Don't have an account?{" "}

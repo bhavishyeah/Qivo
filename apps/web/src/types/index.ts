@@ -25,6 +25,8 @@ export type QuestionSettings = {
   maxLabel?: string;
   maxFileSizeMB?: number;
   allowedFileTypes?: string[];
+  correctAnswer?: string;
+  points?: number;
 };
 
 export type ConditionRule = {
@@ -58,6 +60,8 @@ export type FormSchema = {
     allowMultipleResponses: boolean;
     scheduledPublishAt?: string | null;
     scheduledCloseAt?: string | null;
+    quizMode?: boolean;
+    showScore?: boolean;
   };
   confirmationMessage?: string;
 };
