@@ -94,6 +94,9 @@ export default function FormEditorPage() {
   const dragIndex = useRef<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
+  // Active question (for progressive disclosure)
+  const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
+
   // ─── Load ──────────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -628,6 +631,8 @@ export default function FormEditorPage() {
                 isDragOver={dragOverIndex === index}
                 allQuestions={questions}
                 isQuizMode={quizMode}
+                isActive={activeQuestionId === question.id}
+                onActivate={() => setActiveQuestionId(question.id)}
                 onDragStart={() => handleDragStart(index)}
                 onDragOver={(e) => handleDragOver(e, index)}
                 onDrop={(e) => void handleDrop(e, index)}
@@ -657,6 +662,8 @@ function QuestionCard({
   isDragOver,
   allQuestions,
   isQuizMode,
+  isActive,
+  onActivate,
   onDragStart,
   onDragOver,
   onDrop,
@@ -673,6 +680,8 @@ function QuestionCard({
   isDragOver: boolean;
   allQuestions: Question[];
   isQuizMode: boolean;
+  isActive: boolean;
+  onActivate: () => void;
   onDragStart: () => void;
   onDragOver: (e: DragEvent<HTMLElement>) => void;
   onDrop: (e: DragEvent<HTMLElement>) => void;
@@ -682,8 +691,6 @@ function QuestionCard({
   onDelete: () => void;
   onDuplicate: () => void;
 }) {
-  const [expanded, setExpanded] = useState(true);
-
   const isChoice = CHOICE_TYPES.has(question.type);
   const isRating = RATING_TYPES.has(question.type);
 
@@ -710,13 +717,14 @@ function QuestionCard({
 
   return (
     <article
-      className={`editor-question ${isDragOver ? "drag-over" : ""}`}
+      className={`editor-question ${isDragOver ? "drag-over" : ""} ${isActive ? "active-card" : "inactive-card"}`}
       draggable
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDrop={onDrop}
       onDragEnd={onDragEnd}
-      style={{ cursor: "grab", opacity: isDragOver ? 0.6 : 1 }}
+      onClick={onActivate}
+      style={{ cursor: isActive ? "default" : "pointer", opacity: isDragOver ? 0.6 : 1 }}
     >
       {/* Drag handle + number */}
       <div
@@ -730,35 +738,45 @@ function QuestionCard({
       </div>
 
       <div className="editor-question-body">
-        {/* Meta row */}
-        <div className="editor-question-meta">
-          <span className="status-pill" style={{ fontSize: "0.7rem" }}>
-            {QUESTION_TYPE_LABELS[question.type]}
-          </span>
-          <span className="muted" style={{ fontSize: "0.78rem" }}>
-            {question.required ? "Required" : "Optional"}
-          </span>
-          <button
-            type="button"
-            className="back-button inline-button"
-            style={{ marginLeft: "auto", fontSize: "0.78rem" }}
-            onClick={() => setExpanded((v) => !v)}
-          >
-            {expanded ? "Collapse ↑" : "Expand ↓"}
-          </button>
-        </div>
+        {/* ── Inactive view: minimal info ── */}
+        {!isActive ? (
+          <div className="editor-question-meta" style={{ gap: 10 }}>
+            <span className="status-pill" style={{ fontSize: "0.7rem" }}>
+              {QUESTION_TYPE_LABELS[question.type]}
+            </span>
+            <span style={{ flex: 1, color: "#1e293b", fontWeight: 600, fontSize: "0.95rem" }}>
+              {question.label || "Untitled question"}
+            </span>
+            {question.required ? (
+              <span style={{ color: "#dc2626", fontSize: "0.75rem", fontWeight: 700 }}>Required</span>
+            ) : null}
+          </div>
+        ) : null}
 
-        {/* Always visible: label */}
-        <label htmlFor={`editor-label-${question.id}`}>Question label</label>
-        <input
-          id={`editor-label-${question.id}`}
-          type="text"
-          value={question.label}
-          onChange={(e) => onChange(question.id, { label: e.target.value })}
-        />
-
-        {expanded ? (
+        {/* ── Active view: full editing controls ── */}
+        {isActive ? (
           <>
+            {/* Type + Meta */}
+            <div className="editor-question-meta" style={{ marginBottom: 12 }}>
+              <span className="status-pill" style={{ fontSize: "0.7rem" }}>
+                {QUESTION_TYPE_LABELS[question.type]}
+              </span>
+              <span className="muted" style={{ fontSize: "0.78rem" }}>
+                {question.required ? "Required" : "Optional"}
+              </span>
+            </div>
+
+            {/* Label */}
+            <label htmlFor={`editor-label-${question.id}`}>Question label</label>
+            <input
+              id={`editor-label-${question.id}`}
+              type="text"
+              value={question.label}
+              onChange={(e) => onChange(question.id, { label: e.target.value })}
+              onClick={(e) => e.stopPropagation()}
+              autoFocus
+            />
+
             {/* Description */}
             <label
               htmlFor={`editor-desc-${question.id}`}
@@ -772,6 +790,7 @@ function QuestionCard({
               value={question.description ?? ""}
               onChange={(e) => onChange(question.id, { description: e.target.value || null })}
               placeholder="Add a hint or explanation..."
+              onClick={(e) => e.stopPropagation()}
               style={{ border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px", width: "100%", marginBottom: 12 }}
             />
 

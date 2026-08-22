@@ -1916,3 +1916,34 @@ form {
     padding: 20px 12px 80px;
   }
 }
+
+
+/* ── Active/Inactive Card States ─────────────────────────────── */
+
+.editor-question.inactive-card {
+  border: 1px solid #e2e8f0;
+  padding: 16px 20px;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.editor-question.inactive-card:hover {
+  border-color: #93c5fd;
+  box-shadow: 0 2px 12px rgb(37 99 235 / 8%);
+}
+
+.editor-question.active-card {
+  border: 2px solid #2563eb;
+  border-left: 4px solid #2563eb;
+  padding: 20px;
+  box-shadow: 0 4px 20px rgb(37 99 235 / 12%);
+  background: #ffffff;
+}
+
+.editor-question.inactive-card .editor-question-number {
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.editor-question.inactive-card:hover .editor-question-number {
+  opacity: 1;
+}
