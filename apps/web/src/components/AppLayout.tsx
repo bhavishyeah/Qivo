@@ -128,6 +128,12 @@ export default function AppLayout({
             >
               Events
             </Link>
+            <Link
+              to="/admin"
+              className={`app-nav-link ${isActive("/admin") ? "active" : ""}`}
+            >
+              Admin
+            </Link>
           </div>
 
           <div className="app-nav-user">
