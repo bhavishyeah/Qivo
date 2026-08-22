@@ -140,6 +140,46 @@ export default function AppLayout({
       </nav>
 
       <div className="app-content">{children}</div>
+
+      {/* Mobile bottom nav */}
+      <nav className="app-bottom-nav">
+        <Link
+          to="/dashboard"
+          className={`app-bottom-nav-item ${isActive("/dashboard") ? "active" : ""}`}
+        >
+          <span className="app-bottom-nav-icon">📋</span>
+          Forms
+        </Link>
+        <Link
+          to="/folders"
+          className={`app-bottom-nav-item ${isActive("/folders") ? "active" : ""}`}
+        >
+          <span className="app-bottom-nav-icon">📁</span>
+          Folders
+        </Link>
+        <Link
+          to="/forms/new"
+          className={`app-bottom-nav-item ${isActive("/forms/new") ? "active" : ""}`}
+        >
+          <span className="app-bottom-nav-icon">➕</span>
+          Create
+        </Link>
+        <Link
+          to="/notifications"
+          className={`app-bottom-nav-item ${isActive("/notifications") ? "active" : ""}`}
+        >
+          <span className="app-bottom-nav-icon">🔔</span>
+          Alerts
+          {unreadCount > 0 ? <span className="app-bottom-nav-badge">{unreadCount > 9 ? "9+" : unreadCount}</span> : null}
+        </Link>
+        <Link
+          to="/settings"
+          className={`app-bottom-nav-item ${isActive("/settings") ? "active" : ""}`}
+        >
+          <span className="app-bottom-nav-icon">⚙️</span>
+          More
+        </Link>
+      </nav>
     </div>
   );
 }
