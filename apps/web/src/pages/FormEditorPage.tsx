@@ -705,28 +705,61 @@ export default function FormEditorPage() {
             <p className="muted">No questions yet. Click "+ Add question" to start.</p>
           </div>
         ) : (
-          <div className="editor-question-list">
-            {questions.map((question, index) => (
-              <QuestionCard
-                key={question.id}
-                question={question}
-                index={index}
-                total={questions.length}
-                saving={saving}
-                isDragOver={dragOverIndex === index}
-                allQuestions={questions}
-                isQuizMode={quizMode}
-                isActive={activeQuestionId === question.id}
-                onActivate={() => setActiveQuestionId(question.id)}
-                onDragStart={() => handleDragStart(index)}
-                onDragOver={(e) => handleDragOver(e, index)}
-                onDrop={(e) => void handleDrop(e, index)}
-                onDragEnd={handleDragEnd}
-                onChange={updateQuestionLocal}
-                onDelete={() => void deleteEditorQuestion(question.id)}
-                onDuplicate={() => void duplicateQuestion(question)}
-              />
-            ))}
+          <div className="editor-canvas-with-toolbar">
+            <div className="editor-question-list">
+              {questions.map((question, index) => (
+                <QuestionCard
+                  key={question.id}
+                  question={question}
+                  index={index}
+                  total={questions.length}
+                  saving={saving}
+                  isDragOver={dragOverIndex === index}
+                  allQuestions={questions}
+                  isQuizMode={quizMode}
+                  isActive={activeQuestionId === question.id}
+                  onActivate={() => setActiveQuestionId(question.id)}
+                  onDragStart={() => handleDragStart(index)}
+                  onDragOver={(e) => handleDragOver(e, index)}
+                  onDrop={(e) => void handleDrop(e, index)}
+                  onDragEnd={handleDragEnd}
+                  onChange={updateQuestionLocal}
+                  onDelete={() => void deleteEditorQuestion(question.id)}
+                  onDuplicate={() => void duplicateQuestion(question)}
+                />
+              ))}
+            </div>
+
+            {/* Floating creation toolbar */}
+            <div className="editor-floating-toolbar">
+              <button
+                className="editor-floating-btn"
+                type="button"
+                onClick={() => setShowAddQuestion(true)}
+                title="Add question"
+              >
+                <span>＋</span>
+                <span className="editor-floating-label">Question</span>
+              </button>
+              <button
+                className="editor-floating-btn"
+                type="button"
+                onClick={() => {/* Future: add section */}}
+                title="Add section"
+              >
+                <span>§</span>
+                <span className="editor-floating-label">Section</span>
+              </button>
+              <button
+                className="editor-floating-btn"
+                type="button"
+                onClick={() => {/* Future: add image */}}
+                title="Add image"
+              >
+                <span>🖼</span>
+                <span className="editor-floating-label">Media</span>
+              </button>
+            </div>
           </div>
         )}
       </section>
