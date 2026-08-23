@@ -99,6 +99,7 @@ export default function FormEditorPage() {
   // Drag state
   const dragIndex = useRef<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
 
   // Active question (for progressive disclosure)
   const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
@@ -345,6 +346,7 @@ export default function FormEditorPage() {
 
   function handleDragStart(index: number) {
     dragIndex.current = index;
+    setDraggingIndex(index);
   }
 
   function handleDragOver(event: DragEvent, index: number) {
@@ -354,6 +356,7 @@ export default function FormEditorPage() {
 
   function handleDragEnd() {
     setDragOverIndex(null);
+    setDraggingIndex(null);
     dragIndex.current = null;
   }
 
@@ -780,6 +783,7 @@ export default function FormEditorPage() {
                   total={questions.length}
                   saving={saving}
                   isDragOver={dragOverIndex === index}
+                  isDragging={draggingIndex === index}
                   allQuestions={questions}
                   isQuizMode={quizMode}
                   isActive={activeQuestionId === question.id}
@@ -842,6 +846,7 @@ function QuestionCard({
   index,
   saving,
   isDragOver,
+  isDragging,
   allQuestions,
   isQuizMode,
   isActive,
@@ -859,6 +864,7 @@ function QuestionCard({
   total: number;
   saving: boolean;
   isDragOver: boolean;
+  isDragging: boolean;
   allQuestions: Question[];
   isQuizMode: boolean;
   isActive: boolean;
@@ -897,14 +903,14 @@ function QuestionCard({
 
   return (
     <article
-      className={`editor-question ${isDragOver ? "drag-over" : ""} ${isActive ? "active-card" : "inactive-card"}`}
-      draggable
-      onDragStart={onDragStart}
+      className={`editor-question ${isDragOver ? "drag-over" : ""} ${isDragging ? "dragging" : ""} ${isActive ? "active-card" : "inactive-card"}`}
+      draggable={!isActive}
+      onDragStart={(e) => { if ((e.target as HTMLElement).closest("input, textarea, select")) { e.preventDefault(); return; } onDragStart(); }}
       onDragOver={onDragOver}
       onDrop={onDrop}
       onDragEnd={onDragEnd}
       onClick={onActivate}
-      style={{ cursor: isActive ? "default" : "pointer", opacity: isDragOver ? 0.6 : 1 }}
+      style={{ cursor: isDragging ? "grabbing" : isActive ? "default" : "pointer" }}
     >
       {/* Drag handle + number */}
       <div

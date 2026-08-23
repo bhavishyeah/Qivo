@@ -1337,17 +1337,38 @@ form {
 
 /* Drag and drop */
 .editor-question[draggable="true"] {
-  transition: transform 150ms ease, box-shadow 150ms ease;
+  transition: transform 200ms ease, box-shadow 200ms ease, opacity 200ms ease;
 }
 
-.editor-question[draggable="true"]:hover {
-  box-shadow: 0 4px 20px rgb(37 99 235 / 12%);
+.editor-question[draggable="true"]:active {
+  cursor: grabbing;
 }
 
 .editor-question.drag-over {
-  border: 2px dashed #2563eb !important;
-  background: #eff6ff !important;
-  transform: scale(1.01);
+  position: relative;
+}
+
+.editor-question.drag-over::before {
+  content: "";
+  position: absolute;
+  top: -8px;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: #2563eb;
+  border-radius: 4px;
+  animation: drag-line-pulse 1s ease infinite;
+}
+
+@keyframes drag-line-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.editor-question.dragging {
+  opacity: 0.4;
+  transform: scale(0.98);
+  box-shadow: 0 8px 32px rgb(37 99 235 / 15%) !important;
 }
 
 
