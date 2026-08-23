@@ -69,6 +69,8 @@ export type FormSchema = {
 export type FormRecord = {
   id: string;
   workspaceId: string;
+  folderId?: string | null;
+  eventId?: string | null;
   title: string;
   description?: string | null;
   slug: string;

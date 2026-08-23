@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, ApiRequestError } from "../lib/api";
 import type { FormRecord, WorkspaceRecord } from "../types";
 
-type FormWithCount = FormRecord & { responseCount?: number; folderId?: string | null };
+type FormWithCount = FormRecord & { responseCount?: number };
 
 type SortOption = "updatedAt" | "createdAt" | "title";
 type StatusFilter = "ALL" | "DRAFT" | "PENDING_REVIEW" | "PUBLISHED" | "CLOSED" | "ARCHIVED";
@@ -14,12 +14,18 @@ type FolderRecord = {
   parentId: string | null;
 };
 
+type EventRecord = {
+  id: string;
+  name: string;
+};
+
 export default function DashboardPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
   const [forms, setForms] = useState<FormWithCount[]>([]);
   const [folders, setFolders] = useState<FolderRecord[]>([]);
+  const [events, setEvents] = useState<EventRecord[]>([]);
   const [workspaces, setWorkspaces] = useState<WorkspaceRecord[]>([]);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string>("");
   const [loading, setLoading] = useState(true);
@@ -70,6 +76,11 @@ export default function DashboardPage() {
 
       setForms(formsData.forms);
       setFolders(foldersData.folders);
+
+      // Load events in background
+      api.get<{ events: EventRecord[] }>(`/api/events?workspaceId=${encodeURIComponent(workspaceId)}`)
+        .then((data) => setEvents(data.events))
+        .catch(() => { /* non-critical */ });
 
       // Load response counts in background
       formsData.forms.forEach((form) => {
@@ -302,6 +313,10 @@ export default function DashboardPage() {
             ? folders.find((f) => f.id === form.folderId)?.name ?? null
             : null;
 
+          const eventName = form.eventId
+            ? events.find((e) => e.id === form.eventId)?.name ?? null
+            : null;
+
           return (
             <article className="form-tile" key={form.id}>
               <div className="form-tile-top">
@@ -321,7 +336,14 @@ export default function DashboardPage() {
                 </p>
               ) : null}
 
-              <h2 style={{ marginTop: folderName ? 6 : 24 }}>{form.title}</h2>
+              {/* Event badge */}
+              {eventName ? (
+                <p style={{ margin: folderName ? "4px 0 0" : "8px 0 0", fontSize: "0.75rem", color: "#7c3aed", fontWeight: 700 }}>
+                  🎪 {eventName}
+                </p>
+              ) : null}
+
+              <h2 style={{ marginTop: (folderName || eventName) ? 6 : 24 }}>{form.title}</h2>
 
               <p className="form-tile-description">
                 {form.description || "No description provided."}

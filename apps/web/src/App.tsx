@@ -94,9 +94,6 @@ function App() {
         <Route path="/events" element={<Protected>{() => <EventsPage />}</Protected>} />
         <Route path="/admin" element={<Protected>{() => <AdminPanelPage />}</Protected>} />
 
-        {/* Legacy public form route */}
-        <Route path="/forms/:slug" element={<PublicFormPage />} />
-
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

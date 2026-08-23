@@ -378,6 +378,36 @@ const errorHandler: ErrorRequestHandler = (
       });
       return;
 
+    case "EVENT_NOT_FOUND":
+      res.status(404).json({
+        success: false,
+        error: {
+          code: "EVENT_NOT_FOUND",
+          message: error.message,
+        },
+      });
+      return;
+
+    case "NOTIFICATION_NOT_FOUND":
+      res.status(404).json({
+        success: false,
+        error: {
+          code: "NOTIFICATION_NOT_FOUND",
+          message: error.message,
+        },
+      });
+      return;
+
+    case "GOOGLE_NOT_CONFIGURED":
+      res.status(501).json({
+        success: false,
+        error: {
+          code: "GOOGLE_NOT_CONFIGURED",
+          message: error.message,
+        },
+      });
+      return;
+
     default:
       res.status(500).json({
         success: false,
