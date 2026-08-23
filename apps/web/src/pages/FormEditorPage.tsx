@@ -136,20 +136,72 @@ export default function FormEditorPage() {
     void loadEditor();
   }, [formId]);
 
-  // ─── Undo ─────────────────────────────────────────────────────────────────
+  // ─── Undo / Redo ────────────────────────────────────────────────────────────
+
+  const redoStack = useRef<HistoryEntry[]>([]);
+  const lastHistoryPush = useRef<number>(0);
 
   function pushHistory(current: Question[]) {
-    history.current = [...history.current.slice(-19), { questions: current }];
+    // Don't push if less than 500ms since last push (debounce for rapid typing)
+    const now = Date.now();
+    if (now - lastHistoryPush.current < 500 && history.current.length > 0) {
+      // Update the latest entry instead
+      history.current[history.current.length - 1] = { questions: current };
+      return;
+    }
+    lastHistoryPush.current = now;
+    history.current = [...history.current.slice(-29), { questions: current }];
+    // Clear redo stack when a new action is performed
+    redoStack.current = [];
   }
 
   function undo() {
+    if (history.current.length === 0) return;
     const prev = history.current.pop();
-    if (prev) setQuestions(prev.questions);
+    if (prev) {
+      // Push current state to redo
+      redoStack.current.push({ questions });
+      setQuestions(prev.questions);
+    }
   }
+
+  function redo() {
+    if (redoStack.current.length === 0) return;
+    const next = redoStack.current.pop();
+    if (next) {
+      // Push current state to undo
+      history.current.push({ questions });
+      setQuestions(next.questions);
+    }
+  }
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      const isCtrl = e.ctrlKey || e.metaKey;
+      if (!isCtrl) return;
+
+      if (e.key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      } else if (e.key === "z" && e.shiftKey) {
+        e.preventDefault();
+        redo();
+      } else if (e.key === "y") {
+        e.preventDefault();
+        redo();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  });
 
   // ─── Question mutations ───────────────────────────────────────────────────
 
   function updateQuestionLocal(questionId: string, patch: Partial<Question>) {
+    // Push current state to history before modifying
+    pushHistory(questions);
     setQuestions((current) => {
       const updated = current.map((q) => (q.id === questionId ? { ...q, ...patch } : q));
       // Schedule autosave for this question
@@ -493,9 +545,22 @@ export default function FormEditorPage() {
 
           {/* Right: actions */}
           <div className="editor-topnav-actions">
-            {history.current.length > 0 ? (
-              <button className="editor-topnav-btn" type="button" onClick={undo} title="Undo">↩</button>
-            ) : null}
+            <button
+              className="editor-topnav-btn"
+              type="button"
+              onClick={undo}
+              disabled={history.current.length === 0}
+              title="Undo (Ctrl+Z)"
+              style={{ opacity: history.current.length === 0 ? 0.3 : 1 }}
+            >↩</button>
+            <button
+              className="editor-topnav-btn"
+              type="button"
+              onClick={redo}
+              disabled={redoStack.current.length === 0}
+              title="Redo (Ctrl+Y)"
+              style={{ opacity: redoStack.current.length === 0 ? 0.3 : 1 }}
+            >↪</button>
 
             <Link className="editor-topnav-btn" to={`/forms/${formId}/preview`} title="Preview">👁</Link>
 
