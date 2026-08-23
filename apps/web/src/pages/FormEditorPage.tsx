@@ -180,17 +180,41 @@ export default function FormEditorPage() {
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       const isCtrl = e.ctrlKey || e.metaKey;
-      if (!isCtrl) return;
 
-      if (e.key === "z" && !e.shiftKey) {
-        e.preventDefault();
-        undo();
-      } else if (e.key === "z" && e.shiftKey) {
-        e.preventDefault();
-        redo();
-      } else if (e.key === "y") {
-        e.preventDefault();
-        redo();
+      // Ctrl+Z/Y for undo/redo
+      if (isCtrl) {
+        if (e.key === "z" && !e.shiftKey) { e.preventDefault(); undo(); return; }
+        if (e.key === "z" && e.shiftKey) { e.preventDefault(); redo(); return; }
+        if (e.key === "y") { e.preventDefault(); redo(); return; }
+      }
+
+      // Tab / Shift+Tab to navigate between cards (only when not in an input)
+      if (e.key === "Tab" && activeQuestionId) {
+        const target = e.target as HTMLElement;
+        const isInInput = target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT";
+        if (!isInInput) {
+          e.preventDefault();
+          const currentIdx = questions.findIndex((q) => q.id === activeQuestionId);
+          if (e.shiftKey) {
+            // Previous card
+            if (currentIdx > 0) setActiveQuestionId(questions[currentIdx - 1].id);
+          } else {
+            // Next card
+            if (currentIdx < questions.length - 1) setActiveQuestionId(questions[currentIdx + 1].id);
+          }
+        }
+      }
+
+      // Delete key to remove active card (only when not in input)
+      if (e.key === "Delete" && activeQuestionId) {
+        const target = e.target as HTMLElement;
+        const isInInput = target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT";
+        if (!isInInput) {
+          e.preventDefault();
+          if (confirm("Delete this question?")) {
+            void deleteEditorQuestion(activeQuestionId);
+          }
+        }
       }
     }
 

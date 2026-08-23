@@ -2329,3 +2329,177 @@ form {
   from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+
+/* ══════════════════════════════════════════════════════════════════
+   DESIGN SYSTEM — Consistent tokens
+   ══════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* Colors */
+  --qivo-primary: #2563eb;
+  --qivo-primary-hover: #1d4ed8;
+  --qivo-text: #1e293b;
+  --qivo-text-secondary: #64748b;
+  --qivo-text-muted: #94a3b8;
+  --qivo-border: #e2e8f0;
+  --qivo-border-hover: #93c5fd;
+  --qivo-bg-canvas: #f8fafc;
+  --qivo-bg-card: #ffffff;
+  --qivo-bg-hover: #f1f5f9;
+  --qivo-danger: #dc2626;
+  --qivo-success: #16a34a;
+
+  /* Radius */
+  --qivo-radius-card: 12px;
+  --qivo-radius-control: 8px;
+  --qivo-radius-pill: 999px;
+
+  /* Shadows */
+  --qivo-shadow-sm: 0 1px 3px rgb(0 0 0 / 5%);
+  --qivo-shadow-md: 0 4px 12px rgb(30 64 175 / 8%);
+  --qivo-shadow-lg: 0 8px 32px rgb(30 64 175 / 12%);
+  --qivo-shadow-xl: 0 16px 60px rgb(30 64 175 / 15%);
+
+  /* Transitions */
+  --qivo-transition: 150ms ease;
+  --qivo-transition-slow: 200ms ease;
+
+  /* Typography */
+  --qivo-font-title: 2rem;
+  --qivo-font-section: 1.25rem;
+  --qivo-font-label: 1rem;
+  --qivo-font-helper: 0.875rem;
+  --qivo-font-micro: 0.75rem;
+}
+
+/* Apply design tokens to existing components */
+
+.editor-card {
+  border-radius: var(--qivo-radius-card);
+  box-shadow: var(--qivo-shadow-sm);
+  border-color: var(--qivo-border);
+}
+
+.editor-question.inactive-card {
+  border-radius: var(--qivo-radius-card);
+  box-shadow: var(--qivo-shadow-sm);
+  transition: border-color var(--qivo-transition), box-shadow var(--qivo-transition);
+}
+
+.editor-question.inactive-card:hover {
+  box-shadow: var(--qivo-shadow-md);
+  border-color: var(--qivo-border-hover);
+}
+
+.editor-question.active-card {
+  border-radius: var(--qivo-radius-card);
+  box-shadow: var(--qivo-shadow-lg);
+}
+
+.editor-form-header-card {
+  border-radius: var(--qivo-radius-card);
+  box-shadow: var(--qivo-shadow-md);
+}
+
+.editor-floating-btn {
+  border-radius: var(--qivo-radius-control);
+  box-shadow: var(--qivo-shadow-sm);
+  transition: all var(--qivo-transition);
+}
+
+.editor-floating-btn:hover {
+  box-shadow: var(--qivo-shadow-md);
+}
+
+.editor-topnav-publish {
+  border-radius: var(--qivo-radius-control);
+  transition: all var(--qivo-transition);
+}
+
+.editor-topnav-btn {
+  border-radius: var(--qivo-radius-control);
+  transition: background var(--qivo-transition);
+}
+
+.status-pill {
+  border-radius: var(--qivo-radius-pill);
+}
+
+/* Form tile cards on dashboard */
+.form-tile {
+  border-radius: var(--qivo-radius-card);
+  box-shadow: var(--qivo-shadow-sm);
+  transition: box-shadow var(--qivo-transition), transform var(--qivo-transition);
+}
+
+.form-tile:hover {
+  box-shadow: var(--qivo-shadow-md);
+  transform: translateY(-2px);
+}
+
+/* Public form card */
+.public-form-body {
+  border-radius: var(--qivo-radius-card);
+  box-shadow: var(--qivo-shadow-lg);
+}
+
+/* Buttons use control radius */
+.secondary-button,
+.submit-button,
+.danger-button {
+  border-radius: var(--qivo-radius-control);
+  transition: all var(--qivo-transition);
+}
+
+/* Inputs use control radius */
+.question-field input[type="text"],
+.question-field input[type="email"],
+.question-field input[type="number"],
+.question-field input[type="date"],
+.question-field input[type="tel"],
+.question-field input[type="url"],
+.question-field textarea {
+  border-radius: var(--qivo-radius-control) !important;
+  transition: border-color var(--qivo-transition), box-shadow var(--qivo-transition);
+}
+
+
+/* ── Respondent View Transitions ─────────────────────────── */
+
+.public-section {
+  animation: section-slide-in 300ms ease;
+}
+
+@keyframes section-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Success animation */
+.public-status-success {
+  animation: success-pop 400ms ease;
+}
+
+@keyframes success-pop {
+  0% { opacity: 0; transform: scale(0.9); }
+  50% { transform: scale(1.02); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+/* Touch target enforcement */
+.choice-item,
+.rating-item {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+.public-form-nav button {
+  min-height: 44px;
+}
