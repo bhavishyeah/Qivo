@@ -6,6 +6,7 @@ type AuditEntry = {
   id: string;
   workspaceId: string;
   userId: string;
+  userName: string;
   action: string;
   entityType: string;
   entityId: string | null;
@@ -169,7 +170,7 @@ export default function AuditLogPage() {
                       {title ? <> — <span style={{ color: "#475569" }}>{title as string}</span></> : null}
                     </p>
                     <p style={{ margin: "2px 0 0", color: "#94a3b8", fontSize: "0.78rem" }}>
-                      {new Date(entry.createdAt).toLocaleString()} · {entry.entityType}
+                      {entry.userName} · {new Date(entry.createdAt).toLocaleString()} · {entry.entityType}
                       {entry.entityId ? ` · ${entry.entityId.slice(0, 8)}…` : ""}
                     </p>
                   </div>

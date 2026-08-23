@@ -76,6 +76,16 @@ app.use(morgan("dev"));
 
 app.use("/api", apiLimiter);
 app.use("/api/auth", authLimiter);
+
+// Higher limit for public form endpoints (events with many attendees)
+const publicFormLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 500,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  message: { success: false, error: { code: "RATE_LIMITED", message: "Too many requests." } },
+});
+app.use("/api/forms/public", publicFormLimiter);
 app.use("/api", csrfProtection([
   process.env.WEB_URL || "http://localhost:5173",
 ]));

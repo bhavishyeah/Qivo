@@ -55,5 +55,18 @@ export async function listAuditLogs(
     prisma.auditLog.count({ where: { workspaceId } }),
   ]);
 
-  return { logs, total };
+  // Fetch user names for the logs
+  const userIds = [...new Set(logs.map((l) => l.userId))];
+  const users = await prisma.user.findMany({
+    where: { id: { in: userIds } },
+    select: { id: true, name: true },
+  });
+  const userMap = new Map(users.map((u) => [u.id, u.name]));
+
+  const logsWithNames = logs.map((log) => ({
+    ...log,
+    userName: userMap.get(log.userId) ?? "Unknown",
+  }));
+
+  return { logs: logsWithNames, total };
 }
