@@ -108,6 +108,10 @@ export default function FormEditorPage() {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
 
+  // Workspace tabs
+  type EditorTab = "builder" | "responses" | "settings";
+  const [activeTab, setActiveTab] = useState<EditorTab>("builder");
+
   // ─── Load ──────────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -621,6 +625,23 @@ export default function FormEditorPage() {
       {message ? <p className="editor-message" role="status">{message}</p> : null}
       {error ? <p className="submit-error" role="alert">{error}</p> : null}
 
+      {/* ── Workspace Tabs ── */}
+      <div className="editor-tabs">
+        <button type="button" className={`editor-tab ${activeTab === "builder" ? "active" : ""}`} onClick={() => setActiveTab("builder")}>
+          Builder
+        </button>
+        <button type="button" className={`editor-tab ${activeTab === "responses" ? "active" : ""}`} onClick={() => setActiveTab("responses")}>
+          Responses
+        </button>
+        <button type="button" className={`editor-tab ${activeTab === "settings" ? "active" : ""}`} onClick={() => setActiveTab("settings")}>
+          Settings
+        </button>
+      </div>
+
+      {/* ── TAB: Builder ── */}
+      {activeTab === "builder" ? (
+        <>
+
       {/* ── Review panel (admin) ── */}
       {canReview ? (
         <section className="editor-card" style={{ maxWidth: 980, margin: "0 auto 20px" }}>
@@ -703,77 +724,6 @@ export default function FormEditorPage() {
             </span>
           </div>
         </div>
-      </section>
-
-      {/* ── Settings (collapsible groups) ── */}
-      <section className="editor-card settings-card">
-        <div className="editor-card-header">
-          <div><p className="eyebrow">Settings</p><h2>Form configuration</h2></div>
-          <button className="secondary-button compact" type="button" onClick={(e) => void saveFormSettings(e as any)} disabled={savingSettings}>
-            {savingSettings ? "Saving..." : "Save all"}
-          </button>
-        </div>
-
-        <form onSubmit={saveFormSettings}>
-          {/* Group 1: Collection */}
-          <SettingsGroup
-            title="Collection"
-            description="How responses are collected"
-            summary={`${collectEmail ? "Email required" : "Anonymous"} · ${allowMultipleResponses ? "Multiple allowed" : "One per person"}`}
-          >
-            <label className="settings-toggle">
-              <input type="checkbox" checked={collectEmail} onChange={(e) => setCollectEmail(e.target.checked)} />
-              <span><strong>Collect email addresses</strong><small>Ask respondents to provide their email.</small></span>
-            </label>
-            <label className="settings-toggle">
-              <input type="checkbox" checked={allowMultipleResponses} onChange={(e) => setAllowMultipleResponses(e.target.checked)} />
-              <span><strong>Allow multiple responses</strong><small>Let the same person submit more than once.</small></span>
-            </label>
-            <label className="settings-toggle">
-              <input type="checkbox" checked={quizMode} onChange={(e) => setQuizMode(e.target.checked)} />
-              <span><strong>Quiz mode</strong><small>Enable scoring — set correct answers per question.</small></span>
-            </label>
-            {quizMode ? (
-              <label className="settings-toggle">
-                <input type="checkbox" checked={showScore} onChange={(e) => setShowScore(e.target.checked)} />
-                <span><strong>Show score after submission</strong><small>Respondent sees their score.</small></span>
-              </label>
-            ) : null}
-          </SettingsGroup>
-
-          {/* Group 2: Access & Schedule */}
-          <SettingsGroup
-            title="Access & Schedule"
-            description="When the form opens and closes"
-            summary={`${scheduledPublishAt ? "Scheduled" : "Manual publish"} · ${scheduledCloseAt ? "Auto-close set" : "No close date"}`}
-          >
-            <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-              <div className="question-field" style={{ flex: 1, minWidth: 200 }}>
-                <label htmlFor="scheduled-publish">Scheduled publish</label>
-                <input id="scheduled-publish" type="datetime-local" value={scheduledPublishAt} onChange={(e) => setScheduledPublishAt(e.target.value)} style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }} />
-                <small className="muted">Form becomes public at this time.</small>
-              </div>
-              <div className="question-field" style={{ flex: 1, minWidth: 200 }}>
-                <label htmlFor="scheduled-close">Scheduled close</label>
-                <input id="scheduled-close" type="datetime-local" value={scheduledCloseAt} onChange={(e) => setScheduledCloseAt(e.target.value)} style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }} />
-                <small className="muted">Stops accepting responses at this time.</small>
-              </div>
-            </div>
-          </SettingsGroup>
-
-          {/* Group 3: Presentation */}
-          <SettingsGroup
-            title="Presentation"
-            description="What respondents see after submitting"
-            summary={confirmationMessage ? "Custom message set" : "Default message"}
-          >
-            <div className="question-field">
-              <label htmlFor="confirmation-message">Confirmation message</label>
-              <textarea id="confirmation-message" rows={3} value={confirmationMessage} onChange={(e) => setConfirmationMessage(e.target.value)} placeholder="Thanks for your response." />
-              <small className="muted">Shown to respondents after they submit.</small>
-            </div>
-          </SettingsGroup>
-        </form>
       </section>
 
       {/* ── Questions ── */}
@@ -887,6 +837,44 @@ export default function FormEditorPage() {
 
       {/* ── Version history ── */}
       <VersionHistory formId={formId!} />
+
+        </>
+      ) : null}
+
+      {/* ── TAB: Responses ── */}
+      {activeTab === "responses" ? (
+        <ResponsesTabPanel formId={formId!} formTitle={form.title} questions={questions} />
+      ) : null}
+
+      {/* ── TAB: Settings ── */}
+      {activeTab === "settings" ? (
+        <section className="editor-card settings-card">
+          <div className="editor-card-header">
+            <div><p className="eyebrow">Settings</p><h2>Form configuration</h2></div>
+            <button className="secondary-button compact" type="button" onClick={(e) => void saveFormSettings(e as any)} disabled={savingSettings}>
+              {savingSettings ? "Saving..." : "Save all"}
+            </button>
+          </div>
+          <form onSubmit={saveFormSettings}>
+            <SettingsGroup title="Collection" description="How responses are collected" summary={`${collectEmail ? "Email required" : "Anonymous"} · ${allowMultipleResponses ? "Multiple allowed" : "One per person"}`}>
+              <label className="settings-toggle"><input type="checkbox" checked={collectEmail} onChange={(e) => setCollectEmail(e.target.checked)} /><span><strong>Collect email addresses</strong><small>Ask respondents to provide their email.</small></span></label>
+              <label className="settings-toggle"><input type="checkbox" checked={allowMultipleResponses} onChange={(e) => setAllowMultipleResponses(e.target.checked)} /><span><strong>Allow multiple responses</strong><small>Let the same person submit more than once.</small></span></label>
+              <label className="settings-toggle"><input type="checkbox" checked={quizMode} onChange={(e) => setQuizMode(e.target.checked)} /><span><strong>Quiz mode</strong><small>Enable scoring — set correct answers per question.</small></span></label>
+              {quizMode ? (<label className="settings-toggle"><input type="checkbox" checked={showScore} onChange={(e) => setShowScore(e.target.checked)} /><span><strong>Show score after submission</strong><small>Respondent sees their score.</small></span></label>) : null}
+            </SettingsGroup>
+            <SettingsGroup title="Access & Schedule" description="When the form opens and closes" summary={`${scheduledPublishAt ? "Scheduled" : "Manual publish"} · ${scheduledCloseAt ? "Auto-close set" : "No close date"}`}>
+              <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+                <div className="question-field" style={{ flex: 1, minWidth: 200 }}><label htmlFor="s-publish">Scheduled publish</label><input id="s-publish" type="datetime-local" value={scheduledPublishAt} onChange={(e) => setScheduledPublishAt(e.target.value)} style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }} /><small className="muted">Form becomes public at this time.</small></div>
+                <div className="question-field" style={{ flex: 1, minWidth: 200 }}><label htmlFor="s-close">Scheduled close</label><input id="s-close" type="datetime-local" value={scheduledCloseAt} onChange={(e) => setScheduledCloseAt(e.target.value)} style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }} /><small className="muted">Stops accepting responses at this time.</small></div>
+              </div>
+            </SettingsGroup>
+            <SettingsGroup title="Presentation" description="What respondents see after submitting" summary={confirmationMessage ? "Custom message set" : "Default message"}>
+              <div className="question-field"><label htmlFor="s-confirm">Confirmation message</label><textarea id="s-confirm" rows={3} value={confirmationMessage} onChange={(e) => setConfirmationMessage(e.target.value)} placeholder="Thanks for your response." /><small className="muted">Shown to respondents after they submit.</small></div>
+            </SettingsGroup>
+          </form>
+        </section>
+      ) : null}
+
     </main>
   );
 }
@@ -1260,6 +1248,102 @@ function QuestionCard({
         ) : null}
       </div>
     </article>
+  );
+}
+
+// ─── Responses Tab Panel ──────────────────────────────────────────────────────
+
+function ResponsesTabPanel({ formId }: { formId: string; formTitle: string; questions: Question[] }) {
+  const [responses, setResponses] = useState<Array<{ id: string; answers: Record<string, unknown>; metadata?: Record<string, unknown> | null; submittedAt: string }>>([]);
+  const [totalCount, setTotalCount] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const [respData, countData] = await Promise.all([
+          api.get<{ responses: typeof responses }>(`/api/forms/${formId}/responses?limit=50`),
+          api.get<{ count: number }>(`/api/forms/${formId}/responses-count`),
+        ]);
+        setResponses(respData.responses);
+        setTotalCount(countData.count);
+      } catch (err) {
+        setError(err instanceof ApiRequestError ? err.message : "Unable to load responses.");
+      } finally {
+        setLoading(false);
+      }
+    }
+    void load();
+  }, [formId]);
+
+  if (loading) {
+    return (
+      <div style={{ maxWidth: 980, margin: "0 auto", padding: "20px 0" }}>
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="skeleton-card" style={{ marginBottom: 12 }}>
+            <div className="skeleton-block" style={{ width: "40%", height: 16, marginBottom: 8 }} />
+            <div className="skeleton-block" style={{ width: "60%", height: 12 }} />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (error) {
+    return <p className="submit-error" style={{ maxWidth: 980, margin: "20px auto" }}>{error}</p>;
+  }
+
+  return (
+    <div style={{ maxWidth: 980, margin: "0 auto", padding: "20px 0" }}>
+      {/* Summary */}
+      <div style={{ display: "flex", gap: 16, marginBottom: 20, flexWrap: "wrap" }}>
+        <div className="editor-card" style={{ flex: 1, minWidth: 140, padding: "20px", textAlign: "center" }}>
+          <span className="muted" style={{ fontSize: "0.78rem", display: "block", marginBottom: 4 }}>Total</span>
+          <strong style={{ fontSize: "1.8rem", color: "#111827" }}>{totalCount ?? 0}</strong>
+        </div>
+        <div className="editor-card" style={{ flex: 1, minWidth: 140, padding: "20px", textAlign: "center" }}>
+          <span className="muted" style={{ fontSize: "0.78rem", display: "block", marginBottom: 4 }}>Showing</span>
+          <strong style={{ fontSize: "1.8rem", color: "#111827" }}>{responses.length}</strong>
+        </div>
+        <div className="editor-card" style={{ flex: 1, minWidth: 140, padding: "20px", textAlign: "center" }}>
+          <Link to={`/forms/${formId}/reports`} className="secondary-link" style={{ fontSize: "0.88rem" }}>
+            📊 View Reports →
+          </Link>
+        </div>
+      </div>
+
+      {/* Response list */}
+      <div className="editor-card">
+        <div className="editor-card-header">
+          <div><p className="eyebrow">Recent responses</p><h2>{responses.length} shown</h2></div>
+          <Link to={`/forms/${formId}/responses`} className="secondary-button compact">Full view →</Link>
+        </div>
+
+        {responses.length === 0 ? (
+          <div className="empty-state" style={{ padding: "32px 0", textAlign: "center" }}>
+            <p style={{ fontSize: "1.5rem", marginBottom: 8 }}>📭</p>
+            <p className="muted">No responses yet. Share your form to start collecting.</p>
+          </div>
+        ) : (
+          <div style={{ display: "grid", gap: 8 }}>
+            {responses.slice(0, 20).map((resp) => (
+              <div key={resp.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", background: "#f8fafc", borderRadius: 10, border: "1px solid #f1f5f9" }}>
+                <div>
+                  <strong style={{ color: "#1e293b", fontSize: "0.9rem" }}>
+                    {new Date(resp.submittedAt).toLocaleString()}
+                  </strong>
+                  {typeof resp.metadata?.email === "string" ? (
+                    <span className="muted" style={{ marginLeft: 12, fontSize: "0.8rem" }}>{resp.metadata.email}</span>
+                  ) : null}
+                </div>
+                <span className="muted" style={{ fontSize: "0.72rem" }}>{resp.id.slice(0, 8)}…</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
