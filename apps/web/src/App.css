@@ -1953,3 +1953,64 @@ form {
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+
+/* ── Form Header Card (Google Forms-style accent) ────────── */
+
+.editor-form-header-card {
+  max-width: 980px;
+  margin: 0 auto 20px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgb(30 64 175 / 6%);
+}
+
+.editor-form-header-accent {
+  height: 8px;
+  background: linear-gradient(90deg, #2563eb, #7c3aed);
+  border-radius: 12px 12px 0 0;
+}
+
+.editor-form-header-content {
+  padding: 24px 28px;
+}
+
+.editor-form-header-title {
+  margin: 0 0 8px;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.03em;
+}
+
+.editor-form-header-desc {
+  margin: 0 0 16px;
+  font-size: 0.95rem;
+  color: #475569;
+  line-height: 1.6;
+}
+
+.editor-form-header-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* ── Canvas spacing polish ────────────────────────────────── */
+
+.editor-shell {
+  background:
+    radial-gradient(circle at top right, #eff6ff, transparent 40%),
+    #f8fafc;
+}
+
+.editor-card {
+  margin-bottom: 16px;
+}
+
+.editor-question-list {
+  gap: 12px;
+}

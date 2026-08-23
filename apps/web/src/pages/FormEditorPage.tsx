@@ -557,6 +557,32 @@ export default function FormEditorPage() {
         </div>
       ) : null}
 
+      {/* ── Form Header Card (accent-bordered) ── */}
+      <section className="editor-form-header-card">
+        <div className="editor-form-header-accent" />
+        <div className="editor-form-header-content">
+          <h2 className="editor-form-header-title">{form.title}</h2>
+          {form.description ? (
+            <p className="editor-form-header-desc">{form.description}</p>
+          ) : (
+            <p className="editor-form-header-desc" style={{ color: "#94a3b8", fontStyle: "italic" }}>
+              No description
+            </p>
+          )}
+          <div className="editor-form-header-meta">
+            <span className={`status-pill status-${form.status.toLowerCase()}`}>
+              {form.status.replace(/_/g, " ")}
+            </span>
+            <span className="muted" style={{ fontSize: "0.78rem" }}>
+              {questions.length} question{questions.length !== 1 ? "s" : ""}
+            </span>
+            <span className="muted" style={{ fontSize: "0.78rem" }}>
+              Updated {new Date(form.updatedAt).toLocaleDateString()}
+            </span>
+          </div>
+        </div>
+      </section>
+
       {/* ── Settings ── */}
       <section className="editor-card settings-card">
         <div className="editor-card-header">
