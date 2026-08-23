@@ -2005,6 +2005,7 @@ form {
   background:
     radial-gradient(circle at top right, #eff6ff, transparent 40%),
     #f8fafc;
+  padding-top: 24px;
 }
 
 .editor-card {
@@ -2013,4 +2014,146 @@ form {
 
 .editor-question-list {
   gap: 12px;
+}
+
+
+/* ── Editor Top Navigation (Google Forms-style) ──────────── */
+
+.editor-topnav {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid #e2e8f0;
+  padding: 0 24px;
+}
+
+.editor-topnav-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 1200px;
+  margin: 0 auto;
+  height: 56px;
+  gap: 16px;
+}
+
+.editor-topnav-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.editor-topnav-logo {
+  color: #2563eb;
+  font-weight: 900;
+  font-size: 1.1rem;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.editor-topnav-title {
+  border: none;
+  background: none;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1e293b;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 6px;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background 150ms ease;
+}
+
+.editor-topnav-title:hover {
+  background: #f1f5f9;
+}
+
+.editor-topnav-title-input {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1e293b;
+  border: 1px solid #2563eb;
+  border-radius: 6px;
+  padding: 6px 10px;
+  max-width: 300px;
+  outline: none;
+  box-shadow: 0 0 0 3px rgb(37 99 235 / 15%);
+}
+
+.editor-topnav-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.editor-topnav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: none;
+  border-radius: 8px;
+  font-size: 1.1rem;
+  cursor: pointer;
+  color: #475569;
+  text-decoration: none;
+  transition: background 150ms ease;
+}
+
+.editor-topnav-btn:hover {
+  background: #f1f5f9;
+}
+
+.editor-topnav-btn.danger:hover {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.editor-topnav-publish {
+  border: none;
+  background: #2563eb;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 0.88rem;
+  padding: 8px 18px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 150ms ease, transform 150ms ease;
+}
+
+.editor-topnav-publish:hover:not(:disabled) {
+  background: #1d4ed8;
+  transform: translateY(-1px);
+}
+
+.editor-topnav-publish:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 768px) {
+  .editor-topnav-inner {
+    height: 48px;
+    padding: 0;
+  }
+
+  .editor-topnav-title {
+    max-width: 140px;
+    font-size: 0.88rem;
+  }
+
+  .editor-topnav-publish {
+    padding: 6px 12px;
+    font-size: 0.82rem;
+  }
 }

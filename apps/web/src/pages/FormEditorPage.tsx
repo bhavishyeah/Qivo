@@ -103,6 +103,10 @@ export default function FormEditorPage() {
   // Active question (for progressive disclosure)
   const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
 
+  // Inline title editing
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
+
   // ─── Load ──────────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -191,6 +195,21 @@ export default function FormEditorPage() {
         setSaveStatus("offline");
       }
     }
+  }
+
+  async function saveTitle(newTitle: string) {
+    if (!formId || !newTitle.trim()) return;
+    setSaveStatus("saving");
+    try {
+      const data = await api.patch<{ form: FormRecord }>(`/api/forms/${formId}`, { title: newTitle.trim() });
+      setForm(data.form);
+      setSaveStatus("saved");
+      setTimeout(() => setSaveStatus((s) => s === "saved" ? "idle" : s), 3000);
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : "Unable to save title.");
+      setSaveStatus("error");
+    }
+    setEditingTitle(false);
   }
 
   async function deleteEditorQuestion(questionId: string) {
@@ -443,58 +462,68 @@ export default function FormEditorPage() {
 
   return (
     <main className="editor-shell">
-      {/* ── Header ── */}
-      <header className="editor-header">
-        <div>
-          <p className="eyebrow">Form editor</p>
-          <h1>{form.title}</h1>
-          <p className="muted" style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            Edit questions and publish your form.
+      {/* ── Sticky Top Nav ── */}
+      <nav className="editor-topnav">
+        <div className="editor-topnav-inner">
+          {/* Left: logo + title */}
+          <div className="editor-topnav-left">
+            <Link to="/dashboard" className="editor-topnav-logo">Qivo</Link>
+            {editingTitle ? (
+              <input
+                className="editor-topnav-title-input"
+                type="text"
+                value={titleDraft}
+                onChange={(e) => setTitleDraft(e.target.value)}
+                onBlur={() => void saveTitle(titleDraft)}
+                onKeyDown={(e) => { if (e.key === "Enter") void saveTitle(titleDraft); if (e.key === "Escape") setEditingTitle(false); }}
+                autoFocus
+              />
+            ) : (
+              <button
+                className="editor-topnav-title"
+                type="button"
+                onClick={() => { setEditingTitle(true); setTitleDraft(form.title); }}
+                title="Click to rename"
+              >
+                {form.title}
+              </button>
+            )}
             <SaveStatusBadge status={saveStatus} />
-          </p>
+          </div>
+
+          {/* Right: actions */}
+          <div className="editor-topnav-actions">
+            {history.current.length > 0 ? (
+              <button className="editor-topnav-btn" type="button" onClick={undo} title="Undo">↩</button>
+            ) : null}
+
+            <Link className="editor-topnav-btn" to={`/forms/${formId}/preview`} title="Preview">👁</Link>
+
+            {isPublished ? (
+              <Link className="editor-topnav-btn" to={`/forms/${formId}/share`} title="Share / QR">🔗</Link>
+            ) : null}
+
+            {isPublished ? (
+              <button className="editor-topnav-btn danger" type="button" disabled={saving} onClick={closeEditorForm} title="Close form">🔒</button>
+            ) : null}
+
+            {canSubmitForReview ? (
+              <button className="editor-topnav-btn" type="button" disabled={saving} onClick={() => void openReviewPanel()} title="Submit for review">📋</button>
+            ) : null}
+
+            {canPublish ? (
+              <button
+                className="editor-topnav-publish"
+                type="button"
+                disabled={saving}
+                onClick={publishEditorForm}
+              >
+                {form.status === "APPROVED" ? "Publish ✓" : "Publish"}
+              </button>
+            ) : null}
+          </div>
         </div>
-
-        <div className="editor-actions">
-          <span className={`status-pill status-${form.status.toLowerCase()}`}>
-            {form.status.replace(/_/g, " ")}
-          </span>
-
-          {history.current.length > 0 ? (
-            <button className="secondary-button compact" type="button" onClick={undo}>
-              ↩ Undo
-            </button>
-          ) : null}
-
-          <Link className="secondary-button compact" to={`/forms/${formId}/preview`}>
-            👁 Preview
-          </Link>
-
-          {isPublished ? (
-            <>
-              <Link className="secondary-button" to={`/forms/${formId}/share`}>Share / QR</Link>
-              <button className="danger-button" type="button" disabled={saving} onClick={closeEditorForm}>Close form</button>
-            </>
-          ) : null}
-
-          {canSubmitForReview ? (
-            <button className="secondary-button" type="button" disabled={saving} onClick={() => void openReviewPanel()}>
-              Submit for review
-            </button>
-          ) : null}
-
-          {canPublish ? (
-            <button
-              className="secondary-button"
-              type="button"
-              disabled={saving}
-              onClick={publishEditorForm}
-              style={form.status === "APPROVED" ? { background: "#16a34a", color: "#fff", border: "none" } : undefined}
-            >
-              {form.status === "APPROVED" ? "Publish approved form" : "Publish"}
-            </button>
-          ) : null}
-        </div>
-      </header>
+      </nav>
 
       {message ? <p className="editor-message" role="status">{message}</p> : null}
       {error ? <p className="submit-error" role="alert">{error}</p> : null}
