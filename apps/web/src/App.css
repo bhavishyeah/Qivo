@@ -2266,3 +2266,66 @@ form {
     display: none;
   }
 }
+
+
+/* ── Settings Groups (collapsible) ───────────────────────── */
+
+.settings-group {
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.settings-group:last-child {
+  border-bottom: none;
+}
+
+.settings-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 16px 4px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  gap: 16px;
+  transition: background 150ms ease;
+  border-radius: 8px;
+}
+
+.settings-group-header:hover {
+  background: #f8fafc;
+}
+
+.settings-group-title {
+  display: block;
+  color: #1e293b;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.settings-group-desc {
+  display: block;
+  color: #94a3b8;
+  font-size: 0.8rem;
+  margin-top: 2px;
+}
+
+.settings-group-summary {
+  color: #64748b;
+  font-size: 0.75rem;
+  background: #f1f5f9;
+  padding: 3px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.settings-group-body {
+  padding: 4px 4px 16px;
+  animation: settings-expand 200ms ease;
+}
+
+@keyframes settings-expand {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}

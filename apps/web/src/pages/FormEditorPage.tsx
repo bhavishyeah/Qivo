@@ -681,47 +681,74 @@ export default function FormEditorPage() {
         </div>
       </section>
 
-      {/* ── Settings ── */}
+      {/* ── Settings (collapsible groups) ── */}
       <section className="editor-card settings-card">
         <div className="editor-card-header">
-          <div><p className="eyebrow">Settings</p><h2>Response settings</h2></div>
+          <div><p className="eyebrow">Settings</p><h2>Form configuration</h2></div>
+          <button className="secondary-button compact" type="button" onClick={(e) => void saveFormSettings(e as any)} disabled={savingSettings}>
+            {savingSettings ? "Saving..." : "Save all"}
+          </button>
         </div>
+
         <form onSubmit={saveFormSettings}>
-          <label className="settings-toggle">
-            <input type="checkbox" checked={collectEmail} onChange={(e) => setCollectEmail(e.target.checked)} />
-            <span><strong>Collect email addresses</strong><small>Ask respondents to provide their email.</small></span>
-          </label>
-          <label className="settings-toggle">
-            <input type="checkbox" checked={allowMultipleResponses} onChange={(e) => setAllowMultipleResponses(e.target.checked)} />
-            <span><strong>Allow multiple responses</strong><small>Let the same person submit more than once.</small></span>
-          </label>
-          <div className="question-field">
-            <label htmlFor="confirmation-message">Confirmation message</label>
-            <textarea id="confirmation-message" rows={3} value={confirmationMessage} onChange={(e) => setConfirmationMessage(e.target.value)} placeholder="Thanks for your response." />
-          </div>
-          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
-            <div className="question-field" style={{ flex: 1, minWidth: 200 }}>
-              <label htmlFor="scheduled-publish">Scheduled publish (optional)</label>
-              <input id="scheduled-publish" type="datetime-local" value={scheduledPublishAt} onChange={(e) => setScheduledPublishAt(e.target.value)} style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }} />
-              <small className="muted">Form will become public at this time.</small>
-            </div>
-            <div className="question-field" style={{ flex: 1, minWidth: 200 }}>
-              <label htmlFor="scheduled-close">Scheduled close (optional)</label>
-              <input id="scheduled-close" type="datetime-local" value={scheduledCloseAt} onChange={(e) => setScheduledCloseAt(e.target.value)} style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }} />
-              <small className="muted">Form will stop accepting responses at this time.</small>
-            </div>
-          </div>
-          <label className="settings-toggle">
-            <input type="checkbox" checked={quizMode} onChange={(e) => setQuizMode(e.target.checked)} />
-            <span><strong>Quiz mode</strong><small>Enable scoring — set correct answers on each question.</small></span>
-          </label>
-          {quizMode ? (
+          {/* Group 1: Collection */}
+          <SettingsGroup
+            title="Collection"
+            description="How responses are collected"
+            summary={`${collectEmail ? "Email required" : "Anonymous"} · ${allowMultipleResponses ? "Multiple allowed" : "One per person"}`}
+          >
             <label className="settings-toggle">
-              <input type="checkbox" checked={showScore} onChange={(e) => setShowScore(e.target.checked)} />
-              <span><strong>Show score to respondent</strong><small>Display score after submission.</small></span>
+              <input type="checkbox" checked={collectEmail} onChange={(e) => setCollectEmail(e.target.checked)} />
+              <span><strong>Collect email addresses</strong><small>Ask respondents to provide their email.</small></span>
             </label>
-          ) : null}
-          <button className="secondary-button" type="submit" disabled={savingSettings}>{savingSettings ? "Saving..." : "Save settings"}</button>
+            <label className="settings-toggle">
+              <input type="checkbox" checked={allowMultipleResponses} onChange={(e) => setAllowMultipleResponses(e.target.checked)} />
+              <span><strong>Allow multiple responses</strong><small>Let the same person submit more than once.</small></span>
+            </label>
+            <label className="settings-toggle">
+              <input type="checkbox" checked={quizMode} onChange={(e) => setQuizMode(e.target.checked)} />
+              <span><strong>Quiz mode</strong><small>Enable scoring — set correct answers per question.</small></span>
+            </label>
+            {quizMode ? (
+              <label className="settings-toggle">
+                <input type="checkbox" checked={showScore} onChange={(e) => setShowScore(e.target.checked)} />
+                <span><strong>Show score after submission</strong><small>Respondent sees their score.</small></span>
+              </label>
+            ) : null}
+          </SettingsGroup>
+
+          {/* Group 2: Access & Schedule */}
+          <SettingsGroup
+            title="Access & Schedule"
+            description="When the form opens and closes"
+            summary={`${scheduledPublishAt ? "Scheduled" : "Manual publish"} · ${scheduledCloseAt ? "Auto-close set" : "No close date"}`}
+          >
+            <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+              <div className="question-field" style={{ flex: 1, minWidth: 200 }}>
+                <label htmlFor="scheduled-publish">Scheduled publish</label>
+                <input id="scheduled-publish" type="datetime-local" value={scheduledPublishAt} onChange={(e) => setScheduledPublishAt(e.target.value)} style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }} />
+                <small className="muted">Form becomes public at this time.</small>
+              </div>
+              <div className="question-field" style={{ flex: 1, minWidth: 200 }}>
+                <label htmlFor="scheduled-close">Scheduled close</label>
+                <input id="scheduled-close" type="datetime-local" value={scheduledCloseAt} onChange={(e) => setScheduledCloseAt(e.target.value)} style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }} />
+                <small className="muted">Stops accepting responses at this time.</small>
+              </div>
+            </div>
+          </SettingsGroup>
+
+          {/* Group 3: Presentation */}
+          <SettingsGroup
+            title="Presentation"
+            description="What respondents see after submitting"
+            summary={confirmationMessage ? "Custom message set" : "Default message"}
+          >
+            <div className="question-field">
+              <label htmlFor="confirmation-message">Confirmation message</label>
+              <textarea id="confirmation-message" rows={3} value={confirmationMessage} onChange={(e) => setConfirmationMessage(e.target.value)} placeholder="Thanks for your response." />
+              <small className="muted">Shown to respondents after they submit.</small>
+            </div>
+          </SettingsGroup>
         </form>
       </section>
 
@@ -1209,6 +1236,48 @@ function QuestionCard({
         ) : null}
       </div>
     </article>
+  );
+}
+
+// ─── Settings Group ───────────────────────────────────────────────────────────
+
+function SettingsGroup({
+  title,
+  description,
+  summary,
+  children,
+}: {
+  title: string;
+  description: string;
+  summary: string;
+  children: React.ReactNode;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="settings-group">
+      <button
+        type="button"
+        className="settings-group-header"
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <div>
+          <strong className="settings-group-title">{title}</strong>
+          <span className="settings-group-desc">{description}</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {!expanded ? (
+            <span className="settings-group-summary">{summary}</span>
+          ) : null}
+          <span style={{ fontSize: "0.9rem", color: "#94a3b8" }}>{expanded ? "▲" : "▼"}</span>
+        </div>
+      </button>
+      {expanded ? (
+        <div className="settings-group-body">
+          {children}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
