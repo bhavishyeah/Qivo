@@ -231,6 +231,7 @@ export default function FormEditorPage() {
     try {
       await api.patch(`/api/forms/${formId}/questions/${pending.questionId}`, {
         label: pending.question.label,
+        type: pending.question.type,
         description: pending.question.description,
         required: pending.question.required,
         options: pending.question.options,
@@ -942,11 +943,44 @@ function QuestionCard({
         {/* ── Active view: full editing controls ── */}
         {isActive ? (
           <>
-            {/* Type + Meta */}
-            <div className="editor-question-meta" style={{ marginBottom: 12 }}>
-              <span className="status-pill" style={{ fontSize: "0.7rem" }}>
-                {QUESTION_TYPE_LABELS[question.type]}
-              </span>
+            {/* Type selector + Meta */}
+            <div className="editor-question-meta" style={{ marginBottom: 12, gap: 10 }}>
+              <select
+                value={question.type}
+                onChange={(e) => {
+                  const newType = e.target.value as QuestionType;
+                  // Preserve compatible data, reset type-specific fields
+                  const patch: Partial<Question> = { type: newType };
+                  // Reset options if switching away from choice types
+                  if (!CHOICE_TYPES.has(newType) && CHOICE_TYPES.has(question.type)) {
+                    patch.options = undefined;
+                  }
+                  // Add default options if switching TO choice types
+                  if (CHOICE_TYPES.has(newType) && !question.options?.length) {
+                    patch.options = [{ value: "option_1", label: "Option 1" }];
+                  }
+                  // Reset settings for rating/scale
+                  if (RATING_TYPES.has(newType) && !question.settings?.min) {
+                    patch.settings = { ...question.settings, min: 1, max: newType === "LINEAR_SCALE" ? 10 : 5 };
+                  }
+                  onChange(question.id, patch);
+                }}
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  border: "1px solid #cbd5e1",
+                  borderRadius: 8,
+                  padding: "5px 10px",
+                  fontSize: "0.8rem",
+                  fontWeight: 700,
+                  color: "#334155",
+                  background: "#f8fafc",
+                  cursor: "pointer",
+                }}
+              >
+                {(Object.keys(QUESTION_TYPE_LABELS) as QuestionType[]).map((t) => (
+                  <option key={t} value={t}>{QUESTION_TYPE_LABELS[t]}</option>
+                ))}
+              </select>
               <span className="muted" style={{ fontSize: "0.78rem" }}>
                 {question.required ? "Required" : "Optional"}
               </span>
