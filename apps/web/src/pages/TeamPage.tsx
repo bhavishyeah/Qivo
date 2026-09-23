@@ -66,6 +66,8 @@ export default function TeamPage() {
       if (defaultWs) {
         setSelectedWorkspace(defaultWs.id);
         setSelectedWsData(defaultWs);
+        setBrandLogoUrl(defaultWs.logoUrl ?? "");
+        setBrandColor(defaultWs.primaryColor ?? "");
         await loadMembers(defaultWs.id);
       }
     } catch (err) {
@@ -90,6 +92,8 @@ export default function TeamPage() {
     setSelectedWorkspace(wsId);
     const ws = workspaces.find((w) => w.id === wsId) ?? null;
     setSelectedWsData(ws);
+    setBrandLogoUrl(ws?.logoUrl ?? "");
+    setBrandColor(ws?.primaryColor ?? "");
     setError("");
     setMessage("");
     await loadMembers(wsId);
@@ -201,10 +205,25 @@ export default function TeamPage() {
     if (!selectedWorkspace) return;
     setSavingBrand(true); setError(""); setMessage("");
     try {
+      const nextLogoUrl = brandLogoUrl.trim() || null;
+      const nextColor = brandColor.trim() || null;
       await api.patch(`/api/workspaces/${selectedWorkspace}/branding`, {
-        logoUrl: brandLogoUrl.trim() || null,
-        primaryColor: brandColor.trim() || null,
+        logoUrl: nextLogoUrl,
+        primaryColor: nextColor,
       });
+      // Keep local state in sync so the editor + preview reflect saved values.
+      setWorkspaces((current) =>
+        current.map((w) =>
+          w.id === selectedWorkspace
+            ? { ...w, logoUrl: nextLogoUrl, primaryColor: nextColor }
+            : w,
+        ),
+      );
+      setSelectedWsData((current) =>
+        current && current.id === selectedWorkspace
+          ? { ...current, logoUrl: nextLogoUrl, primaryColor: nextColor }
+          : current,
+      );
       setShowBranding(false);
       setMessage("Branding updated! It will appear on your public forms.");
     } catch (err) {
@@ -409,6 +428,61 @@ export default function TeamPage() {
               </div>
               <small className="muted">Used for buttons and links on your public forms.</small>
             </div>
+
+            {/* Live preview — mirrors how branding appears on a public form */}
+            <div className="question-field">
+              <label>Preview</label>
+              <div
+                style={{
+                  border: "1px solid #e2e8f0",
+                  borderRadius: 12,
+                  padding: 20,
+                  background: "#fff",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+                  {brandLogoUrl.trim() ? (
+                    <img
+                      src={brandLogoUrl.trim()}
+                      alt="Logo preview"
+                      style={{ height: 36, maxWidth: 160, objectFit: "contain" }}
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).style.display = "none";
+                      }}
+                    />
+                  ) : null}
+                  <span
+                    style={{
+                      textTransform: "uppercase",
+                      letterSpacing: "0.06em",
+                      fontSize: "0.72rem",
+                      fontWeight: 700,
+                      color: brandColor.trim() || "#2563eb",
+                    }}
+                  >
+                    {selectedWsData?.name ?? "Your workspace"}
+                  </span>
+                </div>
+                <p style={{ margin: "0 0 14px", color: "#334155", fontSize: "0.92rem" }}>
+                  Sample form question — this is how respondents see your form.
+                </p>
+                <span
+                  style={{
+                    display: "inline-block",
+                    padding: "9px 18px",
+                    borderRadius: 10,
+                    background: brandColor.trim() || "#2563eb",
+                    color: "#fff",
+                    fontSize: "0.88rem",
+                    fontWeight: 600,
+                  }}
+                >
+                  Submit
+                </span>
+              </div>
+              <small className="muted">Updates live as you edit. Logo hides if the URL can't load.</small>
+            </div>
+
             <button className="secondary-button" type="submit" disabled={savingBrand}>
               {savingBrand ? "Saving..." : "Save branding"}
             </button>

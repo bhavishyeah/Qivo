@@ -109,6 +109,8 @@ export type WorkspaceRecord = {
   type: "PERSONAL" | "TEAM";
   role: string;
   createdAt: string;
+  logoUrl?: string | null;
+  primaryColor?: string | null;
 };
 
 export type AnswerValue = string | number | string[] | boolean | null;

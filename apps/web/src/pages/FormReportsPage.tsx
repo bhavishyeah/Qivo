@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   BarChart,
@@ -10,14 +10,56 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { api, ApiRequestError } from "../lib/api";
-import type { FormRecord, Question, ResponseRecord } from "../types";
+
+// ─── Report shapes (mirror the API's getFormReport output) ──────────────────
+
+type QuestionType =
+  | "SHORT_TEXT" | "LONG_TEXT" | "EMAIL" | "NUMBER" | "DATE"
+  | "SINGLE_CHOICE" | "MULTIPLE_CHOICE" | "RATING" | "YES_NO"
+  | "PHONE" | "URL" | "FILE_UPLOAD" | "LINEAR_SCALE";
+
+type BaseReport = {
+  questionId: string;
+  label: string;
+  type: QuestionType;
+  answered: number;
+  skipped: number;
+};
+
+type ChoiceReport = BaseReport & {
+  kind: "choice";
+  options: Array<{ name: string; count: number; percentage: number }>;
+};
+type RatingReport = BaseReport & {
+  kind: "rating";
+  min: number;
+  max: number;
+  average: number | null;
+  distribution: Array<{ rating: number; count: number }>;
+};
+type NumberReport = BaseReport & {
+  kind: "number";
+  average: number | null;
+  min: number | null;
+  max: number | null;
+  sum: number;
+};
+type TextReport = BaseReport & { kind: "text"; sample: string[] };
+
+type QuestionReport = ChoiceReport | RatingReport | NumberReport | TextReport;
+
+type FormReport = {
+  totalResponses: number;
+  analytics: { views: number; submissions: number; conversionRate: number };
+  questions: QuestionReport[];
+};
 
 export default function FormReportsPage() {
   const { formId } = useParams<{ formId: string }>();
   const navigate = useNavigate();
 
-  const [form, setForm] = useState<FormRecord | null>(null);
-  const [responses, setResponses] = useState<ResponseRecord[]>([]);
+  const [formTitle, setFormTitle] = useState("");
+  const [report, setReport] = useState<FormReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -30,36 +72,13 @@ export default function FormReportsPage() {
       }
 
       try {
-        const formData = await api.get<{ form: FormRecord }>(`/api/forms/${formId}`);
-        setForm(formData.form);
-
-        // Load all responses (paginate through)
-        let allResponses: ResponseRecord[] = [];
-        let cursor: string | undefined;
-        let hasMore = true;
-
-        while (hasMore) {
-          const query = new URLSearchParams({ limit: "100" });
-          if (cursor) query.set("cursor", cursor);
-
-          const data = await api.get<{
-            responses: ResponseRecord[];
-            nextCursor?: string;
-          }>(`/api/forms/${formId}/responses?${query.toString()}`);
-
-          allResponses = [...allResponses, ...data.responses];
-
-          if (data.nextCursor) {
-            cursor = data.nextCursor;
-          } else {
-            hasMore = false;
-          }
-
-          // Safety limit
-          if (allResponses.length > 5000) break;
-        }
-
-        setResponses(allResponses);
+        // Form (for the title) + the server-aggregated report in parallel.
+        const [formData, reportData] = await Promise.all([
+          api.get<{ form: { title: string } }>(`/api/forms/${formId}`),
+          api.get<FormReport>(`/api/forms/${formId}/report`),
+        ]);
+        setFormTitle(formData.form.title);
+        setReport(reportData);
       } catch (err) {
         setError(
           err instanceof ApiRequestError ? err.message : "Unable to load reports.",
@@ -72,11 +91,6 @@ export default function FormReportsPage() {
     void loadData();
   }, [formId]);
 
-  const questions = useMemo(
-    () => form?.schema?.sections?.flatMap((s) => s.questions) ?? [],
-    [form],
-  );
-
   if (loading) {
     return (
       <main className="page-shell">
@@ -87,7 +101,7 @@ export default function FormReportsPage() {
     );
   }
 
-  if (error || !form) {
+  if (error || !report) {
     return (
       <main className="page-shell">
         <div className="status-card error-card">
@@ -97,6 +111,8 @@ export default function FormReportsPage() {
       </main>
     );
   }
+
+  const { totalResponses, analytics, questions } = report;
 
   return (
     <main className="dashboard-shell">
@@ -110,8 +126,8 @@ export default function FormReportsPage() {
             ← Dashboard
           </button>
           <p className="eyebrow">Reports</p>
-          <h1>{form.title}</h1>
-          <p className="muted">Analytics and insights from {responses.length} responses.</p>
+          <h1>{formTitle}</h1>
+          <p className="muted">Analytics and insights from {totalResponses} responses.</p>
         </div>
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -128,7 +144,19 @@ export default function FormReportsPage() {
       <section className="response-summary" style={{ maxWidth: 980, margin: "0 auto 24px" }}>
         <div>
           <span className="summary-label">Total responses</span>
-          <strong>{responses.length}</strong>
+          <strong>{totalResponses}</strong>
+        </div>
+        <div>
+          <span className="summary-label">Views</span>
+          <strong>{analytics.views}</strong>
+        </div>
+        <div>
+          <span className="summary-label">Submissions</span>
+          <strong>{analytics.submissions}</strong>
+        </div>
+        <div>
+          <span className="summary-label">Conversion</span>
+          <strong>{analytics.conversionRate}%</strong>
         </div>
         <div>
           <span className="summary-label">Questions</span>
@@ -138,11 +166,7 @@ export default function FormReportsPage() {
 
       {/* Per-question analytics */}
       {questions.map((question) => (
-        <QuestionAnalytics
-          key={question.id}
-          question={question}
-          responses={responses}
-        />
+        <QuestionAnalytics key={question.questionId} report={question} />
       ))}
 
       {questions.length === 0 ? (
@@ -154,142 +178,36 @@ export default function FormReportsPage() {
   );
 }
 
-function QuestionAnalytics({
-  question,
-  responses,
-}: {
-  question: Question;
-  responses: ResponseRecord[];
-}) {
-  // Get all answers for this question
-  const answers = responses
-    .map((r) => r.answers[question.id])
-    .filter((a) => a !== undefined && a !== null && a !== "");
+function QuestionAnalytics({ report }: { report: QuestionReport }) {
+  if (report.kind === "choice") return <ChoiceChart report={report} />;
+  if (report.kind === "rating") return <RatingChart report={report} />;
+  if (report.kind === "number") return <NumberSummary report={report} />;
+  return <TextSummary report={report} />;
+}
 
-  const totalAnswers = answers.length;
-  const skipCount = responses.length - totalAnswers;
-
-  // Choice-based questions → bar/pie chart
-  if (
-    question.type === "SINGLE_CHOICE" ||
-    question.type === "MULTIPLE_CHOICE" ||
-    question.type === "YES_NO"
-  ) {
-    return (
-      <ChoiceChart
-        question={question}
-        answers={answers}
-        totalResponses={responses.length}
-        skipCount={skipCount}
-      />
-    );
-  }
-
-  // Rating → bar chart of distribution
-  if (question.type === "RATING") {
-    return (
-      <RatingChart
-        question={question}
-        answers={answers}
-        totalResponses={responses.length}
-        skipCount={skipCount}
-      />
-    );
-  }
-
-  // Number → average + distribution
-  if (question.type === "NUMBER") {
-    return (
-      <NumberSummary
-        question={question}
-        answers={answers}
-        skipCount={skipCount}
-      />
-    );
-  }
-
-  // Text-based → show summary stats
+function CardHeader({ report, eyebrow }: { report: BaseReport; eyebrow?: string }) {
   return (
-    <section className="editor-card" style={{ maxWidth: 980, margin: "0 auto 18px" }}>
-      <div className="editor-card-header">
-        <div>
-          <p className="eyebrow">{question.type.replace(/_/g, " ")}</p>
-          <h2>{question.label}</h2>
-        </div>
+    <div className="editor-card-header">
+      <div>
+        <p className="eyebrow">{eyebrow ?? report.type.replace(/_/g, " ")}</p>
+        <h2>{report.label}</h2>
       </div>
-      <p className="muted">
-        {totalAnswers} answer{totalAnswers === 1 ? "" : "s"} · {skipCount} skipped
-      </p>
-      {totalAnswers > 0 ? (
-        <div style={{ maxHeight: 200, overflow: "auto", marginTop: 12 }}>
-          {answers.slice(0, 20).map((answer, i) => (
-            <div
-              key={i}
-              style={{
-                padding: "8px 12px",
-                background: i % 2 === 0 ? "#f8fafc" : "#fff",
-                borderRadius: 8,
-                marginBottom: 4,
-                color: "#334155",
-                fontSize: "0.92rem",
-              }}
-            >
-              {String(answer)}
-            </div>
-          ))}
-          {totalAnswers > 20 ? (
-            <p className="muted" style={{ marginTop: 8 }}>
-              + {totalAnswers - 20} more responses
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-    </section>
+    </div>
   );
 }
 
-function ChoiceChart({
-  question,
-  answers,
-  skipCount,
-}: {
-  question: Question;
-  answers: unknown[];
-  totalResponses: number;
-  skipCount: number;
-}) {
-  // Count occurrences
-  const counts = new Map<string, number>();
-
-  for (const answer of answers) {
-    if (Array.isArray(answer)) {
-      for (const item of answer) {
-        counts.set(String(item), (counts.get(String(item)) ?? 0) + 1);
-      }
-    } else {
-      const val = String(answer);
-      counts.set(val, (counts.get(val) ?? 0) + 1);
-    }
-  }
-
-  const chartData = Array.from(counts.entries())
-    .map(([name, count]) => ({
-      name: name.length > 25 ? name.slice(0, 22) + "..." : name,
-      count,
-      percentage: answers.length > 0 ? Math.round((count / answers.length) * 100) : 0,
-    }))
-    .sort((a, b) => b.count - a.count);
+function ChoiceChart({ report }: { report: ChoiceReport }) {
+  const chartData = report.options.map((o) => ({
+    name: o.name.length > 25 ? o.name.slice(0, 22) + "..." : o.name,
+    count: o.count,
+    percentage: o.percentage,
+  }));
 
   return (
     <section className="editor-card" style={{ maxWidth: 980, margin: "0 auto 18px" }}>
-      <div className="editor-card-header">
-        <div>
-          <p className="eyebrow">{question.type.replace(/_/g, " ")}</p>
-          <h2>{question.label}</h2>
-        </div>
-      </div>
+      <CardHeader report={report} />
       <p className="muted" style={{ marginBottom: 16 }}>
-        {answers.length} answer{answers.length === 1 ? "" : "s"} · {skipCount} skipped
+        {report.answered} answer{report.answered === 1 ? "" : "s"} · {report.skipped} skipped
       </p>
 
       {chartData.length > 0 ? (
@@ -299,25 +217,22 @@ function ChoiceChart({
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
               <XAxis type="number" />
               <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 12 }} />
-              <Tooltip
-                formatter={(value) => [`${value} responses`, "Count"]}
-              />
+              <Tooltip formatter={(value) => [`${value} responses`, "Count"]} />
               <Bar dataKey="count" fill="#2563eb" radius={[0, 6, 6, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
       ) : null}
 
-      {/* Also show as list */}
       <div style={{ marginTop: 16 }}>
-        {chartData.map((item, i) => (
+        {report.options.map((item, i) => (
           <div
             key={item.name}
             style={{
               display: "flex",
               justifyContent: "space-between",
               padding: "8px 0",
-              borderBottom: i < chartData.length - 1 ? "1px solid #f1f5f9" : "none",
+              borderBottom: i < report.options.length - 1 ? "1px solid #f1f5f9" : "none",
             }}
           >
             <span style={{ color: "#334155" }}>{item.name}</span>
@@ -331,36 +246,10 @@ function ChoiceChart({
   );
 }
 
-function RatingChart({
-  question,
-  answers,
-  skipCount,
-}: {
-  question: Question;
-  answers: unknown[];
-  totalResponses: number;
-  skipCount: number;
-}) {
-  const min = question.settings?.min ?? 1;
-  const max = question.settings?.max ?? 5;
-
-  const counts = new Map<number, number>();
-  for (let i = min; i <= max; i++) counts.set(i, 0);
-
-  let sum = 0;
-  for (const answer of answers) {
-    const num = Number(answer);
-    if (!isNaN(num)) {
-      counts.set(num, (counts.get(num) ?? 0) + 1);
-      sum += num;
-    }
-  }
-
-  const average = answers.length > 0 ? (sum / answers.length).toFixed(1) : "—";
-
-  const chartData = Array.from(counts.entries()).map(([rating, count]) => ({
-    rating: String(rating),
-    count,
+function RatingChart({ report }: { report: RatingReport }) {
+  const chartData = report.distribution.map((d) => ({
+    rating: String(d.rating),
+    count: d.count,
   }));
 
   return (
@@ -368,16 +257,18 @@ function RatingChart({
       <div className="editor-card-header">
         <div>
           <p className="eyebrow">Rating</p>
-          <h2>{question.label}</h2>
+          <h2>{report.label}</h2>
         </div>
         <div style={{ textAlign: "right" }}>
           <span className="muted">Average</span>
           <br />
-          <strong style={{ fontSize: "1.8rem", color: "#2563eb" }}>{average}</strong>
+          <strong style={{ fontSize: "1.8rem", color: "#2563eb" }}>
+            {report.average ?? "—"}
+          </strong>
         </div>
       </div>
       <p className="muted" style={{ marginBottom: 16 }}>
-        {answers.length} answer{answers.length === 1 ? "" : "s"} · {skipCount} skipped
+        {report.answered} answer{report.answered === 1 ? "" : "s"} · {report.skipped} skipped
       </p>
 
       {chartData.length > 0 ? (
@@ -387,9 +278,7 @@ function RatingChart({
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
               <XAxis dataKey="rating" />
               <YAxis allowDecimals={false} />
-              <Tooltip
-                formatter={(value) => [`${value} responses`, "Count"]}
-              />
+              <Tooltip formatter={(value) => [`${value} responses`, "Count"]} />
               <Bar dataKey="count" fill="#2563eb" radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
@@ -399,54 +288,70 @@ function RatingChart({
   );
 }
 
-function NumberSummary({
-  question,
-  answers,
-  skipCount,
-}: {
-  question: Question;
-  answers: unknown[];
-  skipCount: number;
-}) {
-  const numbers = answers.map(Number).filter((n) => !isNaN(n));
-  const sum = numbers.reduce((a, b) => a + b, 0);
-  const avg = numbers.length > 0 ? (sum / numbers.length).toFixed(1) : "—";
-  const min = numbers.length > 0 ? Math.min(...numbers) : "—";
-  const max = numbers.length > 0 ? Math.max(...numbers) : "—";
-
+function NumberSummary({ report }: { report: NumberReport }) {
   return (
     <section className="editor-card" style={{ maxWidth: 980, margin: "0 auto 18px" }}>
-      <div className="editor-card-header">
-        <div>
-          <p className="eyebrow">Number</p>
-          <h2>{question.label}</h2>
-        </div>
-      </div>
+      <CardHeader report={report} eyebrow="Number" />
       <p className="muted" style={{ marginBottom: 16 }}>
-        {numbers.length} answer{numbers.length === 1 ? "" : "s"} · {skipCount} skipped
+        {report.answered} answer{report.answered === 1 ? "" : "s"} · {report.skipped} skipped
       </p>
       <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
         <div>
           <span className="summary-label">Average</span>
           <br />
-          <strong style={{ fontSize: "1.4rem" }}>{avg}</strong>
+          <strong style={{ fontSize: "1.4rem" }}>{report.average ?? "—"}</strong>
         </div>
         <div>
           <span className="summary-label">Min</span>
           <br />
-          <strong style={{ fontSize: "1.4rem" }}>{min}</strong>
+          <strong style={{ fontSize: "1.4rem" }}>{report.min ?? "—"}</strong>
         </div>
         <div>
           <span className="summary-label">Max</span>
           <br />
-          <strong style={{ fontSize: "1.4rem" }}>{max}</strong>
+          <strong style={{ fontSize: "1.4rem" }}>{report.max ?? "—"}</strong>
         </div>
         <div>
           <span className="summary-label">Sum</span>
           <br />
-          <strong style={{ fontSize: "1.4rem" }}>{sum}</strong>
+          <strong style={{ fontSize: "1.4rem" }}>{report.sum}</strong>
         </div>
       </div>
+    </section>
+  );
+}
+
+function TextSummary({ report }: { report: TextReport }) {
+  return (
+    <section className="editor-card" style={{ maxWidth: 980, margin: "0 auto 18px" }}>
+      <CardHeader report={report} />
+      <p className="muted">
+        {report.answered} answer{report.answered === 1 ? "" : "s"} · {report.skipped} skipped
+      </p>
+      {report.sample.length > 0 ? (
+        <div style={{ maxHeight: 200, overflow: "auto", marginTop: 12 }}>
+          {report.sample.map((answer, i) => (
+            <div
+              key={i}
+              style={{
+                padding: "8px 12px",
+                background: i % 2 === 0 ? "#f8fafc" : "#fff",
+                borderRadius: 8,
+                marginBottom: 4,
+                color: "#334155",
+                fontSize: "0.92rem",
+              }}
+            >
+              {answer}
+            </div>
+          ))}
+          {report.answered > report.sample.length ? (
+            <p className="muted" style={{ marginTop: 8 }}>
+              + {report.answered - report.sample.length} more responses
+            </p>
+          ) : null}
+        </div>
+      ) : null}
     </section>
   );
 }

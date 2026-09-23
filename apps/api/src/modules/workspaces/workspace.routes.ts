@@ -48,6 +48,8 @@ workspaceRouter.get(
             type: workspace.type,
             role,
             createdAt: workspace.createdAt,
+            logoUrl: workspace.logoUrl,
+            primaryColor: workspace.primaryColor,
           })),
         },
       });

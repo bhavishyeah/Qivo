@@ -265,6 +265,61 @@ export async function listForms(
   });
 }
 
+/**
+ * Aggregate stats for a workspace's admin dashboard, computed server-side in a
+ * handful of queries instead of one HTTP request per form (former N+1).
+ */
+export async function getWorkspaceStats(
+  workspaceId: string,
+  userId: string,
+) {
+  const membership = await getMembership(workspaceId, userId);
+
+  if (!membership) {
+    const error = new Error("Workspace not found.");
+    error.name = "WORKSPACE_NOT_FOUND";
+    throw error;
+  }
+
+  // Forms grouped by status (one query), member count, and recent forms.
+  const [statusGroups, totalMembers, recentForms] = await Promise.all([
+    prisma.form.groupBy({
+      by: ["status"],
+      where: { workspaceId, deletedAt: null },
+      _count: { _all: true },
+    }),
+    prisma.workspaceMember.count({ where: { workspaceId } }),
+    prisma.form.findMany({
+      where: { workspaceId, deletedAt: null },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+      select: { id: true, title: true, status: true, createdAt: true },
+    }),
+  ]);
+
+  const countByStatus = new Map(
+    statusGroups.map((g) => [g.status, g._count._all]),
+  );
+  const publishedForms = countByStatus.get("PUBLISHED") ?? 0;
+  const draftForms = countByStatus.get("DRAFT") ?? 0;
+  const totalForms = statusGroups.reduce((sum, g) => sum + g._count._all, 0);
+
+  // Total responses across all non-deleted forms in the workspace — a single
+  // count with a relational filter, not one count per form.
+  const totalResponses = await prisma.formResponse.count({
+    where: { form: { workspaceId, deletedAt: null } },
+  });
+
+  return {
+    totalForms,
+    publishedForms,
+    draftForms,
+    totalMembers,
+    totalResponses,
+    recentForms,
+  };
+}
+
 export async function getForm(
   formId: string,
   userId: string,
@@ -1400,4 +1455,171 @@ export async function getFormAnalytics(
   const conversionRate = views > 0 ? Math.round((submissions / views) * 100) : 0;
 
   return { views, submissions, conversionRate };
+}
+
+// ─── Reports aggregation ────────────────────────────────────────────────────
+//
+// Server-side per-question aggregation for the reports page. Previously the
+// client fetched every response (up to 5000 rows) and aggregated in the browser.
+// This computes the same breakdowns on the server in a single DB read.
+
+type ChoiceReport = {
+  kind: "choice";
+  options: Array<{ name: string; count: number; percentage: number }>;
+};
+
+type RatingReport = {
+  kind: "rating";
+  min: number;
+  max: number;
+  average: number | null;
+  distribution: Array<{ rating: number; count: number }>;
+};
+
+type NumberReport = {
+  kind: "number";
+  average: number | null;
+  min: number | null;
+  max: number | null;
+  sum: number;
+};
+
+type TextReport = {
+  kind: "text";
+  sample: string[]; // up to 20 non-empty answers
+};
+
+type QuestionReport = {
+  questionId: string;
+  label: string;
+  type: QuestionType;
+  answered: number;
+  skipped: number;
+} & (ChoiceReport | RatingReport | NumberReport | TextReport);
+
+function isAnswered(value: unknown): boolean {
+  if (value === undefined || value === null || value === "") return false;
+  if (Array.isArray(value) && value.length === 0) return false;
+  return true;
+}
+
+export async function getFormReport(formId: string, userId: string) {
+  const form = await getForm(formId, userId);
+  const schema = getFormSchema(form.schema);
+  const questions = schema.sections.flatMap((s) => s.questions);
+
+  // Single read of all responses for this form (answers only — no pagination
+  // round trips). Ordered newest-first so text samples show recent answers.
+  const [responses, views, submissions] = await Promise.all([
+    prisma.formResponse.findMany({
+      where: { formId: form.id },
+      orderBy: { submittedAt: "desc" },
+      select: { answers: true },
+    }),
+    prisma.formAnalytics.count({ where: { formId: form.id, event: "view" } }),
+    prisma.formAnalytics.count({ where: { formId: form.id, event: "submission" } }),
+  ]);
+
+  const totalResponses = responses.length;
+
+  const answerRows = responses.map(
+    (r) => (r.answers ?? {}) as Record<string, unknown>,
+  );
+
+  const questionReports: QuestionReport[] = questions.map((question) => {
+    const values = answerRows.map((row) => row[question.id]);
+    const answers = values.filter(isAnswered);
+    const answered = answers.length;
+    const skipped = totalResponses - answered;
+
+    const base = {
+      questionId: question.id,
+      label: question.label,
+      type: question.type,
+      answered,
+      skipped,
+    };
+
+    if (
+      question.type === "SINGLE_CHOICE" ||
+      question.type === "MULTIPLE_CHOICE" ||
+      question.type === "YES_NO"
+    ) {
+      const counts = new Map<string, number>();
+      for (const answer of answers) {
+        if (Array.isArray(answer)) {
+          for (const item of answer) {
+            const key = String(item);
+            counts.set(key, (counts.get(key) ?? 0) + 1);
+          }
+        } else {
+          const key = String(answer);
+          counts.set(key, (counts.get(key) ?? 0) + 1);
+        }
+      }
+      const options = Array.from(counts.entries())
+        .map(([name, count]) => ({
+          name,
+          count,
+          percentage: answered > 0 ? Math.round((count / answered) * 100) : 0,
+        }))
+        .sort((a, b) => b.count - a.count);
+      return { ...base, kind: "choice", options };
+    }
+
+    if (question.type === "RATING" || question.type === "LINEAR_SCALE") {
+      const min = Number(question.settings?.["min"] ?? 1);
+      const max = Number(question.settings?.["max"] ?? 5);
+      const counts = new Map<number, number>();
+      for (let i = min; i <= max; i++) counts.set(i, 0);
+      let sum = 0;
+      let n = 0;
+      for (const answer of answers) {
+        const num = Number(answer);
+        if (!Number.isNaN(num)) {
+          counts.set(num, (counts.get(num) ?? 0) + 1);
+          sum += num;
+          n += 1;
+        }
+      }
+      const distribution = Array.from(counts.entries())
+        .sort((a, b) => a[0] - b[0])
+        .map(([rating, count]) => ({ rating, count }));
+      return {
+        ...base,
+        kind: "rating",
+        min,
+        max,
+        average: n > 0 ? Math.round((sum / n) * 10) / 10 : null,
+        distribution,
+      };
+    }
+
+    if (question.type === "NUMBER") {
+      const numbers = answers
+        .map(Number)
+        .filter((n) => !Number.isNaN(n));
+      const sum = numbers.reduce((a, b) => a + b, 0);
+      return {
+        ...base,
+        kind: "number",
+        average: numbers.length > 0 ? Math.round((sum / numbers.length) * 10) / 10 : null,
+        min: numbers.length > 0 ? Math.min(...numbers) : null,
+        max: numbers.length > 0 ? Math.max(...numbers) : null,
+        sum,
+      };
+    }
+
+    // Text-based (SHORT_TEXT, LONG_TEXT, EMAIL, DATE, PHONE, URL, FILE_UPLOAD)
+    const sample = answers.slice(0, 20).map((a) => String(a));
+    return { ...base, kind: "text", sample };
+  });
+
+  const conversionRate = views > 0 ? Math.round((submissions / views) * 100) : 0;
+
+  return {
+    totalResponses,
+    analytics: { views, submissions, conversionRate },
+    questions: questionReports,
+  };
 }

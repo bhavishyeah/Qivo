@@ -40,35 +40,12 @@ export default function AdminPanelPage() {
 
   async function loadStats(wsId: string) {
     try {
-      // Fetch forms, members, and compute stats
-      const [formsData, membersData] = await Promise.all([
-        api.get<{ forms: { id: string; title: string; status: string; createdAt: string }[] }>(`/api/forms?workspaceId=${encodeURIComponent(wsId)}`),
-        api.get<{ members: { id: string }[] }>(`/api/members?workspaceId=${encodeURIComponent(wsId)}`),
-      ]);
-
-      const forms = formsData.forms;
-      const published = forms.filter((f) => f.status === "PUBLISHED").length;
-      const drafts = forms.filter((f) => f.status === "DRAFT").length;
-
-      // Get total response count
-      let totalResponses = 0;
-      // Only count first 20 forms to avoid too many requests
-      const topForms = forms.slice(0, 20);
-      const counts = await Promise.all(
-        topForms.map((f) =>
-          api.get<{ count: number }>(`/api/forms/${f.id}/responses-count`).catch(() => ({ count: 0 }))
-        )
+      // Single aggregate request — the server computes all counts (previously
+      // this fired one /responses-count request per form).
+      const data = await api.get<StatsData>(
+        `/api/forms/workspace-stats?workspaceId=${encodeURIComponent(wsId)}`,
       );
-      totalResponses = counts.reduce((sum, c) => sum + c.count, 0);
-
-      setStats({
-        totalForms: forms.length,
-        totalResponses,
-        totalMembers: membersData.members.length,
-        publishedForms: published,
-        draftForms: drafts,
-        recentForms: forms.slice(0, 10),
-      });
+      setStats(data);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : "Unable to load stats.");
     }

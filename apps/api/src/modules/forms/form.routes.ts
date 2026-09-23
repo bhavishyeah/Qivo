@@ -33,7 +33,9 @@ import {
   getFormAnalytics,
   getFormResponse,
   getFormResponseCount,
+  getFormReport,
   getPublicForm,
+  getWorkspaceStats,
   listFormResponses,
   listFormVersions,
   listForms,
@@ -63,6 +65,37 @@ formRouter.get("/templates", (_req, res) => {
     },
   });
 });
+
+// Aggregate stats for a workspace's admin dashboard (single request, no N+1).
+formRouter.get(
+  "/workspace-stats",
+  requireAuth,
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: { code: "UNAUTHENTICATED", message: "Authentication is required." },
+        });
+        return;
+      }
+
+      const workspaceId = req.query.workspaceId;
+      if (typeof workspaceId !== "string" || workspaceId.length === 0) {
+        res.status(400).json({
+          success: false,
+          error: { code: "INVALID_WORKSPACE_ID", message: "A valid workspace ID is required." },
+        });
+        return;
+      }
+
+      const stats = await getWorkspaceStats(workspaceId, req.user.id);
+      res.json({ success: true, data: stats });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
 // Create form from template
 formRouter.post(
@@ -791,6 +824,30 @@ formRouter.get(
       }
       const analytics = await getFormAnalytics(formId, req.user.id);
       res.json({ success: true, data: analytics });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+// Server-side aggregated report (per-question breakdowns + analytics) so the
+// client no longer fetches every response to aggregate in the browser.
+formRouter.get(
+  "/:formId/report",
+  requireAuth,
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: { code: "UNAUTHENTICATED", message: "Authentication is required." } });
+        return;
+      }
+      const formId = req.params.formId;
+      if (typeof formId !== "string") {
+        res.status(400).json({ success: false, error: { code: "INVALID_FORM_ID", message: "A valid form ID is required." } });
+        return;
+      }
+      const report = await getFormReport(formId, req.user.id);
+      res.json({ success: true, data: report });
     } catch (error) {
       next(error);
     }
