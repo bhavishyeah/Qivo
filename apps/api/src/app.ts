@@ -62,9 +62,25 @@ const authLimiter = rateLimit({
 app.use(helmet());
 app.use(compression());
 
+// Allowed browser origins. WEB_URL may be a comma-separated list so Vercel
+// preview URLs can be added alongside the production URL. Trailing slashes are
+// stripped so "https://x.vercel.app/" and "https://x.vercel.app" both match.
+const allowedOrigins = (process.env.WEB_URL || "http://localhost:5173")
+  .split(",")
+  .map((o) => o.trim().replace(/\/$/, ""))
+  .filter(Boolean);
+
 app.use(
   cors({
-    origin: process.env.WEB_URL || "http://localhost:5173",
+    origin(origin, callback) {
+      // Non-browser clients (curl, health checks) send no Origin — allow them.
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+      const normalized = origin.replace(/\/$/, "");
+      callback(null, allowedOrigins.includes(normalized));
+    },
     credentials: true,
   }),
 );
@@ -86,9 +102,7 @@ const publicFormLimiter = rateLimit({
   message: { success: false, error: { code: "RATE_LIMITED", message: "Too many requests." } },
 });
 app.use("/api/forms/public", publicFormLimiter);
-app.use("/api", csrfProtection([
-  process.env.WEB_URL || "http://localhost:5173",
-]));
+app.use("/api", csrfProtection(allowedOrigins));
 
 app.use("/api/forms", formRouter);
 app.use("/api/folders", folderRouter);
