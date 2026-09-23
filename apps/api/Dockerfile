@@ -42,9 +42,10 @@ COPY --from=builder /app/apps/api/dist ./apps/api/dist/
 COPY --from=builder /app/apps/api/src/generated ./apps/api/src/generated/
 
 ENV NODE_ENV=production
-ENV PORT=3000
 
 EXPOSE 3000
 
-WORKDIR /app/apps/api
-CMD ["node", "dist/server.js"]
+WORKDIR /app
+# Run migrations against the DB, then start the server.
+# Railway injects PORT at runtime; the app reads it from env.
+CMD ["sh", "-c", "pnpm exec prisma migrate deploy && node apps/api/dist/server.js"]

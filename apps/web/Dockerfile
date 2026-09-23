@@ -23,8 +23,16 @@ RUN pnpm exec vite build
 FROM nginx:alpine AS runner
 
 COPY --from=builder /app/apps/web/dist /usr/share/nginx/html
-COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
+
+# nginx.conf is a template; envsubst fills in $PORT at container start.
+# The official nginx image auto-processes files in /etc/nginx/templates/.
+COPY apps/web/nginx.conf /etc/nginx/templates/default.conf.template
+
+# Default port when Railway does not inject one (e.g. local docker run).
+ENV PORT=80
+# Only substitute ${PORT}; leave nginx runtime vars like $uri untouched.
+ENV NGINX_ENVSUBST_FILTER=PORT
 
 EXPOSE 80
 
-CMD ["nginx", "-g", "daemon off;"]
+# Base image entrypoint runs envsubst on templates, then starts nginx.

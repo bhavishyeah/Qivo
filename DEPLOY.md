@@ -29,8 +29,11 @@ git push origin main
 3. Select your `Qivo` repository
 4. In the service settings:
    - **Root Directory**: leave empty (deploy from repo root)
-   - **Build Command**: `pnpm install && pnpm exec prisma generate && pnpm --filter api exec tsc`
-   - **Start Command**: `pnpm exec prisma migrate deploy && node apps/api/dist/server.js`
+   - **Builder**: `Dockerfile`
+   - **Dockerfile Path**: `apps/api/Dockerfile`
+   - No build/start commands needed — the Dockerfile builds with `tsc` and its
+     `CMD` runs `prisma migrate deploy` then `node apps/api/dist/server.js`.
+     Railway's injected `$PORT` is read automatically by the server.
 5. Click **"New"** → **"Database"** → **"Add PostgreSQL"**
 6. Railway auto-sets `DATABASE_URL`. Add these **additional variables**:
 
@@ -47,7 +50,31 @@ DIRECT_URL=${{Postgres.DATABASE_URL}}     ← (Railway variable reference)
 
 ---
 
-## Step 3: Deploy Frontend on Vercel
+> **Note:** `apps/api/railway.json` and `apps/web/railway.json` pin the builder,
+> Dockerfile path, start command, healthcheck, and restart policy. When you set a
+> service's Root Directory to `apps/api` (or `apps/web`), Railway auto-detects
+> that service's `railway.json`, so most settings above are applied for you.
+
+---
+
+## Step 3: Deploy Frontend
+
+You can host the frontend on Railway (Docker) or on Vercel/Cloudflare Pages.
+
+### Option A — Railway (Docker)
+
+1. In the same Railway project, click **"New"** → **"GitHub Repo"** → same repo
+2. Service settings:
+   - **Root Directory**: `apps/web` (Railway picks up `apps/web/railway.json`)
+   - **Builder**: `Dockerfile`, path `apps/web/Dockerfile`
+3. Add a **build-time variable** (not a runtime var — Vite inlines it at build):
+   ```
+   VITE_API_URL=https://qivo-api-production.up.railway.app
+   ```
+   In Railway, mark it as available at build time so the Docker `ARG` receives it.
+4. Deploy. nginx listens on Railway's injected `$PORT` automatically.
+
+### Option B — Vercel
 
 1. Go to https://vercel.com → Sign in with GitHub
 2. Click **"Add New Project"** → Select your `Qivo` repository
