@@ -43,12 +43,14 @@ RUN pnpm install --frozen-lockfile --prod
 
 COPY --from=builder /app/apps/api/dist ./apps/api/dist/
 COPY --from=builder /app/apps/api/src/generated ./apps/api/src/generated/
+COPY apps/api/docker-entrypoint.sh ./docker-entrypoint.sh
+RUN chmod +x ./docker-entrypoint.sh
 
 ENV NODE_ENV=production
 
 EXPOSE 3000
 
 WORKDIR /app
-# Run migrations against the DB, then start the server.
-# Railway injects PORT at runtime; the app reads it from env.
-CMD ["sh", "-c", "pnpm exec prisma migrate deploy && node apps/api/dist/server.js"]
+# Entrypoint runs migrations then unconditionally starts the server, so a
+# migrate quirk can never prevent the server from booting.
+CMD ["./docker-entrypoint.sh"]
