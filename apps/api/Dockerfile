@@ -20,9 +20,12 @@ COPY apps/api ./apps/api/
 # Generate Prisma client
 RUN pnpm exec prisma generate
 
-# Build TypeScript
+# Build TypeScript. Use the explicit project + outDir so tsc resolves the
+# api's tsconfig regardless of pnpm's working dir, then fail the build if the
+# entrypoint wasn't emitted (prevents a green-but-broken image).
 WORKDIR /app/apps/api
-RUN pnpm exec tsc --outDir dist
+RUN pnpm exec tsc --project tsconfig.json --outDir dist \
+  && test -f dist/server.js || (echo "ERROR: dist/server.js not emitted" && ls -R dist && exit 1)
 
 # Stage 2: Production
 FROM node:22-alpine AS runner
