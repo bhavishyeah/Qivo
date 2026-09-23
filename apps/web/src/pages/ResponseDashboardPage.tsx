@@ -87,6 +87,7 @@ export default function ResponseDashboardPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   // Derive questions from form state (fixed — was using form before declaration)
   const questions =
@@ -140,6 +141,41 @@ export default function ResponseDashboardPage() {
     void loadResponses();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formId]);
+
+  // Fetch ALL responses (paginating through the cursor endpoint) so exports
+  // include every response, not just the page currently on screen.
+  async function fetchAllResponses(): Promise<ResponseRecord[]> {
+    if (!formId) return [];
+    const all: ResponseRecord[] = [];
+    let cursor: string | undefined;
+    // Hard cap mirrors the reports page to avoid unbounded memory use.
+    while (all.length <= 5000) {
+      const query = new URLSearchParams({ limit: "100" });
+      if (cursor) query.set("cursor", cursor);
+      const data = await api.get<{ responses: ResponseRecord[]; nextCursor?: string }>(
+        `/api/forms/${formId}/responses?${query.toString()}`,
+      );
+      all.push(...data.responses);
+      if (data.nextCursor) cursor = data.nextCursor;
+      else break;
+    }
+    return all;
+  }
+
+  async function exportResponses(format: "csv" | "excel") {
+    setExporting(true);
+    setError("");
+    try {
+      const all = await fetchAllResponses();
+      const title = form?.title ?? "form";
+      if (format === "csv") downloadResponsesCsv(all, questions, title);
+      else downloadResponsesExcel(all, questions, title);
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : "Unable to export responses.");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   async function openResponse(responseId: string) {
     if (!formId) return;
@@ -229,32 +265,19 @@ export default function ResponseDashboardPage() {
           <button
             className="secondary-button"
             type="button"
-            disabled={responses.length === 0}
-            onClick={() =>
-              downloadResponsesCsv(responses, questions, form?.title ?? "form")
-            }
+            disabled={(totalCount ?? responses.length) === 0 || exporting}
+            onClick={() => void exportResponses("csv")}
           >
-            CSV
+            {exporting ? "Exporting..." : "CSV"}
           </button>
           <button
             className="secondary-button"
             type="button"
-            disabled={responses.length === 0}
-            onClick={() =>
-              downloadResponsesExcel(responses, questions, form?.title ?? "form")
-            }
+            disabled={(totalCount ?? responses.length) === 0 || exporting}
+            onClick={() => void exportResponses("excel")}
           >
-            Excel
+            {exporting ? "Exporting..." : "Excel"}
           </button>
-          <a
-            className="secondary-button"
-            href="https://docs.google.com/spreadsheets/create"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ textDecoration: "none", fontSize: "0.88rem" }}
-          >
-            Sheets ↗
-          </a>
           <Link className="secondary-link" to={`/forms/${formId}/reports`}>
             Reports
           </Link>

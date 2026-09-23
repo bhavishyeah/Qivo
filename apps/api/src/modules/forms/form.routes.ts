@@ -11,6 +11,8 @@ import {
 import {
   createFormSchema,
   createQuestionSchema,
+  createSectionSchema,
+  updateSectionSchema,
   reorderQuestionsSchema,
   responseListQuerySchema,
   submitResponseSchema,
@@ -25,6 +27,9 @@ import {
   closeForm,
   createForm,
   createQuestion,
+  createSection,
+  updateSection,
+  deleteSection,
   deleteForm,
   deleteFormResponse,
   deleteQuestion,
@@ -36,6 +41,8 @@ import {
   getFormReport,
   getPublicForm,
   getWorkspaceStats,
+  getFormVersion,
+  restoreFormVersion,
   listFormResponses,
   listFormVersions,
   listForms,
@@ -336,6 +343,9 @@ formRouter.post(
           ...(input.settings !== undefined
             ? { settings: input.settings }
             : {}),
+          ...(input.sectionId !== undefined
+            ? { sectionId: input.sectionId }
+            : {}),
         },
       );
 
@@ -343,6 +353,78 @@ formRouter.post(
         success: true,
         data: result,
       });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+// ─── Sections ───────────────────────────────────────────────────────────────
+
+formRouter.post(
+  "/:formId/sections",
+  requireAuth,
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: { code: "UNAUTHENTICATED", message: "Authentication is required." } });
+        return;
+      }
+      const formId = req.params.formId;
+      if (typeof formId !== "string") {
+        res.status(400).json({ success: false, error: { code: "INVALID_FORM_ID", message: "A valid form ID is required." } });
+        return;
+      }
+      const input = createSectionSchema.parse(req.body);
+      const result = await createSection(formId, req.user.id, {
+        ...(input.title !== undefined ? { title: input.title } : {}),
+      });
+      res.status(201).json({ success: true, data: result });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+formRouter.patch(
+  "/:formId/sections/:sectionId",
+  requireAuth,
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: { code: "UNAUTHENTICATED", message: "Authentication is required." } });
+        return;
+      }
+      const { formId, sectionId } = req.params;
+      if (typeof formId !== "string" || typeof sectionId !== "string") {
+        res.status(400).json({ success: false, error: { code: "INVALID_FORM_ID", message: "Valid form and section IDs are required." } });
+        return;
+      }
+      const input = updateSectionSchema.parse(req.body);
+      const form = await updateSection(formId, sectionId, req.user.id, { title: input.title });
+      res.json({ success: true, data: { form } });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+formRouter.delete(
+  "/:formId/sections/:sectionId",
+  requireAuth,
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: { code: "UNAUTHENTICATED", message: "Authentication is required." } });
+        return;
+      }
+      const { formId, sectionId } = req.params;
+      if (typeof formId !== "string" || typeof sectionId !== "string") {
+        res.status(400).json({ success: false, error: { code: "INVALID_FORM_ID", message: "Valid form and section IDs are required." } });
+        return;
+      }
+      const form = await deleteSection(formId, sectionId, req.user.id);
+      res.json({ success: true, data: { form } });
     } catch (error) {
       next(error);
     }
@@ -682,6 +764,54 @@ formRouter.get(
         success: true,
         data: { versions },
       });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+// Preview a single version snapshot (full schema)
+formRouter.get(
+  "/:formId/versions/:versionNumber",
+  requireAuth,
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: { code: "UNAUTHENTICATED", message: "Authentication is required." } });
+        return;
+      }
+      const { formId, versionNumber } = req.params;
+      const parsedVersion = Number(versionNumber);
+      if (typeof formId !== "string" || !Number.isInteger(parsedVersion)) {
+        res.status(400).json({ success: false, error: { code: "INVALID_FORM_ID", message: "Valid form ID and version number are required." } });
+        return;
+      }
+      const version = await getFormVersion(formId, parsedVersion, req.user.id);
+      res.json({ success: true, data: { version } });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+// Restore a version snapshot onto the form as a new DRAFT
+formRouter.post(
+  "/:formId/versions/:versionNumber/restore",
+  requireAuth,
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: { code: "UNAUTHENTICATED", message: "Authentication is required." } });
+        return;
+      }
+      const { formId, versionNumber } = req.params;
+      const parsedVersion = Number(versionNumber);
+      if (typeof formId !== "string" || !Number.isInteger(parsedVersion)) {
+        res.status(400).json({ success: false, error: { code: "INVALID_FORM_ID", message: "Valid form ID and version number are required." } });
+        return;
+      }
+      const form = await restoreFormVersion(formId, parsedVersion, req.user.id);
+      res.json({ success: true, data: { form } });
     } catch (error) {
       next(error);
     }

@@ -65,9 +65,11 @@ async function request<T>(
   if (!response.ok || !body.success) {
     const err = body as ApiError;
 
-    // If 401, clear the token and dispatch a custom event
+    // On 401, notify the app so it can surface the "session expired" banner.
+    // We intentionally do NOT clear the token here — clearing it immediately
+    // causes the auth guard to redirect and unmount the banner before it shows.
+    // The token is cleared when the user acts on the banner (logs in again).
     if (response.status === 401) {
-      setToken(null);
       window.dispatchEvent(new CustomEvent("qivo:session-expired"));
     }
 

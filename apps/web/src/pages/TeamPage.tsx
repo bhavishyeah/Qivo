@@ -248,7 +248,10 @@ export default function TeamPage() {
     );
   }
 
-  const currentUserRole = members.find((m) => selectedWsData?.role === m.role)?.role ?? selectedWsData?.role ?? "";
+  // selectedWsData.role is the CURRENT user's role in this workspace (set by
+  // the /workspaces endpoint), so derive permissions from it directly rather
+  // than matching a member by role-equality.
+  const currentUserRole = selectedWsData?.role ?? "";
   const canManage = currentUserRole === "OWNER" || currentUserRole === "ADMIN";
 
   return (

@@ -9,6 +9,18 @@ import {
 
 const SESSION_DAYS = 30;
 
+/**
+ * Stored in passwordHash for accounts that have no password (e.g. created via
+ * Google). It is not a valid bcrypt hash, so bcrypt.compare against it always
+ * fails — password login is impossible for these accounts.
+ */
+export const NO_PASSWORD_SENTINEL = "oauth:no-password";
+
+/** True when the account cannot authenticate with a password. */
+export function hasNoPassword(passwordHash: string | null | undefined): boolean {
+  return !passwordHash || passwordHash === NO_PASSWORD_SENTINEL;
+}
+
 function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
@@ -123,6 +135,14 @@ export async function login(input: {
   });
 
   if (!user) {
+    const error = new Error("Invalid email or password.");
+    error.name = "UNAUTHORIZED";
+    throw error;
+  }
+
+  // Accounts created via Google have no password set. Reject password login
+  // for them (same generic error to avoid leaking which method an email uses).
+  if (hasNoPassword(user.passwordHash)) {
     const error = new Error("Invalid email or password.");
     error.name = "UNAUTHORIZED";
     throw error;
@@ -246,6 +266,7 @@ export async function resetPassword(input: {
 export async function changePassword(
   userId: string,
   input: { currentPassword: string; newPassword: string },
+  currentSessionId?: string,
 ) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -254,6 +275,13 @@ export async function changePassword(
   if (!user) {
     const error = new Error("User not found.");
     error.name = "USER_NOT_FOUND";
+    throw error;
+  }
+
+  // Google-only accounts have no password to change/verify against.
+  if (hasNoPassword(user.passwordHash)) {
+    const error = new Error("This account has no password set. Use Google sign-in.");
+    error.name = "UNAUTHORIZED";
     throw error;
   }
 
@@ -273,6 +301,15 @@ export async function changePassword(
   await prisma.user.update({
     where: { id: userId },
     data: { passwordHash },
+  });
+
+  // Invalidate every other session so a stolen/old session can't survive a
+  // password change. Keep the caller's current session so they stay logged in.
+  await prisma.session.deleteMany({
+    where: {
+      userId,
+      ...(currentSessionId ? { id: { not: currentSessionId } } : {}),
+    },
   });
 
   return { success: true };

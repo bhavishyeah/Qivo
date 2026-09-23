@@ -73,7 +73,7 @@ export default function AppLayout({
           <button
             type="button"
             className="secondary-button compact"
-            onClick={() => navigate("/login")}
+            onClick={() => { setToken(null); navigate("/login"); }}
           >
             Log in
           </button>

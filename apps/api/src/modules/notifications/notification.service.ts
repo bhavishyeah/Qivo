@@ -82,6 +82,7 @@ export async function notifyFormEvent(input: {
   actorName: string;
   type: NotificationType;
   targetUserIds: string[];
+  comment?: string;
 }) {
   const messages: Record<NotificationType, string> = {
     FORM_SUBMITTED_FOR_REVIEW: `${input.actorName} submitted "${input.formTitle}" for your review.`,
@@ -115,8 +116,15 @@ export async function notifyFormEvent(input: {
       userId,
       type: input.type,
       title: titles[input.type],
-      message: messages[input.type],
-      metadata: { formId: input.formId, actorId: input.actorId },
+      // Append the reviewer's comment to the message when present.
+      message: input.comment
+        ? `${messages[input.type]} — "${input.comment}"`
+        : messages[input.type],
+      metadata: {
+        formId: input.formId,
+        actorId: input.actorId,
+        ...(input.comment ? { comment: input.comment } : {}),
+      },
     })),
   });
 }

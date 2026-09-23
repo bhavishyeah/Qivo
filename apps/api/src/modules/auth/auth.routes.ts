@@ -164,7 +164,7 @@ authRouter.post(
         })
         .parse(req.body);
 
-      await changePassword(req.user.id, input);
+      await changePassword(req.user.id, input, req.sessionId);
 
       res.json({
         success: true,

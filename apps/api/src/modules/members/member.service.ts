@@ -1,5 +1,6 @@
 import prisma from "../../db/prisma.js";
 import { createNotification } from "../notifications/notification.service.js";
+import { logAction } from "../audit/audit.service.js";
 
 type WorkspaceRole = "OWNER" | "ADMIN" | "EDITOR" | "VIEWER";
 
@@ -106,6 +107,15 @@ export async function inviteMember(
     metadata: { workspaceId, actorId },
   });
 
+  void logAction({
+    workspaceId,
+    userId: actorId,
+    action: "MEMBER_INVITED",
+    entityType: "member",
+    entityId: member.id,
+    metadata: { email: targetUser.email, role: input.role },
+  }).catch((err) => console.error("logAction MEMBER_INVITED failed:", err));
+
   return member;
 }
 
@@ -135,13 +145,24 @@ export async function updateMemberRole(
     throw forbiddenError("Only the owner can assign the Admin role.");
   }
 
-  return prisma.workspaceMember.update({
+  const updated = await prisma.workspaceMember.update({
     where: { id: memberId },
     data: { role: newRole },
     include: {
       user: { select: { id: true, name: true, email: true, avatarUrl: true } },
     },
   });
+
+  void logAction({
+    workspaceId,
+    userId: actorId,
+    action: "MEMBER_ROLE_CHANGED",
+    entityType: "member",
+    entityId: memberId,
+    metadata: { from: targetMember.role, to: newRole, userId: targetMember.userId },
+  }).catch((err) => console.error("logAction MEMBER_ROLE_CHANGED failed:", err));
+
+  return updated;
 }
 
 export async function removeMember(
@@ -174,7 +195,27 @@ export async function removeMember(
     throw forbiddenError("You cannot remove yourself. Use leave workspace instead.");
   }
 
-  return prisma.workspaceMember.delete({ where: { id: memberId } });
+  const removed = await prisma.workspaceMember.delete({ where: { id: memberId } });
+
+  // Notify the removed user (MEMBER_REMOVED was defined but never emitted).
+  void createNotification({
+    userId: targetMember.userId,
+    type: "MEMBER_REMOVED",
+    title: "Removed from workspace",
+    message: "You were removed from a workspace.",
+    metadata: { workspaceId, actorId },
+  }).catch((err) => console.error("MEMBER_REMOVED notification failed:", err));
+
+  void logAction({
+    workspaceId,
+    userId: actorId,
+    action: "MEMBER_REMOVED",
+    entityType: "member",
+    entityId: memberId,
+    metadata: { userId: targetMember.userId, role: targetMember.role },
+  }).catch((err) => console.error("logAction MEMBER_REMOVED failed:", err));
+
+  return removed;
 }
 
 export async function leaveWorkspace(workspaceId: string, userId: string) {
