@@ -1,14 +1,110 @@
 # Deployment Guide
 
-## Architecture
+## Live setup (as deployed)
 
 ```
-Frontend (Vercel/Cloudflare Pages) → API (Railway) → PostgreSQL (Railway)
+Frontend (Vercel)  →  API (Railway, Docker)  →  PostgreSQL (Supabase)
+qivo-web-dusky        qivo-production-587a       aws-0-ap-south-1.pooler
+.vercel.app           .up.railway.app            .supabase.com
 ```
 
-- **Frontend**: Static files served from CDN (fast globally)
-- **API**: Node.js server on Railway
-- **Database**: PostgreSQL on Railway (auto-provisioned)
+- **Frontend**: Vite SPA on Vercel (static, CDN).
+- **API**: Node/Express on Railway, built from `apps/api/Dockerfile`.
+- **Database**: Supabase Postgres (pooled URL for the app, direct URL for migrations).
+
+---
+
+## Routine redeploy (the normal flow)
+
+Both services auto-deploy from the `main` branch on push.
+
+```bash
+git add .
+git commit -m "your change"
+git push origin main
+```
+
+- **API (Railway)**: rebuilds the Docker image, runs migrations via the
+  entrypoint, then starts. Watch Deploy Logs for
+  `Qivo API running on 0.0.0.0:<PORT>`.
+- **Web (Vercel)**: rebuilds automatically. Note: `VITE_*` values are baked in
+  at build time, so a redeploy is required to pick up any env var change.
+
+### Verify after deploy
+- `https://qivo-production-587a.up.railway.app/api/health` → `{"success":true,...}`
+- `https://qivo-production-587a.up.railway.app/api/db-health` → `{"database":"connected"}`
+- Load the Vercel site, log in with DevTools open, confirm the `/api/auth/*`
+  request hits Railway and returns 200 with no CORS error.
+
+---
+
+## Adding a database migration
+
+1. Edit `prisma/schema.prisma`.
+2. Create the migration locally (needs a DB connection via `DIRECT_URL`):
+   ```bash
+   pnpm exec prisma migrate dev --name your_change
+   ```
+3. Commit the generated folder under `prisma/migrations/` together with the
+   schema change, then push. The Railway entrypoint runs `prisma migrate deploy`
+   on boot, applying it automatically.
+
+Never edit an already-applied migration; add a new one.
+
+---
+
+## Environment variables
+
+**Railway (API service)** — set in the service, not in `.env.example`:
+
+| Variable | Value |
+|---|---|
+| `DATABASE_URL` | Supabase **pooled** URL (port 6543, `?pgbouncer=true`) |
+| `DIRECT_URL` | Supabase **direct** URL (port 5432) — used by migrations |
+| `NODE_ENV` | `production` |
+| `WEB_URL` | Vercel URL, no trailing slash. Comma-separate for multiple origins. |
+| `SESSION_COOKIE_NAME` | `qivo_session` |
+| `SESSION_DAYS` | `30` |
+| `RESEND_API_KEY` | Resend key (optional; email skipped if unset) |
+| `GOOGLE_CLIENT_ID` | Google OAuth client ID (optional) |
+| `PORT` | **leave unset** — Railway injects it (currently 8080) |
+
+**Vercel (web project)** — build-time, keep the `VITE_` prefix (these are public):
+
+| Variable | Value |
+|---|---|
+| `VITE_API_URL` | `https://qivo-production-587a.up.railway.app` |
+| `VITE_GOOGLE_CLIENT_ID` | same as `GOOGLE_CLIENT_ID` (optional) |
+
+If the Vercel domain changes, update `WEB_URL` on Railway to match (CORS).
+If the Railway domain changes, update `VITE_API_URL` on Vercel and **redeploy**.
+
+---
+
+## Gotchas learned during the first deploy
+
+- **Port must match.** Railway injects `PORT` (8080). The app honors it, and the
+  domain's **target port must equal that** (Settings → Networking → 8080).
+  A mismatch shows as a `502` with `x-railway-fallback: true`.
+- **No custom Start Command in Railway.** Leave it empty so the Dockerfile
+  `CMD ["./docker-entrypoint.sh"]` runs. A stale UI Start Command overrides both
+  railway.json and the Dockerfile.
+- **`prisma generate` at build time** must not require `DIRECT_URL`
+  (`prisma.config.ts` reads it lazily via `process.env`).
+- **`prisma` CLI is a prod dependency** (root `package.json`) so it survives
+  `pnpm install --prod` and can run migrations at runtime.
+- **`docker-entrypoint.sh` must stay LF** (enforced by `.gitattributes`) or it
+  won't run in the Alpine container.
+- **Don't put secrets behind `VITE_`** — that prefix exposes values to the
+  browser. `VITE_API_URL` and the Google client ID are public, so they're fine.
+- **`.env.example` is committed** — keep placeholders only, never real secrets.
+
+---
+
+## Legacy reference (original plan — Railway Postgres)
+
+The steps below were the initial plan before switching to Supabase + Docker.
+Kept for reference.
 
 ---
 
