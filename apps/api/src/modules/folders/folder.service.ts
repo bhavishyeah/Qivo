@@ -89,11 +89,41 @@ export async function updateFolder(
     throw forbiddenError("You do not have permission to edit this folder.");
   }
 
-  // Prevent setting folder as its own parent
-  if (input.parentId === folderId) {
-    const error = new Error("A folder cannot be its own parent.");
-    error.name = "INVALID_FOLDER_PARENT";
-    throw error;
+  // Validate a requested parent change: same workspace, not itself, and not a
+  // descendant of this folder (which would create a cycle).
+  if (input.parentId !== undefined && input.parentId !== null) {
+    if (input.parentId === folderId) {
+      const error = new Error("A folder cannot be its own parent.");
+      error.name = "INVALID_FOLDER_PARENT";
+      throw error;
+    }
+
+    const parent = await prisma.folder.findFirst({
+      where: { id: input.parentId, workspaceId: folder.workspaceId },
+    });
+    if (!parent) {
+      throw folderNotFoundError();
+    }
+
+    // Walk up from the proposed parent; if we reach this folder, the move
+    // would put a folder under its own descendant → cycle.
+    let ancestorId: string | null = parent.parentId;
+    const guardLimit = 1000; // safety against pre-existing corrupt cycles
+    let steps = 0;
+    while (ancestorId && steps < guardLimit) {
+      if (ancestorId === folderId) {
+        const error = new Error("A folder cannot be moved inside its own subtree.");
+        error.name = "INVALID_FOLDER_PARENT";
+        throw error;
+      }
+      const ancestor: { parentId: string | null } | null =
+        await prisma.folder.findUnique({
+          where: { id: ancestorId },
+          select: { parentId: true },
+        });
+      ancestorId = ancestor?.parentId ?? null;
+      steps += 1;
+    }
   }
 
   return prisma.folder.update({
@@ -117,19 +147,21 @@ export async function deleteFolder(folderId: string, userId: string) {
     throw forbiddenError("You do not have permission to delete this folder.");
   }
 
-  // Move child forms to root (null folderId)
-  await prisma.form.updateMany({
-    where: { folderId },
-    data: { folderId: null },
-  });
+  // Detach forms, reparent child folders, and delete the folder atomically so a
+  // mid-operation failure can't leave the folder tree in a partial state.
+  return prisma.$transaction(async (tx) => {
+    await tx.form.updateMany({
+      where: { folderId },
+      data: { folderId: null },
+    });
 
-  // Move child folders to parent
-  await prisma.folder.updateMany({
-    where: { parentId: folderId },
-    data: { parentId: folder.parentId },
-  });
+    await tx.folder.updateMany({
+      where: { parentId: folderId },
+      data: { parentId: folder.parentId },
+    });
 
-  return prisma.folder.delete({ where: { id: folderId } });
+    return tx.folder.delete({ where: { id: folderId } });
+  });
 }
 
 export async function moveFormToFolder(

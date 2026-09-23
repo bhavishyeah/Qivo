@@ -1,6 +1,7 @@
 import { OAuth2Client } from "google-auth-library";
 import { createHash, randomBytes } from "node:crypto";
 import prisma from "../../db/prisma.js";
+import { NO_PASSWORD_SENTINEL } from "./auth.service.js";
 
 function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
@@ -54,6 +55,16 @@ export async function googleSignIn(idToken: string) {
     throw error;
   }
 
+  // Only trust Google identities where Google itself has verified the email.
+  // Without this, someone could sign in as any account whose email they know
+  // by presenting a token for an unverified Google address — and we'd silently
+  // merge into an existing password-based account (account takeover).
+  if (payload.email_verified !== true) {
+    const error = new Error("Your Google email address is not verified.");
+    error.name = "UNAUTHORIZED";
+    throw error;
+  }
+
   const email = payload.email.toLowerCase();
   const name = payload.name ?? email.split("@")[0] ?? "User";
 
@@ -67,8 +78,11 @@ export async function googleSignIn(idToken: string) {
         data: {
           name,
           email,
-          passwordHash: "", // No password for Google users
-          emailVerified: true, // Google email is verified
+          // Sentinel marking "no password set" (passwordHash is NOT NULL in the
+          // schema). It is not a valid bcrypt hash, so bcrypt.compare always
+          // returns false and the password-login path rejects these accounts.
+          passwordHash: NO_PASSWORD_SENTINEL,
+          emailVerified: true, // Google verified the email (checked above)
           avatarUrl: payload.picture ?? null,
         },
       });

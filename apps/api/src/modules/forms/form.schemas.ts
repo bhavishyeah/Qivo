@@ -53,6 +53,15 @@ export const createQuestionSchema = z.object({
   required: z.boolean().default(false),
   options: z.array(questionOptionSchema).max(100).optional(),
   settings: z.record(z.string(), z.unknown()).optional(),
+  sectionId: z.string().min(1).optional(),
+});
+
+export const createSectionSchema = z.object({
+  title: z.string().trim().min(1).max(200).optional(),
+});
+
+export const updateSectionSchema = z.object({
+  title: z.string().trim().min(1).max(200),
 });
 
 export const updateQuestionSchema = z.object({

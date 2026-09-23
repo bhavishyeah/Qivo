@@ -90,10 +90,10 @@ app.use(express.urlencoded({ extended: false, limit: "1mb" }));
 app.use(cookieParser());
 app.use(morgan("dev"));
 
-app.use("/api", apiLimiter);
-app.use("/api/auth", authLimiter);
-
-// Higher limit for public form endpoints (events with many attendees)
+// Higher limit for public form endpoints (events with many attendees).
+// This MUST be mounted before the global /api limiter, and the global limiter
+// skips /api/forms/public — otherwise the stricter 100/15min bucket would
+// reject public submissions long before this 500 limit is reached.
 const publicFormLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 500,
@@ -102,6 +102,17 @@ const publicFormLimiter = rateLimit({
   message: { success: false, error: { code: "RATE_LIMITED", message: "Too many requests." } },
 });
 app.use("/api/forms/public", publicFormLimiter);
+
+// Global API limiter, but skip the public form paths (handled above).
+app.use("/api", (req, res, next) => {
+  if (req.path.startsWith("/forms/public")) {
+    next();
+    return;
+  }
+  apiLimiter(req, res, next);
+});
+app.use("/api/auth", authLimiter);
+
 app.use("/api", csrfProtection(allowedOrigins));
 
 app.use("/api/forms", formRouter);

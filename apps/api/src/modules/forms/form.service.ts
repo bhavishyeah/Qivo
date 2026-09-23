@@ -234,7 +234,7 @@ export async function createForm(input: {
     entityType: "form",
     entityId: form.id,
     metadata: { title: form.title },
-  });
+  }).catch((err) => console.error("logAction FORM_CREATED failed:", err));
 
   return form;
 }
@@ -339,6 +339,46 @@ export async function getForm(
   });
 
   if (!form) {
+    throw formNotFoundError();
+  }
+
+  return form;
+}
+
+/**
+ * Load a form for reading its RESPONSES/analytics. Submitted responses contain
+ * respondent emails and answers, so a plain workspace membership is not enough
+ * — VIEWERs must not see response data. Requires EDITOR/ADMIN/OWNER.
+ */
+async function getFormForResponseAccess(
+  formId: string,
+  userId: string,
+) {
+  const form = await prisma.form.findFirst({
+    where: {
+      id: formId,
+      deletedAt: null,
+      workspace: {
+        members: {
+          some: { userId, role: { not: "VIEWER" } },
+        },
+      },
+    },
+  });
+
+  if (!form) {
+    // Distinguish "not a member at all" (404) from "member but not allowed" (403).
+    const isMember = await prisma.form.findFirst({
+      where: {
+        id: formId,
+        deletedAt: null,
+        workspace: { members: { some: { userId } } },
+      },
+      select: { id: true },
+    });
+    if (isMember) {
+      throw forbiddenError("You do not have permission to view responses for this form.");
+    }
     throw formNotFoundError();
   }
 
@@ -562,6 +602,7 @@ export async function createQuestion(
     settings?:
       | Record<string, unknown>
       | undefined;
+    sectionId?: string | undefined;
   },
 ) {
   const form = await getEditableForm(
@@ -579,9 +620,13 @@ export async function createQuestion(
     });
   }
 
-  const firstSection = schema.sections[0];
+  // Target the requested section, else the last section (so a question added
+  // right after creating a new section lands in it), else the first.
+  const targetSection = input.sectionId
+    ? schema.sections.find((s) => s.id === input.sectionId)
+    : schema.sections[schema.sections.length - 1];
 
-  if (!firstSection) {
+  if (!targetSection) {
     const error = new Error(
       "Form has no section.",
     );
@@ -608,7 +653,7 @@ export async function createQuestion(
       : {}),
   };
 
-  firstSection.questions.push(question);
+  targetSection.questions.push(question);
 
   const updatedForm = await prisma.form.update({
     where: {
@@ -623,6 +668,87 @@ export async function createQuestion(
     form: updatedForm,
     question,
   };
+}
+
+export async function createSection(
+  formId: string,
+  userId: string,
+  input: { title?: string | undefined },
+) {
+  const form = await getEditableForm(formId, userId);
+  const schema = getFormSchema(form.schema);
+
+  const section = {
+    id: createSectionId(),
+    title: input.title?.trim() || `Section ${schema.sections.length + 1}`,
+    questions: [] as FormQuestion[],
+  };
+  schema.sections.push(section);
+
+  const updatedForm = await prisma.form.update({
+    where: { id: formId },
+    data: { schema: toPrismaJson(schema) },
+  });
+
+  return { form: updatedForm, section };
+}
+
+export async function updateSection(
+  formId: string,
+  sectionId: string,
+  userId: string,
+  input: { title: string },
+) {
+  const form = await getEditableForm(formId, userId);
+  const schema = getFormSchema(form.schema);
+
+  const section = schema.sections.find((s) => s.id === sectionId);
+  if (!section) {
+    const error = new Error("Section not found.");
+    error.name = "QUESTION_NOT_FOUND";
+    throw error;
+  }
+  section.title = input.title.trim();
+
+  return prisma.form.update({
+    where: { id: formId },
+    data: { schema: toPrismaJson(schema) },
+  });
+}
+
+export async function deleteSection(
+  formId: string,
+  sectionId: string,
+  userId: string,
+) {
+  const form = await getEditableForm(formId, userId);
+  const schema = getFormSchema(form.schema);
+
+  if (schema.sections.length <= 1) {
+    const error = new Error("A form must keep at least one section.");
+    error.name = "FORM_SCHEMA_INVALID";
+    throw error;
+  }
+
+  const index = schema.sections.findIndex((s) => s.id === sectionId);
+  if (index === -1) {
+    const error = new Error("Section not found.");
+    error.name = "QUESTION_NOT_FOUND";
+    throw error;
+  }
+
+  // Move the removed section's questions into the previous (or next) section
+  // rather than deleting them along with the section.
+  const [removed] = schema.sections.splice(index, 1);
+  const fallback = schema.sections[Math.max(0, index - 1)];
+  if (removed && fallback) {
+    fallback.questions.push(...removed.questions);
+  }
+
+  return prisma.form.update({
+    where: { id: formId },
+    data: { schema: toPrismaJson(schema) },
+  });
 }
 
 export async function updateQuestion(
@@ -790,31 +916,22 @@ export async function reorderQuestions(
   );
 
   const schema = getFormSchema(form.schema);
-  const section = schema.sections[0];
 
-  if (!section) {
-    const error = new Error(
-      "Form has no section.",
-    );
-    error.name = "QUESTION_NOT_FOUND";
-    throw error;
+  // Map every question (across ALL sections) to the section it belongs to, so
+  // reordering works for multi-section forms instead of only sections[0].
+  const questionsById = new Map<string, FormQuestion>();
+  for (const section of schema.sections) {
+    for (const question of section.questions) {
+      questionsById.set(question.id, question);
+    }
   }
 
-  const questionsById = new Map(
-    section.questions.map((question) => [
-      question.id,
-      question,
-    ]),
-  );
+  const totalQuestions = questionsById.size;
 
   if (
-    questionIds.length !==
-      section.questions.length ||
-    new Set(questionIds).size !==
-      questionIds.length ||
-    questionIds.some(
-      (id) => !questionsById.has(id),
-    )
+    questionIds.length !== totalQuestions ||
+    new Set(questionIds).size !== questionIds.length ||
+    questionIds.some((id) => !questionsById.has(id))
   ) {
     const error = new Error(
       "questionIds must contain every question exactly once.",
@@ -823,9 +940,14 @@ export async function reorderQuestions(
     throw error;
   }
 
-  section.questions = questionIds.map(
-    (id) => questionsById.get(id)!,
-  );
+  // The desired global order comes from questionIds. Within each section, keep
+  // that section's questions but reorder them by their index in questionIds.
+  const globalOrder = new Map(questionIds.map((id, index) => [id, index]));
+  for (const section of schema.sections) {
+    section.questions.sort(
+      (a, b) => (globalOrder.get(a.id) ?? 0) - (globalOrder.get(b.id) ?? 0),
+    );
+  }
 
   return prisma.form.update({
     where: {
@@ -895,29 +1017,38 @@ export async function publishForm(
     throw error;
   }
 
-  // Create a version snapshot and increment version number
-  const newVersion = form.version + 1;
+  // Snapshot the version and flip status to PUBLISHED atomically, so we can
+  // never end up with an orphaned version row and a still-DRAFT form. The
+  // version number is re-read inside the transaction to shrink the race window
+  // between concurrent publishes.
+  const { updatedForm, newVersion } = await prisma.$transaction(async (tx) => {
+    const current = await tx.form.findUnique({
+      where: { id: formId },
+      select: { version: true },
+    });
+    const nextVersion = (current?.version ?? form.version) + 1;
 
-  await prisma.formVersion.create({
-    data: {
-      formId: form.id,
-      versionNumber: newVersion,
-      schema: toPrismaJson(schema),
-      title: form.title,
-      description: form.description,
-      createdBy: userId,
-      publishedAt: new Date(),
-    },
-  });
+    await tx.formVersion.create({
+      data: {
+        formId: form.id,
+        versionNumber: nextVersion,
+        schema: toPrismaJson(schema),
+        title: form.title,
+        description: form.description,
+        createdBy: userId,
+        publishedAt: new Date(),
+      },
+    });
 
-  const updatedForm = await prisma.form.update({
-    where: {
-      id: formId,
-    },
-    data: {
-      status: "PUBLISHED",
-      version: newVersion,
-    },
+    const updated = await tx.form.update({
+      where: { id: formId },
+      data: {
+        status: "PUBLISHED",
+        version: nextVersion,
+      },
+    });
+
+    return { updatedForm: updated, newVersion: nextVersion };
   });
 
   void logAction({
@@ -927,7 +1058,7 @@ export async function publishForm(
     entityType: "form",
     entityId: form.id,
     metadata: { title: form.title, version: newVersion },
-  });
+  }).catch((err) => console.error("logAction FORM_PUBLISHED failed:", err));
 
   return updatedForm;
 }
@@ -960,10 +1091,10 @@ export async function getPublicForm(
     throw error;
   }
 
-  // Track view (fire-and-forget)
-  void prisma.formAnalytics.create({
-    data: { formId: form.id, event: "view" },
-  });
+  // Track view (fire-and-forget; never let analytics failure break form load)
+  void prisma.formAnalytics
+    .create({ data: { formId: form.id, event: "view" } })
+    .catch((err) => console.error("formAnalytics view tracking failed:", err));
 
   const schema = getFormSchema(form.schema);
 
@@ -1041,30 +1172,6 @@ export async function submitFormResponse(
     }
   }
 
-  if (
-    !schema.settings.allowMultipleResponses &&
-    input.email
-  ) {
-    const existingResponse =
-      await prisma.formResponse.findFirst({
-        where: {
-          formId: form.id,
-          metadata: {
-            path: ["email"],
-            equals: input.email.trim().toLowerCase(),
-          },
-        },
-      });
-
-    if (existingResponse) {
-      const error = new Error(
-        "You have already submitted a response.",
-      );
-      error.name = "DUPLICATE_RESPONSE";
-      throw error;
-    }
-  }
-
   const questions = schema.sections.flatMap(
     (section) => section.questions,
   );
@@ -1124,43 +1231,23 @@ if (
   !schema.settings.allowMultipleResponses &&
   normalizedEmail
 ) {
-  const existingResponses =
-    await prisma.formResponse.findMany({
-      where: {
-        formId: form.id,
+  // Query by the stored (already-lowercased) email via a JSON path filter
+  // instead of scanning every response into memory. This is a best-effort
+  // pre-check; a race between two concurrent submissions could still let a
+  // duplicate through — a DB unique index on (formId, metadata->>'email')
+  // would be the airtight guard (needs a migration).
+  const existingResponse = await prisma.formResponse.findFirst({
+    where: {
+      formId: form.id,
+      metadata: {
+        path: ["email"],
+        equals: normalizedEmail,
       },
-      select: {
-        metadata: true,
-      },
-    });
-
-  const hasDuplicate = existingResponses.some(
-    (response) => {
-      const metadata = response.metadata;
-
-      if (
-        !metadata ||
-        typeof metadata !== "object" ||
-        Array.isArray(metadata)
-      ) {
-        return false;
-      }
-
-      const storedEmail = (
-        metadata as {
-          email?: unknown;
-        }
-      ).email;
-
-      return (
-        typeof storedEmail === "string" &&
-        storedEmail.toLowerCase() ===
-          normalizedEmail
-      );
     },
-  );
+    select: { id: true },
+  });
 
-  if (hasDuplicate) {
+  if (existingResponse) {
     const error = new Error(
       "You have already submitted a response.",
     );
@@ -1194,9 +1281,9 @@ const response = await prisma.formResponse.create({
   },
 });
 
-// Check for response milestones and notify form owner
+// Track submission analytics + milestone notification (fire-and-forget, but
+// with a .catch so a failure can't surface as an unhandled rejection).
 void (async () => {
-  // Track submission event
   await prisma.formAnalytics.create({ data: { formId: form.id, event: "submission" } });
 
   const MILESTONES = [10, 50, 100, 250, 500, 1000];
@@ -1211,7 +1298,7 @@ void (async () => {
       targetUserIds: [form.ownerId],
     });
   }
-})();
+})().catch((err) => console.error("submission analytics/milestone failed:", err));
 
 // Calculate quiz score if quiz mode is enabled
 let quizScore: { earned: number; total: number; percentage: number } | null = null;
@@ -1243,7 +1330,7 @@ export async function listFormResponses(
     cursor?: string;
   },
 ) {
-  const form = await getForm(
+  const form = await getFormForResponseAccess(
     formId,
     userId,
   );
@@ -1255,9 +1342,12 @@ export async function listFormResponses(
       where: {
         formId: form.id,
       },
-      orderBy: {
-        submittedAt: "desc",
-      },
+      // id is a stable tiebreaker so cursor paging can't skip/repeat rows
+      // that share the same submittedAt timestamp.
+      orderBy: [
+        { submittedAt: "desc" },
+        { id: "desc" },
+      ],
       take: pageSize,
       ...(input.cursor !== undefined
         ? {
@@ -1291,7 +1381,7 @@ export async function getFormResponse(
   responseId: string,
   userId: string,
 ) {
-  const form = await getForm(
+  const form = await getFormForResponseAccess(
     formId,
     userId,
   );
@@ -1319,7 +1409,9 @@ export async function duplicateForm(
   formId: string,
   userId: string,
 ) {
-  const form = await getForm(formId, userId);
+  // Duplicating creates a new form the caller will own, so require edit rights
+  // (a VIEWER must not be able to fork a form and become its owner).
+  const form = await getEditableForm(formId, userId);
 
   const schema = getFormSchema(form.schema);
 
@@ -1370,7 +1462,7 @@ export async function closeForm(
     entityType: "form",
     entityId: form.id,
     metadata: { title: form.title },
-  });
+  }).catch((err) => console.error("logAction FORM_CLOSED failed:", err));
 
   return updatedForm;
 }
@@ -1393,6 +1485,82 @@ export async function listFormVersions(
       publishedAt: true,
     },
   });
+}
+
+/** Fetch a single version snapshot (including its full schema) for preview. */
+export async function getFormVersion(
+  formId: string,
+  versionNumber: number,
+  userId: string,
+) {
+  const form = await getForm(formId, userId);
+
+  const version = await prisma.formVersion.findFirst({
+    where: { formId: form.id, versionNumber },
+  });
+
+  if (!version) {
+    const error = new Error("Version not found.");
+    error.name = "FORM_NOT_FOUND";
+    throw error;
+  }
+
+  const schema = getFormSchema(version.schema);
+  return {
+    id: version.id,
+    versionNumber: version.versionNumber,
+    title: version.title,
+    description: version.description,
+    createdAt: version.createdAt,
+    publishedAt: version.publishedAt,
+    schema,
+  };
+}
+
+/**
+ * Restore a past version: copy its schema/title/description back onto the form
+ * as the current DRAFT so the user can review and re-publish. Does not itself
+ * publish — it reverts the working copy.
+ */
+export async function restoreFormVersion(
+  formId: string,
+  versionNumber: number,
+  userId: string,
+) {
+  const form = await getEditableForm(formId, userId);
+
+  const version = await prisma.formVersion.findFirst({
+    where: { formId: form.id, versionNumber },
+  });
+
+  if (!version) {
+    const error = new Error("Version not found.");
+    error.name = "FORM_NOT_FOUND";
+    throw error;
+  }
+
+  const schema = getFormSchema(version.schema);
+
+  const updated = await prisma.form.update({
+    where: { id: form.id },
+    data: {
+      schema: toPrismaJson(schema),
+      title: version.title,
+      description: version.description,
+      status: "DRAFT",
+    },
+  });
+
+  void logAction({
+    workspaceId: form.workspaceId,
+    userId,
+    action: "FORM_VERSION_RESTORED",
+    entityType: "form",
+    entityId: form.id,
+    metadata: { title: version.title, restoredFrom: versionNumber },
+  }).catch((err) => console.error("logAction FORM_VERSION_RESTORED failed:", err));
+
+  return updated;
 }
 
 export async function deleteFormResponse(
@@ -1436,7 +1604,7 @@ export async function getFormResponseCount(
   formId: string,
   userId: string,
 ) {
-  await getForm(formId, userId);
+  await getFormForResponseAccess(formId, userId);
   return prisma.formResponse.count({ where: { formId } });
 }
 
@@ -1444,7 +1612,7 @@ export async function getFormAnalytics(
   formId: string,
   userId: string,
 ) {
-  await getForm(formId, userId);
+  await getFormForResponseAccess(formId, userId);
 
   const [views, submissions] = await Promise.all([
     prisma.formAnalytics.count({ where: { formId, event: "view" } }),
@@ -1504,7 +1672,7 @@ function isAnswered(value: unknown): boolean {
 }
 
 export async function getFormReport(formId: string, userId: string) {
-  const form = await getForm(formId, userId);
+  const form = await getFormForResponseAccess(formId, userId);
   const schema = getFormSchema(form.schema);
   const questions = schema.sections.flatMap((s) => s.questions);
 

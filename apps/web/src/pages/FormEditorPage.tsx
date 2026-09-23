@@ -66,10 +66,16 @@ export default function FormEditorPage() {
   type SaveStatus = "idle" | "saving" | "saved" | "error" | "offline";
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingSave = useRef<{ questionId: string; question: Question } | null>(null);
+  // Pending saves keyed by questionId so edits to different questions within
+  // the debounce window are all flushed (previously a single slot dropped all
+  // but the last-edited question's changes).
+  const pendingSaves = useRef<Map<string, Question>>(new Map());
 
-  // Undo history (local state only, not persisted)
+  // Undo history (local state only, not persisted). Lengths are mirrored into
+  // state so the Undo/Redo buttons' disabled state re-renders correctly.
   const history = useRef<HistoryEntry[]>([]);
+  const [undoDepth, setUndoDepth] = useState(0);
+  const [redoDepth, setRedoDepth] = useState(0);
 
   // Add question form
   const [showAddQuestion, setShowAddQuestion] = useState(false);
@@ -146,6 +152,11 @@ export default function FormEditorPage() {
   const redoStack = useRef<HistoryEntry[]>([]);
   const lastHistoryPush = useRef<number>(0);
 
+  function syncHistoryDepth() {
+    setUndoDepth(history.current.length);
+    setRedoDepth(redoStack.current.length);
+  }
+
   function pushHistory(current: Question[]) {
     // Don't push if less than 500ms since last push (debounce for rapid typing)
     const now = Date.now();
@@ -158,15 +169,19 @@ export default function FormEditorPage() {
     history.current = [...history.current.slice(-29), { questions: current }];
     // Clear redo stack when a new action is performed
     redoStack.current = [];
+    syncHistoryDepth();
   }
 
   function undo() {
     if (history.current.length === 0) return;
     const prev = history.current.pop();
     if (prev) {
-      // Push current state to redo
+      // Push current state to redo, restore previous, and persist the restore
+      // so the server doesn't drift from the reverted local state.
       redoStack.current.push({ questions });
       setQuestions(prev.questions);
+      persistQuestionSet(prev.questions);
+      syncHistoryDepth();
     }
   }
 
@@ -177,7 +192,19 @@ export default function FormEditorPage() {
       // Push current state to undo
       history.current.push({ questions });
       setQuestions(next.questions);
+      persistQuestionSet(next.questions);
+      syncHistoryDepth();
     }
+  }
+
+  // After an undo/redo, push each changed question to the server so the DB
+  // matches the restored local state (autosave only fires on direct edits).
+  function persistQuestionSet(restored: Question[]) {
+    if (!formId) return;
+    for (const q of restored) {
+      pendingSaves.current.set(q.id, q);
+    }
+    scheduleAutosaveFlush();
   }
 
   // Keyboard shortcuts
@@ -233,41 +260,52 @@ export default function FormEditorPage() {
     pushHistory(questions);
     setQuestions((current) => {
       const updated = current.map((q) => (q.id === questionId ? { ...q, ...patch } : q));
-      // Schedule autosave for this question
+      // Queue this question for autosave (keyed, so concurrent edits to
+      // different questions are all saved rather than overwriting each other).
       const question = updated.find((q) => q.id === questionId);
       if (question) {
-        scheduleAutosave(questionId, question);
+        pendingSaves.current.set(questionId, question);
+        scheduleAutosaveFlush();
       }
       return updated;
     });
   }
 
-  function scheduleAutosave(questionId: string, question: Question) {
-    pendingSave.current = { questionId, question };
+  function scheduleAutosaveFlush() {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
-      void performAutosave();
+      void flushAutosaves();
     }, 1500);
   }
 
-  async function performAutosave() {
-    const pending = pendingSave.current;
-    if (!pending || !formId) return;
-    pendingSave.current = null;
+  async function flushAutosaves() {
+    if (!formId || pendingSaves.current.size === 0) return;
+
+    // Snapshot and clear the queue so edits made during the flush are batched
+    // into the next flush rather than lost.
+    const batch = Array.from(pendingSaves.current.values());
+    pendingSaves.current.clear();
 
     setSaveStatus("saving");
     try {
-      await api.patch(`/api/forms/${formId}/questions/${pending.questionId}`, {
-        label: pending.question.label,
-        type: pending.question.type,
-        description: pending.question.description,
-        required: pending.question.required,
-        options: pending.question.options,
-        settings: pending.question.settings,
-        conditions: pending.question.conditions,
-      });
+      // Save all queued questions; a failure re-queues them for the next flush.
+      for (const question of batch) {
+        try {
+          await api.patch(`/api/forms/${formId}/questions/${question.id}`, {
+            label: question.label,
+            type: question.type,
+            description: question.description,
+            required: question.required,
+            options: question.options,
+            settings: question.settings,
+            conditions: question.conditions,
+          });
+        } catch (err) {
+          pendingSaves.current.set(question.id, question);
+          throw err;
+        }
+      }
       setSaveStatus("saved");
-      // Reset to idle after 3 seconds
       setTimeout(() => setSaveStatus((s) => s === "saved" ? "idle" : s), 3000);
     } catch (err) {
       if (err instanceof ApiRequestError) {
@@ -368,6 +406,17 @@ export default function FormEditorPage() {
       setError(err instanceof ApiRequestError ? err.message : "Unable to add question.");
     } finally {
       setAddingQuestion(false);
+    }
+  }
+
+  async function addSection() {
+    if (!formId) return;
+    setMessage(""); setError("");
+    try {
+      await api.post(`/api/forms/${formId}/sections`, {});
+      setMessage("Section added. New questions will be added to it.");
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : "Unable to add section.");
     }
   }
 
@@ -581,17 +630,17 @@ export default function FormEditorPage() {
               className="editor-topnav-btn"
               type="button"
               onClick={undo}
-              disabled={history.current.length === 0}
+              disabled={undoDepth === 0}
               title="Undo (Ctrl+Z)"
-              style={{ opacity: history.current.length === 0 ? 0.3 : 1 }}
+              style={{ opacity: undoDepth === 0 ? 0.3 : 1 }}
             >↩</button>
             <button
               className="editor-topnav-btn"
               type="button"
               onClick={redo}
-              disabled={redoStack.current.length === 0}
+              disabled={redoDepth === 0}
               title="Redo (Ctrl+Y)"
-              style={{ opacity: redoStack.current.length === 0 ? 0.3 : 1 }}
+              style={{ opacity: redoDepth === 0 ? 0.3 : 1 }}
             >↪</button>
 
             <Link className="editor-topnav-btn" to={`/forms/${formId}/preview`} title="Preview">👁</Link>
@@ -815,7 +864,7 @@ export default function FormEditorPage() {
               <button
                 className="editor-floating-btn"
                 type="button"
-                onClick={() => {/* Future: add section */}}
+                onClick={() => void addSection()}
                 title="Add section"
               >
                 <span>§</span>
@@ -1580,6 +1629,8 @@ function VersionHistory({ formId }: { formId: string }) {
   const [versions, setVersions] = useState<VersionRecord[]>([]);
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [restoringVersion, setRestoringVersion] = useState<number | null>(null);
+  const [restoreError, setRestoreError] = useState("");
 
   const loadVersions = useCallback(async () => {
     if (versions.length > 0) { setExpanded((v) => !v); return; }
@@ -1590,6 +1641,22 @@ function VersionHistory({ formId }: { formId: string }) {
       setExpanded(true);
     } catch { /* non-critical */ } finally { setLoading(false); }
   }, [formId, versions.length]);
+
+  async function restoreVersion(versionNumber: number) {
+    if (!confirm(`Restore version ${versionNumber}? This replaces the current draft with that version's content.`)) {
+      return;
+    }
+    setRestoringVersion(versionNumber);
+    setRestoreError("");
+    try {
+      await api.post(`/api/forms/${formId}/versions/${versionNumber}/restore`);
+      // Reload the editor so the restored draft is shown.
+      window.location.reload();
+    } catch (err) {
+      setRestoreError(err instanceof ApiRequestError ? err.message : "Unable to restore version.");
+      setRestoringVersion(null);
+    }
+  }
 
   return (
     <section className="editor-card" style={{ marginTop: 20 }}>
@@ -1602,6 +1669,9 @@ function VersionHistory({ formId }: { formId: string }) {
       {expanded && versions.length === 0 ? (
         <p className="muted">No published versions yet.</p>
       ) : null}
+      {restoreError ? (
+        <p className="submit-error" style={{ marginTop: 12 }}>{restoreError}</p>
+      ) : null}
       {expanded && versions.length > 0 ? (
         <div className="editor-question-list">
           {versions.map((v) => (
@@ -1610,9 +1680,19 @@ function VersionHistory({ formId }: { formId: string }) {
                 <strong style={{ color: "#111827" }}>v{v.versionNumber}</strong>
                 <span className="muted" style={{ marginLeft: 12 }}>{v.title}</span>
               </div>
-              <span className="muted" style={{ fontSize: "0.8rem" }}>
-                {v.publishedAt ? `Published ${new Date(v.publishedAt).toLocaleDateString()}` : `Created ${new Date(v.createdAt).toLocaleDateString()}`}
-              </span>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <span className="muted" style={{ fontSize: "0.8rem" }}>
+                  {v.publishedAt ? `Published ${new Date(v.publishedAt).toLocaleDateString()}` : `Created ${new Date(v.createdAt).toLocaleDateString()}`}
+                </span>
+                <button
+                  type="button"
+                  className="secondary-button compact"
+                  disabled={restoringVersion !== null}
+                  onClick={() => void restoreVersion(v.versionNumber)}
+                >
+                  {restoringVersion === v.versionNumber ? "Restoring..." : "Restore"}
+                </button>
+              </div>
             </div>
           ))}
         </div>

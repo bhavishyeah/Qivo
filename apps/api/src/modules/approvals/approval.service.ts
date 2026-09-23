@@ -1,5 +1,6 @@
 import prisma from "../../db/prisma.js";
 import { notifyFormEvent } from "../notifications/notification.service.js";
+import { logAction } from "../audit/audit.service.js";
 
 function forbiddenError(message: string) {
   const error = new Error(message);
@@ -146,7 +147,23 @@ export async function reviewForm(
     actorName: actor?.name ?? "A reviewer",
     type: notificationType,
     targetUserIds: [form.ownerId],
+    ...(input.comment ? { comment: input.comment } : {}),
   });
+
+  // Persist the review decision + comment to the audit trail (the comment was
+  // previously accepted but dropped).
+  void logAction({
+    workspaceId: form.workspaceId,
+    userId,
+    action: `FORM_REVIEW_${input.decision}`,
+    entityType: "form",
+    entityId: form.id,
+    metadata: {
+      title: form.title,
+      decision: input.decision,
+      ...(input.comment ? { comment: input.comment } : {}),
+    },
+  }).catch((err) => console.error("logAction review failed:", err));
 
   return updatedForm;
 }

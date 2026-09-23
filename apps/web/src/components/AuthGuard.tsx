@@ -29,7 +29,11 @@ export default function AuthGuard({
         const data = await api.get<{ user: UserInfo }>("/api/auth/me");
         setUser(data.user);
       } catch (err) {
-        if (err instanceof ApiRequestError && err.code === "UNAUTHENTICATED") {
+        // Any auth failure on the initial check means the stored token is no
+        // longer valid — clear it so we cleanly redirect to /login below.
+        // (The 401 event handler does not clear the token during a session so
+        // the expiry banner can show; here, on mount, clearing is correct.)
+        if (err instanceof ApiRequestError) {
           setToken(null);
         }
       } finally {
