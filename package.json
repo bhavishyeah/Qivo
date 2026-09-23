@@ -12,10 +12,8 @@
 		"lint": "cd apps/web && pnpm lint",
 		"typecheck": "cd apps/api && pnpm exec tsc --noEmit && cd ../../apps/web && pnpm exec tsc --noEmit"
 	},
-	"devDependencies": {
-		"prisma": "^7.9.1"
-	},
 	"dependencies": {
-		"dotenv": "^17.4.2"
+		"dotenv": "^17.4.2",
+		"prisma": "^7.9.1"
 	}
 }
