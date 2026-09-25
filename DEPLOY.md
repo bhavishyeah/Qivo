@@ -67,6 +67,9 @@ Never edit an already-applied migration; add a new one.
 | `SESSION_DAYS` | `30` |
 | `RESEND_API_KEY` | Resend key (optional; email skipped if unset) |
 | `GOOGLE_CLIENT_ID` | Google OAuth client ID (optional) |
+| `CLOUDINARY_CLOUD_NAME` | Cloudinary cloud name (for file uploads; not secret) |
+| `CLOUDINARY_API_KEY` | Cloudinary API key (not secret) |
+| `CLOUDINARY_API_SECRET` | Cloudinary API secret — **server-side only, never exposed to the frontend** |
 | `PORT` | **leave unset** — Railway injects it (currently 8080) |
 
 **Vercel (web project)** — build-time, keep the `VITE_` prefix (these are public):

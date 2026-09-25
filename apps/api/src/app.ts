@@ -443,6 +443,16 @@ const errorHandler: ErrorRequestHandler = (
       });
       return;
 
+    case "UPLOAD_NOT_CONFIGURED":
+      res.status(503).json({
+        success: false,
+        error: {
+          code: "UPLOAD_NOT_CONFIGURED",
+          message: error.message,
+        },
+      });
+      return;
+
     default:
       res.status(500).json({
         success: false,

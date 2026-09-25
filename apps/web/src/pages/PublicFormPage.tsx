@@ -334,6 +334,7 @@ export default function PublicFormPage() {
                       key={question.id}
                       question={question}
                       value={answers[question.id]}
+                      slug={slug ?? ""}
                       onChange={updateAnswer}
                       onInputChange={handleInputChange}
                     />
@@ -394,11 +395,13 @@ export default function PublicFormPage() {
 function QuestionField({
   question,
   value,
+  slug,
   onChange,
   onInputChange,
 }: {
   question: Question;
   value: AnswerValue | undefined;
+  slug: string;
   onChange: (questionId: string, value: AnswerValue) => void;
   onInputChange: (
     questionId: string,
@@ -408,6 +411,54 @@ function QuestionField({
   const inputId = `question-${question.id}`;
   const descriptionId = `${inputId}-description`;
   const description = question.description ?? undefined;
+
+  // File-upload state (unconditional hooks; only used by the FILE_UPLOAD branch)
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+
+  async function uploadFileToCloudinary(file: File) {
+    setUploadError("");
+    setUploading(true);
+    try {
+      // 1) Get a short-lived signature from our API (form must be published).
+      const sig = await publicPost<{
+        cloudName: string;
+        apiKey: string;
+        timestamp: number;
+        signature: string;
+        folder: string;
+      }>(`/api/forms/public/${slug}/upload-signature`, {});
+
+      // 2) Upload the file straight to Cloudinary (bytes never touch our API).
+      const body = new FormData();
+      body.append("file", file);
+      body.append("api_key", sig.apiKey);
+      body.append("timestamp", String(sig.timestamp));
+      body.append("signature", sig.signature);
+      body.append("folder", sig.folder);
+
+      const res = await fetch(
+        `https://api.cloudinary.com/v1_1/${sig.cloudName}/auto/upload`,
+        { method: "POST", body },
+      );
+      if (!res.ok) throw new Error("Upload failed. Please try again.");
+      const data: { secure_url?: string } = await res.json();
+      if (!data.secure_url) throw new Error("Upload failed. Please try again.");
+
+      // 3) Store the delivered URL as the answer.
+      onChange(question.id, data.secure_url);
+    } catch (err) {
+      setUploadError(
+        err instanceof ApiRequestError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : "Upload failed. Please try again.",
+      );
+    } finally {
+      setUploading(false);
+    }
+  }
 
   const label = (
     <span className="question-label">
@@ -573,7 +624,7 @@ function QuestionField({
   if (question.type === "FILE_UPLOAD") {
     const maxSize = question.settings?.maxFileSizeMB ?? 5;
     const allowedTypes = question.settings?.allowedFileTypes ?? [];
-    const fileName = typeof value === "string" && value ? value : "";
+    const uploadedUrl = typeof value === "string" && value.startsWith("http") ? value : "";
 
     return (
       <div className="question-field">
@@ -586,10 +637,11 @@ function QuestionField({
             padding: "24px 16px",
             textAlign: "center",
             background: "#f8fafc",
-            cursor: "pointer",
+            cursor: uploading ? "default" : "pointer",
+            opacity: uploading ? 0.7 : 1,
           }}
-          onClick={() => document.getElementById(inputId)?.click()}
-          onKeyDown={(e) => { if (e.key === "Enter") document.getElementById(inputId)?.click(); }}
+          onClick={() => { if (!uploading) document.getElementById(inputId)?.click(); }}
+          onKeyDown={(e) => { if (e.key === "Enter" && !uploading) document.getElementById(inputId)?.click(); }}
           role="button"
           tabIndex={0}
         >
@@ -598,21 +650,34 @@ function QuestionField({
             type="file"
             accept={allowedTypes.join(",")}
             style={{ display: "none" }}
+            disabled={uploading}
             onChange={(e) => {
               const file = e.target.files?.[0];
-              if (file) {
-                if (file.size > maxSize * 1024 * 1024) {
-                  alert(`File too large. Maximum ${maxSize}MB allowed.`);
-                  return;
-                }
-                // Store file name as value (actual upload would go to S3 in production)
-                onChange(question.id, `[file:${file.name}:${file.size}]`);
+              if (!file) return;
+              if (file.size > maxSize * 1024 * 1024) {
+                setUploadError(`File too large. Maximum ${maxSize}MB allowed.`);
+                return;
               }
+              void uploadFileToCloudinary(file);
             }}
           />
-          {fileName ? (
+          {uploading ? (
+            <p style={{ margin: 0, color: "#475569", fontWeight: 600 }}>Uploading…</p>
+          ) : uploadedUrl ? (
             <p style={{ margin: 0, color: "#16a34a", fontWeight: 600 }}>
-              ✓ {fileName.replace("[file:", "").replace(/:\d+\]$/, "")}
+              ✓ File uploaded ·{" "}
+              <a
+                href={uploadedUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                style={{ color: "#2563eb", textDecoration: "underline" }}
+              >
+                view
+              </a>
+              <span style={{ display: "block", fontSize: "0.8rem", color: "#94a3b8", marginTop: 4 }}>
+                Click to replace
+              </span>
             </p>
           ) : (
             <>
@@ -626,6 +691,9 @@ function QuestionField({
             </>
           )}
         </div>
+        {uploadError ? (
+          <p className="submit-error" style={{ marginTop: 8 }}>{uploadError}</p>
+        ) : null}
       </div>
     );
   }

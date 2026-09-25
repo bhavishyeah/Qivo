@@ -16,6 +16,18 @@ function escapeCsvValue(value: unknown): string {
   return `"${text.replaceAll('"', '""')}"`;
 }
 
+// Render an answer value; uploaded-file answers are https URLs → show a link.
+function renderAnswerValue(value: unknown) {
+  if (typeof value === "string" && /^https?:\/\//.test(value)) {
+    return (
+      <a href={value} target="_blank" rel="noopener noreferrer" style={{ color: "#2563eb", textDecoration: "underline" }}>
+        View file
+      </a>
+    );
+  }
+  return formatResponseValue(value);
+}
+
 function downloadResponsesCsv(
   responses: ResponseRecord[],
   questions: Question[],
@@ -430,7 +442,7 @@ function ResponseDetail({
               <span className="answer-question-label">
                 {questionLabels.get(questionId) ?? questionId}
               </span>
-              <strong>{formatResponseValue(answer)}</strong>
+              <strong>{renderAnswerValue(answer)}</strong>
             </div>
           ))}
         </div>

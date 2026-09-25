@@ -40,6 +40,7 @@ import {
   getFormResponseCount,
   getFormReport,
   getPublicForm,
+  getUploadSignatureForForm,
   getWorkspaceStats,
   getFormVersion,
   restoreFormVersion,
@@ -1200,6 +1201,29 @@ formRouter.get(
         success: true,
         data: { form },
       });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+// Short-lived Cloudinary signature for direct browser file uploads on a public
+// form. Public (respondents are anonymous) but scoped to a published form and
+// covered by the public rate limiter.
+formRouter.post(
+  "/public/:slug/upload-signature",
+  async (req, res, next) => {
+    try {
+      const slug = req.params.slug;
+      if (typeof slug !== "string") {
+        res.status(400).json({
+          success: false,
+          error: { code: "INVALID_FORM_SLUG", message: "A valid form slug is required." },
+        });
+        return;
+      }
+      const signature = await getUploadSignatureForForm(slug);
+      res.json({ success: true, data: signature });
     } catch (error) {
       next(error);
     }

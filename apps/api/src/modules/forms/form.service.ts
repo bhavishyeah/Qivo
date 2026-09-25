@@ -4,6 +4,7 @@ import { Prisma } from "../../generated/prisma/client.js";
 import prisma from "../../db/prisma.js";
 import { logAction } from "../audit/audit.service.js";
 import { notifyFormEvent } from "../notifications/notification.service.js";
+import { signUpload, type CloudinarySignature } from "../../services/cloudinary.js";
 import type {
   UpdateFormSettingsInput,
 } from "./form.schemas.js";
@@ -1165,6 +1166,29 @@ export async function getPublicForm(
         : {}),
     },
   };
+}
+
+/**
+ * Produce a short-lived Cloudinary upload signature for a respondent uploading
+ * a file to a published form. Verifies the form exists + is published so we
+ * don't hand out signatures for arbitrary/unpublished forms. Files are foldered
+ * per form for tidiness.
+ */
+export async function getUploadSignatureForForm(
+  slug: string,
+): Promise<CloudinarySignature> {
+  const form = await prisma.form.findFirst({
+    where: { slug, status: "PUBLISHED", deletedAt: null },
+    select: { id: true },
+  });
+
+  if (!form) {
+    const error = new Error("Published form not found.");
+    error.name = "PUBLIC_FORM_NOT_FOUND";
+    throw error;
+  }
+
+  return signUpload(`qivo/forms/${form.id}`);
 }
 
 export async function submitFormResponse(
