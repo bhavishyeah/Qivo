@@ -131,6 +131,12 @@ app.get("/api/health", (_req, res) => {
     data: {
       service: "qivo-api",
       status: "ok",
+      // Presence-only (never values) — helps diagnose upload config remotely.
+      uploads: {
+        cloudName: Boolean(process.env.CLOUDINARY_CLOUD_NAME),
+        apiKey: Boolean(process.env.CLOUDINARY_API_KEY),
+        apiSecret: Boolean(process.env.CLOUDINARY_API_SECRET),
+      },
     },
   });
 });
