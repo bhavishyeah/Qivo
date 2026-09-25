@@ -1060,17 +1060,45 @@ export async function publishForm(
     metadata: { title: form.title, version: newVersion },
   }).catch((err) => console.error("logAction FORM_PUBLISHED failed:", err));
 
+  // Notify workspace owners/admins that a form went live (the FORM_PUBLISHED
+  // notification type existed but was never emitted). notifyFormEvent filters
+  // out the actor, so the publisher won't notify themselves.
+  void (async () => {
+    const managers = await prisma.workspaceMember.findMany({
+      where: {
+        workspaceId: form.workspaceId,
+        role: { in: ["OWNER", "ADMIN"] },
+      },
+      select: { userId: true },
+    });
+    const actor = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true },
+    });
+    await notifyFormEvent({
+      formId: form.id,
+      formTitle: form.title,
+      actorId: userId,
+      actorName: actor?.name ?? "Someone",
+      type: "FORM_PUBLISHED",
+      targetUserIds: managers.map((m) => m.userId),
+    });
+  })().catch((err) => console.error("FORM_PUBLISHED notification failed:", err));
+
   return updatedForm;
 }
 
 export async function getPublicForm(
   slug: string,
 ) {
-  const form = await prisma.form.findFirst({
+  // Match a published form, OR a not-yet-published one whose scheduled publish
+  // time may have arrived (we confirm in JS since the time lives in the JSON
+  // schema). This lazily enforces scheduledPublishAt without a cron job.
+  let form = await prisma.form.findFirst({
     where: {
       slug,
-      status: "PUBLISHED",
       deletedAt: null,
+      status: { in: ["PUBLISHED", "DRAFT", "APPROVED", "CHANGES_REQUESTED"] },
     },
     include: {
       workspace: {
@@ -1082,6 +1110,22 @@ export async function getPublicForm(
       },
     },
   });
+
+  if (form && form.status !== "PUBLISHED") {
+    // Not published yet — only serve it if a scheduled publish time has passed.
+    const scheduledAt = getFormSchema(form.schema).settings.scheduledPublishAt;
+    const due = scheduledAt ? new Date(scheduledAt) <= new Date() : false;
+    if (due) {
+      // Publish it now (lazily) so it becomes and stays publicly available.
+      await prisma.form.update({
+        where: { id: form.id },
+        data: { status: "PUBLISHED" },
+      });
+      form = { ...form, status: "PUBLISHED" };
+    } else {
+      form = null;
+    }
+  }
 
   if (!form) {
     const error = new Error(
@@ -1231,18 +1275,13 @@ if (
   !schema.settings.allowMultipleResponses &&
   normalizedEmail
 ) {
-  // Query by the stored (already-lowercased) email via a JSON path filter
-  // instead of scanning every response into memory. This is a best-effort
-  // pre-check; a race between two concurrent submissions could still let a
-  // duplicate through — a DB unique index on (formId, metadata->>'email')
-  // would be the airtight guard (needs a migration).
+  // Fast pre-check against the indexed respondentEmail column for a friendly
+  // error. The DB unique index (formId, respondentEmail) is the airtight guard
+  // that also covers the concurrent-submission race (handled on create below).
   const existingResponse = await prisma.formResponse.findFirst({
     where: {
       formId: form.id,
-      metadata: {
-        path: ["email"],
-        equals: normalizedEmail,
-      },
+      respondentEmail: normalizedEmail,
     },
     select: { id: true },
   });
@@ -1268,18 +1307,38 @@ const responseMetadata: Record<
     : {}),
 };
 
-const response = await prisma.formResponse.create({
-  data: {
-    formId: form.id,
-    ...(respondentId !== undefined
-      ? { respondentId }
-      : {}),
-    answers:
-      input.answers as Prisma.InputJsonValue,
-    metadata:
-      responseMetadata as Prisma.InputJsonValue,
-  },
-});
+// For single-response forms, set respondentEmail so the DB unique index
+// (formId, respondentEmail) enforces one-per-email even under a race. Leave it
+// null for multi-response/anonymous forms (NULLs don't collide in Postgres).
+const respondentEmail =
+  !schema.settings.allowMultipleResponses && normalizedEmail
+    ? normalizedEmail
+    : null;
+
+let response;
+try {
+  response = await prisma.formResponse.create({
+    data: {
+      formId: form.id,
+      ...(respondentId !== undefined ? { respondentId } : {}),
+      respondentEmail,
+      answers: input.answers as Prisma.InputJsonValue,
+      metadata: responseMetadata as Prisma.InputJsonValue,
+    },
+  });
+} catch (err) {
+  // Unique violation on (formId, respondentEmail) → duplicate submission that
+  // slipped past the pre-check due to a concurrent request.
+  if (
+    err instanceof Prisma.PrismaClientKnownRequestError &&
+    err.code === "P2002"
+  ) {
+    const error = new Error("You have already submitted a response.");
+    error.name = "DUPLICATE_RESPONSE";
+    throw error;
+  }
+  throw err;
+}
 
 // Track submission analytics + milestone notification (fire-and-forget, but
 // with a .catch so a failure can't surface as an unhandled rejection).
@@ -1785,9 +1844,53 @@ export async function getFormReport(formId: string, userId: string) {
 
   const conversionRate = views > 0 ? Math.round((submissions / views) * 100) : 0;
 
+  // Daily views/submissions for the last 30 days (server-side group-by-day).
+  const timeSeries = await getFormDailyTimeSeries(form.id, 30);
+
   return {
     totalResponses,
     analytics: { views, submissions, conversionRate },
+    timeSeries,
     questions: questionReports,
   };
+}
+
+/**
+ * Views and submissions grouped by calendar day for the last `days` days.
+ * Returns a contiguous series (zero-filled days) so charts don't have gaps.
+ */
+export async function getFormDailyTimeSeries(formId: string, days: number) {
+  const rows = await prisma.$queryRaw<
+    Array<{ day: Date; event: string; count: bigint }>
+  >`
+    SELECT date_trunc('day', "createdAt") AS day, "event", COUNT(*) AS count
+    FROM "FormAnalytics"
+    WHERE "formId" = ${formId}
+      AND "createdAt" >= now() - (${days}::text || ' days')::interval
+    GROUP BY 1, 2
+    ORDER BY 1 ASC
+  `;
+
+  // Index counts by "YYYY-MM-DD" + event.
+  const byKey = new Map<string, number>();
+  for (const r of rows) {
+    const key = `${new Date(r.day).toISOString().slice(0, 10)}:${r.event}`;
+    byKey.set(key, Number(r.count));
+  }
+
+  // Zero-fill each day in the window.
+  const series: Array<{ date: string; views: number; submissions: number }> = [];
+  const today = new Date();
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const date = d.toISOString().slice(0, 10);
+    series.push({
+      date,
+      views: byKey.get(`${date}:view`) ?? 0,
+      submissions: byKey.get(`${date}:submission`) ?? 0,
+    });
+  }
+
+  return series;
 }

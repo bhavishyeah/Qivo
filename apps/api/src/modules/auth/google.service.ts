@@ -1,7 +1,6 @@
 import { OAuth2Client } from "google-auth-library";
 import { createHash, randomBytes } from "node:crypto";
 import prisma from "../../db/prisma.js";
-import { NO_PASSWORD_SENTINEL } from "./auth.service.js";
 
 function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
@@ -67,9 +66,14 @@ export async function googleSignIn(idToken: string) {
 
   const email = payload.email.toLowerCase();
   const name = payload.name ?? email.split("@")[0] ?? "User";
+  const googleId = payload.sub;
 
-  // Check if user exists
-  let user = await prisma.user.findUnique({ where: { email } });
+  // Prefer matching by the stable Google account id; fall back to email so an
+  // existing account (created by email/password) can be linked to Google.
+  let user =
+    (googleId
+      ? await prisma.user.findUnique({ where: { googleId } })
+      : null) ?? (await prisma.user.findUnique({ where: { email } }));
 
   if (!user) {
     // Create new user (sign up via Google)
@@ -78,10 +82,10 @@ export async function googleSignIn(idToken: string) {
         data: {
           name,
           email,
-          // Sentinel marking "no password set" (passwordHash is NOT NULL in the
-          // schema). It is not a valid bcrypt hash, so bcrypt.compare always
-          // returns false and the password-login path rejects these accounts.
-          passwordHash: NO_PASSWORD_SENTINEL,
+          googleId,
+          // No password for Google-created accounts (passwordHash is now
+          // nullable); the password-login path rejects null-password users.
+          passwordHash: null,
           emailVerified: true, // Google verified the email (checked above)
           avatarUrl: payload.picture ?? null,
         },
@@ -103,6 +107,13 @@ export async function googleSignIn(idToken: string) {
       return newUser;
     });
   } else {
+    // Link the Google account id to this existing user if not already linked.
+    if (googleId && user.googleId !== googleId) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { googleId },
+      });
+    }
     // Update avatar if not set
     if (!user.avatarUrl && payload.picture) {
       await prisma.user.update({

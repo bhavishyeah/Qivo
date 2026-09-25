@@ -142,15 +142,17 @@ export async function login(input: {
 
   // Accounts created via Google have no password set. Reject password login
   // for them (same generic error to avoid leaking which method an email uses).
-  if (hasNoPassword(user.passwordHash)) {
+  const storedHash = user.passwordHash;
+  if (hasNoPassword(storedHash)) {
     const error = new Error("Invalid email or password.");
     error.name = "UNAUTHORIZED";
     throw error;
   }
 
+  // Safe: hasNoPassword ruled out null/undefined/sentinel above.
   const passwordMatches = await bcrypt.compare(
     input.password,
-    user.passwordHash,
+    storedHash as string,
   );
 
   if (!passwordMatches) {
@@ -285,9 +287,10 @@ export async function changePassword(
     throw error;
   }
 
+  // Safe: hasNoPassword ruled out null/undefined/sentinel above.
   const passwordMatches = await bcrypt.compare(
     input.currentPassword,
-    user.passwordHash,
+    user.passwordHash as string,
   );
 
   if (!passwordMatches) {
