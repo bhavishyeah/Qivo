@@ -17,15 +17,30 @@ export default function AppLayout({
   const [sessionExpired, setSessionExpired] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
+
     async function fetchUnread() {
       try {
         const data = await api.get<{ count: number }>("/api/notifications/unread-count");
-        setUnreadCount(data.count);
+        if (!cancelled) setUnreadCount(data.count);
       } catch {
         // non-critical
       }
     }
+
+    // Fetch now, then poll every 30s, and refresh when the tab regains focus.
     void fetchUnread();
+    const interval = setInterval(() => void fetchUnread(), 30_000);
+    const onFocus = () => void fetchUnread();
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
+    // Re-run on navigation too so the badge updates when leaving the
+    // notifications page (where items get marked read).
   }, [location.pathname]);
 
   useEffect(() => {

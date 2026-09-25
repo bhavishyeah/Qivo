@@ -57,6 +57,8 @@ export default function FormEditorPage() {
 
   const [form, setForm] = useState<FormRecord | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
+  // Sections (id + title), ordered. Derived from the form schema on load.
+  const [sections, setSections] = useState<Array<{ id: string; title: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -131,6 +133,9 @@ export default function FormEditorPage() {
         setForm(formData.form);
         setQuestions(questionsData.questions);
         const schema = formData.form.schema;
+        setSections(
+          (schema.sections ?? []).map((s) => ({ id: s.id, title: s.title })),
+        );
         setCollectEmail(schema.settings?.collectEmail ?? false);
         setAllowMultipleResponses(schema.settings?.allowMultipleResponses ?? true);
         setConfirmationMessage(schema.confirmationMessage ?? "");
@@ -413,10 +418,58 @@ export default function FormEditorPage() {
     if (!formId) return;
     setMessage(""); setError("");
     try {
-      await api.post(`/api/forms/${formId}/sections`, {});
-      setMessage("Section added. New questions will be added to it.");
+      const data = await api.post<{ section: { id: string; title: string } }>(
+        `/api/forms/${formId}/sections`,
+        {},
+      );
+      setSections((current) => [...current, { id: data.section.id, title: data.section.title }]);
+      setMessage("Section added. Use “+ Question” within it to add questions.");
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : "Unable to add section.");
+    }
+  }
+
+  async function renameSection(sectionId: string, title: string) {
+    if (!formId || !title.trim()) return;
+    setSections((current) =>
+      current.map((s) => (s.id === sectionId ? { ...s, title: title.trim() } : s)),
+    );
+    try {
+      await api.patch(`/api/forms/${formId}/sections/${sectionId}`, { title: title.trim() });
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : "Unable to rename section.");
+    }
+  }
+
+  async function deleteSectionById(sectionId: string) {
+    if (!formId) return;
+    if (sections.length <= 1) {
+      setError("A form must keep at least one section.");
+      return;
+    }
+    if (!confirm("Delete this section? Its questions move to the previous section.")) return;
+    setError(""); setMessage("");
+    try {
+      await api.delete(`/api/forms/${formId}/sections/${sectionId}`);
+      // Reload so questions re-group under their new section correctly.
+      window.location.reload();
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : "Unable to delete section.");
+    }
+  }
+
+  async function addQuestionToSection(sectionId: string) {
+    if (!formId) return;
+    setError(""); setMessage("");
+    try {
+      const data = await api.post<{ question: Question }>(
+        `/api/forms/${formId}/questions`,
+        { label: "Untitled question", type: "SHORT_TEXT", required: false, sectionId },
+      );
+      setQuestions((current) => [...current, { ...data.question, sectionId }]);
+      setActiveQuestionId(data.question.id);
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : "Unable to add question.");
     }
   }
 
@@ -818,7 +871,7 @@ export default function FormEditorPage() {
           </form>
         ) : null}
 
-        {questions.length === 0 ? (
+        {questions.length === 0 && sections.length <= 1 ? (
           <div className="empty-state" style={{ textAlign: "center", padding: "32px 0" }}>
             <p style={{ fontSize: "1.5rem", marginBottom: 8 }}>📝</p>
             <p className="muted">No questions yet. Click "+ Add question" to start.</p>
@@ -826,28 +879,93 @@ export default function FormEditorPage() {
         ) : (
           <div className="editor-canvas-with-toolbar">
             <div className="editor-question-list">
-              {questions.map((question, index) => (
-                <QuestionCard
-                  key={question.id}
-                  question={question}
-                  index={index}
-                  total={questions.length}
-                  saving={saving}
-                  isDragOver={dragOverIndex === index}
-                  isDragging={draggingIndex === index}
-                  allQuestions={questions}
-                  isQuizMode={quizMode}
-                  isActive={activeQuestionId === question.id}
-                  onActivate={() => setActiveQuestionId(question.id)}
-                  onDragStart={() => handleDragStart(index)}
-                  onDragOver={(e) => handleDragOver(e, index)}
-                  onDrop={(e) => void handleDrop(e, index)}
-                  onDragEnd={handleDragEnd}
-                  onChange={updateQuestionLocal}
-                  onDelete={() => void deleteEditorQuestion(question.id)}
-                  onDuplicate={() => void duplicateQuestion(question)}
-                />
-              ))}
+              {(() => {
+                // Group questions by section while preserving each card's GLOBAL
+                // index into the flat `questions` array so drag-drop stays valid.
+                const groups =
+                  sections.length > 0
+                    ? sections
+                    : [{ id: "__default__", title: "" }];
+                // Only show section chrome when there's more than one section.
+                const showSectionChrome = sections.length > 1;
+                return groups.map((section) => {
+                  const sectionQuestions = questions
+                    .map((q, index) => ({ q, index }))
+                    .filter(({ q }) =>
+                      section.id === "__default__"
+                        ? true
+                        : (q.sectionId ?? sections[0]?.id) === section.id,
+                    );
+                  return (
+                    <div key={section.id} className="editor-section-group">
+                      {showSectionChrome ? (
+                        <div
+                          className="editor-section-header"
+                          style={{ display: "flex", alignItems: "center", gap: 10, margin: "8px 0 12px" }}
+                        >
+                          <input
+                            type="text"
+                            defaultValue={section.title}
+                            onBlur={(e) => {
+                              if (e.target.value.trim() && e.target.value.trim() !== section.title) {
+                                void renameSection(section.id, e.target.value);
+                              }
+                            }}
+                            style={{
+                              flex: 1, fontWeight: 700, fontSize: "1rem",
+                              border: "none", borderBottom: "2px solid #e2e8f0",
+                              padding: "6px 2px", background: "transparent",
+                            }}
+                            aria-label="Section title"
+                          />
+                          <button
+                            type="button"
+                            className="secondary-button compact"
+                            onClick={() => void deleteSectionById(section.id)}
+                            title="Delete section"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      ) : null}
+
+                      {sectionQuestions.map(({ q: question, index }) => (
+                        <QuestionCard
+                          key={question.id}
+                          question={question}
+                          index={index}
+                          total={questions.length}
+                          saving={saving}
+                          isDragOver={dragOverIndex === index}
+                          isDragging={draggingIndex === index}
+                          allQuestions={questions}
+                          isQuizMode={quizMode}
+                          isActive={activeQuestionId === question.id}
+                          onActivate={() => setActiveQuestionId(question.id)}
+                          onDragStart={() => handleDragStart(index)}
+                          onDragOver={(e) => handleDragOver(e, index)}
+                          onDrop={(e) => void handleDrop(e, index)}
+                          onDragEnd={handleDragEnd}
+                          onChange={updateQuestionLocal}
+                          onDelete={() => void deleteEditorQuestion(question.id)}
+                          onDuplicate={() => void duplicateQuestion(question)}
+                        />
+                      ))}
+
+                      {showSectionChrome ? (
+                        <button
+                          type="button"
+                          className="secondary-button compact"
+                          style={{ marginTop: 4 }}
+                          onClick={() => void addQuestionToSection(section.id)}
+                        >
+                          + Question in this section
+                        </button>
+                      ) : null}
+                    </div>
+                  );
+                });
+              })()}
             </div>
 
             {/* Floating creation toolbar */}

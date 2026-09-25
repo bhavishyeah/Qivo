@@ -44,6 +44,8 @@ export type Question = {
   options?: QuestionOption[];
   settings?: QuestionSettings;
   conditions?: ConditionRule[];
+  // Present when questions are loaded via the flattened list endpoint.
+  sectionId?: string;
 };
 
 export type Section = {

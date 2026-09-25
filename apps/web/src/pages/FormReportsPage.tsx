@@ -3,6 +3,9 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   BarChart,
   Bar,
+  LineChart,
+  Line,
+  Legend,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -48,9 +51,12 @@ type TextReport = BaseReport & { kind: "text"; sample: string[] };
 
 type QuestionReport = ChoiceReport | RatingReport | NumberReport | TextReport;
 
+type TimeSeriesPoint = { date: string; views: number; submissions: number };
+
 type FormReport = {
   totalResponses: number;
   analytics: { views: number; submissions: number; conversionRate: number };
+  timeSeries: TimeSeriesPoint[];
   questions: QuestionReport[];
 };
 
@@ -112,7 +118,8 @@ export default function FormReportsPage() {
     );
   }
 
-  const { totalResponses, analytics, questions } = report;
+  const { totalResponses, analytics, timeSeries, questions } = report;
+  const hasActivity = timeSeries.some((p) => p.views > 0 || p.submissions > 0);
 
   return (
     <main className="dashboard-shell">
@@ -163,6 +170,36 @@ export default function FormReportsPage() {
           <strong>{questions.length}</strong>
         </div>
       </section>
+
+      {/* Activity over time (last 30 days) */}
+      {hasActivity ? (
+        <section className="editor-card" style={{ maxWidth: 980, margin: "0 auto 18px" }}>
+          <div className="editor-card-header">
+            <div>
+              <p className="eyebrow">Activity</p>
+              <h2>Views &amp; submissions (last 30 days)</h2>
+            </div>
+          </div>
+          <div style={{ width: "100%", height: 240 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={timeSeries} margin={{ left: 0, right: 16, top: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 11 }}
+                  tickFormatter={(d: string) => d.slice(5)}
+                  minTickGap={24}
+                />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                <Tooltip />
+                <Legend />
+                <Line type="monotone" dataKey="views" stroke="#2563eb" strokeWidth={2} dot={false} name="Views" />
+                <Line type="monotone" dataKey="submissions" stroke="#16a34a" strokeWidth={2} dot={false} name="Submissions" />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </section>
+      ) : null}
 
       {/* Per-question analytics */}
       {questions.map((question) => (
