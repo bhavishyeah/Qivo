@@ -126,18 +126,35 @@ app.use("/api/auth", authRouter);
 app.use("/api/workspaces", workspaceRouter);
 
 app.get("/api/health", (_req, res) => {
+  // Never cache this endpoint — it reflects live runtime state.
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.setHeader("Pragma", "no-cache");
   res.json({
     success: true,
     data: {
       service: "qivo-api",
       status: "ok",
-      // Presence-only (never values) — helps diagnose upload config remotely.
+      ts: Date.now(),
       uploads: {
         cloudName: Boolean(process.env.CLOUDINARY_CLOUD_NAME),
         apiKey: Boolean(process.env.CLOUDINARY_API_KEY),
         apiSecret: Boolean(process.env.CLOUDINARY_API_SECRET),
       },
     },
+  });
+});
+
+// Temporary env-dump for diagnosing the Cloudinary 503. Shows only key
+// names + booleans, never values. Remove once uploads are confirmed working.
+app.get("/api/env-check", (_req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  res.json({
+    ts: Date.now(),
+    pid: process.pid,
+    cloudName: Boolean(process.env.CLOUDINARY_CLOUD_NAME),
+    apiKey: Boolean(process.env.CLOUDINARY_API_KEY),
+    apiSecret: Boolean(process.env.CLOUDINARY_API_SECRET),
+    cloudKeys: Object.keys(process.env).filter((k) => k.includes("CLOUD")),
   });
 });
 
