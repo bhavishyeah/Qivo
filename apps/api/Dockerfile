@@ -20,6 +20,11 @@ COPY apps/api ./apps/api/
 # Generate Prisma client
 RUN pnpm exec prisma generate
 
+# Cache-bust: bump this value to force a clean TypeScript rebuild (prevents a
+# stale cached dist/ from shipping old request-handling code).
+ARG BUILD_REV=2026-09-27-1
+RUN echo "build rev: $BUILD_REV"
+
 # Build TypeScript. Use the explicit project + outDir so tsc resolves the
 # api's tsconfig regardless of pnpm's working dir, then fail the build if the
 # entrypoint wasn't emitted (prevents a green-but-broken image).
