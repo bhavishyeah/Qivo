@@ -13,8 +13,41 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { api, ApiRequestError } from "../lib/api";
+import { isImageUrl } from "./PublicFormPage";
 
 // ─── Report shapes (mirror the API's getFormReport output) ──────────────────
+
+// Render a single text-report sample. File-upload answers are URLs: images
+// become thumbnails, other files become "View file" links, plain text is shown
+// as-is.
+function renderSampleAnswer(answer: string) {
+  if (/^https?:\/\//.test(answer)) {
+    if (isImageUrl(answer)) {
+      return (
+        <a href={answer} target="_blank" rel="noopener noreferrer">
+          <img
+            src={answer}
+            alt="Uploaded file"
+            style={{
+              maxWidth: 90,
+              maxHeight: 90,
+              borderRadius: 6,
+              border: "1px solid #e2e8f0",
+              objectFit: "cover",
+              display: "block",
+            }}
+          />
+        </a>
+      );
+    }
+    return (
+      <a href={answer} target="_blank" rel="noopener noreferrer" style={{ color: "#2563eb", textDecoration: "underline" }}>
+        View file
+      </a>
+    );
+  }
+  return answer;
+}
 
 type QuestionType =
   | "SHORT_TEXT" | "LONG_TEXT" | "EMAIL" | "NUMBER" | "DATE"
@@ -379,7 +412,7 @@ function TextSummary({ report }: { report: TextReport }) {
                 fontSize: "0.92rem",
               }}
             >
-              {answer}
+              {renderSampleAnswer(answer)}
             </div>
           ))}
           {report.answered > report.sample.length ? (

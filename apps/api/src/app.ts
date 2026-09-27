@@ -155,7 +155,6 @@ app.get("/api/health", (_req, res) => {
 // names + booleans, never values. Remove once uploads are confirmed working.
 app.get("/api/env-check", (_req, res) => {
   res.setHeader("Cache-Control", "no-store");
-  const { existsSync: envExists } = require("node:fs");
   res.json({
     ts: Date.now(),
     pid: process.pid,

@@ -10,6 +10,73 @@ import { publicGet, publicPost, ApiRequestError } from "../lib/api";
 import { evaluateConditions } from "../lib/conditions";
 import type { AnswerValue, PublicForm, Question, Section } from "../types";
 
+// ─── Upload helpers ─────────────────────────────────────────────────────────
+
+// True for URLs that point at an image we can safely render as an <img>.
+// Cloudinary image uploads land under /image/upload/ and carry an image
+// extension, so we check both signals.
+export function isImageUrl(url: string): boolean {
+  if (!/^https?:\/\//.test(url)) return false;
+  return (
+    /\/image\/upload\//.test(url) ||
+    /\.(png|jpe?g|gif|webp|svg|avif|bmp)(\?|$)/i.test(url)
+  );
+}
+
+
+// Downscale + recompress an image in the browser before uploading. Large phone
+// photos (several MB) dominate upload time; resizing to a max edge and encoding
+// as JPEG typically shrinks them by 5-20x with no visible quality loss for form
+// attachments. Returns the original file untouched for non-images, for GIFs
+// (animation would be lost), or if anything goes wrong.
+async function maybeCompressImage(file: File): Promise<File> {
+  const MAX_EDGE = 1600; // longest side, in px
+  const QUALITY = 0.82;
+
+  if (!file.type.startsWith("image/") || file.type === "image/gif") {
+    return file;
+  }
+
+  try {
+    const bitmap = await createImageBitmap(file);
+    const { width, height } = bitmap;
+    const scale = Math.min(1, MAX_EDGE / Math.max(width, height));
+
+    // Already small enough — don't re-encode (avoids upsizing tiny images).
+    if (scale === 1 && file.size <= 1_000_000) {
+      bitmap.close();
+      return file;
+    }
+
+    const targetW = Math.round(width * scale);
+    const targetH = Math.round(height * scale);
+    const canvas = document.createElement("canvas");
+    canvas.width = targetW;
+    canvas.height = targetH;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      bitmap.close();
+      return file;
+    }
+    ctx.drawImage(bitmap, 0, 0, targetW, targetH);
+    bitmap.close();
+
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", QUALITY),
+    );
+    if (!blob || blob.size >= file.size) {
+      // Compression didn't help — keep the original.
+      return file;
+    }
+
+    const newName = file.name.replace(/\.[^.]+$/, "") + ".jpg";
+    return new File([blob], newName, { type: "image/jpeg" });
+  } catch {
+    // If the browser can't decode it, upload the original untouched.
+    return file;
+  }
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function PublicFormPage() {
@@ -415,11 +482,19 @@ function QuestionField({
   // File-upload state (unconditional hooks; only used by the FILE_UPLOAD branch)
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
+  const [uploadProgress, setUploadProgress] = useState(0); // 0-100
 
-  async function uploadFileToCloudinary(file: File) {
+  async function uploadFileToCloudinary(rawFile: File) {
     setUploadError("");
     setUploading(true);
+    setUploadProgress(0);
     try {
+      // 0) For images, downscale + recompress in the browser before sending.
+      // A phone photo is often several MB; shrinking it to a sane max dimension
+      // cuts the bytes on the wire (the real bottleneck) by an order of
+      // magnitude, so uploads finish far faster. Non-images pass through as-is.
+      const file = await maybeCompressImage(rawFile);
+
       // 1) Get a short-lived signature from our API (form must be published).
       const sig = await publicPost<{
         cloudName: string;
@@ -429,7 +504,9 @@ function QuestionField({
         folder: string;
       }>(`/api/forms/public/${slug}/upload-signature?t=${Date.now()}`, {});
 
-      // 2) Upload the file straight to Cloudinary (bytes never touch our API).
+      // 2) Upload straight to Cloudinary (bytes never touch our API). Images go
+      // to the image endpoint (skips auto resource detection); everything else
+      // uses auto. Use XHR so we can report real upload progress.
       const body = new FormData();
       body.append("file", file);
       body.append("api_key", sig.apiKey);
@@ -437,16 +514,37 @@ function QuestionField({
       body.append("signature", sig.signature);
       body.append("folder", sig.folder);
 
-      const res = await fetch(
-        `https://api.cloudinary.com/v1_1/${sig.cloudName}/auto/upload`,
-        { method: "POST", body },
-      );
-      if (!res.ok) throw new Error("Upload failed. Please try again.");
-      const data: { secure_url?: string } = await res.json();
-      if (!data.secure_url) throw new Error("Upload failed. Please try again.");
+      const resourceType = file.type.startsWith("image/") ? "image" : "auto";
+      const secureUrl = await new Promise<string>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open(
+          "POST",
+          `https://api.cloudinary.com/v1_1/${sig.cloudName}/${resourceType}/upload`,
+        );
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            setUploadProgress(Math.round((e.loaded / e.total) * 100));
+          }
+        };
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              const data = JSON.parse(xhr.responseText) as { secure_url?: string };
+              if (data.secure_url) resolve(data.secure_url);
+              else reject(new Error("Upload failed. Please try again."));
+            } catch {
+              reject(new Error("Upload failed. Please try again."));
+            }
+          } else {
+            reject(new Error("Upload failed. Please try again."));
+          }
+        };
+        xhr.onerror = () => reject(new Error("Upload failed. Please try again."));
+        xhr.send(body);
+      });
 
       // 3) Store the delivered URL as the answer.
-      onChange(question.id, data.secure_url);
+      onChange(question.id, secureUrl);
     } catch (err) {
       setUploadError(
         err instanceof ApiRequestError
@@ -457,6 +555,7 @@ function QuestionField({
       );
     } finally {
       setUploading(false);
+      setUploadProgress(0);
     }
   }
 
@@ -662,23 +761,60 @@ function QuestionField({
             }}
           />
           {uploading ? (
-            <p style={{ margin: 0, color: "#475569", fontWeight: 600 }}>Uploading…</p>
-          ) : uploadedUrl ? (
-            <p style={{ margin: 0, color: "#16a34a", fontWeight: 600 }}>
-              ✓ File uploaded ·{" "}
-              <a
-                href={uploadedUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                style={{ color: "#2563eb", textDecoration: "underline" }}
+            <div>
+              <p style={{ margin: "0 0 10px", color: "#475569", fontWeight: 600 }}>
+                Uploading… {uploadProgress > 0 ? `${uploadProgress}%` : ""}
+              </p>
+              <div
+                style={{
+                  height: 8,
+                  borderRadius: 999,
+                  background: "#e2e8f0",
+                  overflow: "hidden",
+                }}
               >
-                view
-              </a>
-              <span style={{ display: "block", fontSize: "0.8rem", color: "#94a3b8", marginTop: 4 }}>
-                Click to replace
-              </span>
-            </p>
+                <div
+                  style={{
+                    height: "100%",
+                    width: `${uploadProgress}%`,
+                    background: "#2563eb",
+                    borderRadius: 999,
+                    transition: "width 0.2s ease",
+                  }}
+                />
+              </div>
+            </div>
+          ) : uploadedUrl ? (
+            <div style={{ color: "#16a34a", fontWeight: 600 }}>
+              {isImageUrl(uploadedUrl) ? (
+                <img
+                  src={uploadedUrl}
+                  alt="Uploaded preview"
+                  style={{
+                    maxWidth: "100%",
+                    maxHeight: 180,
+                    borderRadius: 8,
+                    marginBottom: 8,
+                    objectFit: "contain",
+                  }}
+                />
+              ) : null}
+              <p style={{ margin: 0 }}>
+                ✓ File uploaded ·{" "}
+                <a
+                  href={uploadedUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  style={{ color: "#2563eb", textDecoration: "underline" }}
+                >
+                  view
+                </a>
+                <span style={{ display: "block", fontSize: "0.8rem", color: "#94a3b8", marginTop: 4 }}>
+                  Click to replace
+                </span>
+              </p>
+            </div>
           ) : (
             <>
               <p style={{ margin: "0 0 4px", color: "#475569", fontWeight: 600 }}>

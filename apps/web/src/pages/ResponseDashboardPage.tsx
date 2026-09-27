@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import * as XLSX from "xlsx";
 import { api, ApiRequestError } from "../lib/api";
+import { isImageUrl } from "./PublicFormPage";
 import type { FormRecord, Question, ResponseRecord } from "../types";
 
 function formatResponseValue(value: unknown): string {
@@ -16,9 +17,28 @@ function escapeCsvValue(value: unknown): string {
   return `"${text.replaceAll('"', '""')}"`;
 }
 
-// Render an answer value; uploaded-file answers are https URLs → show a link.
+// Render an answer value; uploaded-file answers are https URLs. Images render
+// as a clickable thumbnail; other files fall back to a "View file" link.
 function renderAnswerValue(value: unknown) {
   if (typeof value === "string" && /^https?:\/\//.test(value)) {
+    if (isImageUrl(value)) {
+      return (
+        <a href={value} target="_blank" rel="noopener noreferrer">
+          <img
+            src={value}
+            alt="Uploaded file"
+            style={{
+              maxWidth: 120,
+              maxHeight: 120,
+              borderRadius: 8,
+              border: "1px solid #e2e8f0",
+              objectFit: "cover",
+              display: "block",
+            }}
+          />
+        </a>
+      );
+    }
     return (
       <a href={value} target="_blank" rel="noopener noreferrer" style={{ color: "#2563eb", textDecoration: "underline" }}>
         View file
