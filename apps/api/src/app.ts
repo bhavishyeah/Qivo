@@ -9,6 +9,13 @@ import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 import morgan from "morgan";
 import { z } from "zod";
+import { randomBytes } from "node:crypto";
+import { existsSync } from "node:fs";
+
+// Unique ID generated when this module loads — lets us tie boot logs to
+// which exact process is handling a given request.
+const INSTANCE_ID = randomBytes(4).toString("hex");
+export function getInstanceId() { return INSTANCE_ID; }
 
 import prisma from "./db/prisma.js";
 import { csrfProtection } from "./middleware/csrf.js";
@@ -148,13 +155,18 @@ app.get("/api/health", (_req, res) => {
 // names + booleans, never values. Remove once uploads are confirmed working.
 app.get("/api/env-check", (_req, res) => {
   res.setHeader("Cache-Control", "no-store");
+  const { existsSync: envExists } = require("node:fs");
   res.json({
     ts: Date.now(),
     pid: process.pid,
+    instanceId: INSTANCE_ID,
     cloudName: Boolean(process.env.CLOUDINARY_CLOUD_NAME),
     apiKey: Boolean(process.env.CLOUDINARY_API_KEY),
     apiSecret: Boolean(process.env.CLOUDINARY_API_SECRET),
     cloudKeys: Object.keys(process.env).filter((k) => k.includes("CLOUD")),
+    dotenvPresent: existsSync("/app/.env"),
+    dotenvApiPresent: existsSync("/app/apps/api/.env"),
+    totalEnvKeys: Object.keys(process.env).length,
   });
 });
 

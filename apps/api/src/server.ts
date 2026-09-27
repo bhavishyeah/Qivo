@@ -15,9 +15,13 @@ if (!process.env.DATABASE_URL) {
 
 import app from "./app.js";
 
+// app.ts generates INSTANCE_ID at module load — import it so we can log it
+// at server boot and tie the boot log to request-handler logs.
+import { getInstanceId } from "./app.js";
+
 const port = Number(process.env.PORT ?? 3000);
 
-console.log(`Starting Qivo API... (PORT=${process.env.PORT ?? "unset, using 3000"})`);
+console.log(`Starting Qivo API... (PORT=${process.env.PORT ?? "unset, using 3000"}) instance=${getInstanceId()}`);
 console.log(
   "[server] cloudinary at boot:",
   "cloud=", Boolean(process.env.CLOUDINARY_CLOUD_NAME),
