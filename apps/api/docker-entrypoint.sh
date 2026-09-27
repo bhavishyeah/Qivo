@@ -5,6 +5,8 @@ set -e
 # values) so we can diagnose missing config directly from the deploy log.
 echo "[entrypoint] env check: NODE_ENV=$NODE_ENV PORT=$PORT"
 echo "[entrypoint] cloudinary present: cloud=$([ -n \"$CLOUDINARY_CLOUD_NAME\" ] && echo yes || echo no) key=$([ -n \"$CLOUDINARY_API_KEY\" ] && echo yes || echo no) secret=$([ -n \"$CLOUDINARY_API_SECRET\" ] && echo yes || echo no)"
+echo "[entrypoint] cloudinary value lengths:"
+node -e "console.log('  cloud len:', (process.env.CLOUDINARY_CLOUD_NAME||'').length, 'key len:', (process.env.CLOUDINARY_API_KEY||'').length, 'secret len:', (process.env.CLOUDINARY_API_SECRET||'').length)"
 
 echo "[entrypoint] Running prisma migrate deploy..."
 if pnpm exec prisma migrate deploy; then
@@ -22,20 +24,6 @@ ls -la /app/.env 2>/dev/null || echo "  no /app/.env"
 ls -la /app/apps/api/.env 2>/dev/null || echo "  no /app/apps/api/.env"
 
 echo "[entrypoint] Starting server: node apps/api/dist/server.js"
-# Use 'env' to explicitly forward all current environment variables to the
-# Node process. Without this, some platforms drop vars between the shell
-# entrypoint and the exec'd process.
-exec env \
-  CLOUDINARY_CLOUD_NAME="$CLOUDINARY_CLOUD_NAME" \
-  CLOUDINARY_API_KEY="$CLOUDINARY_API_KEY" \
-  CLOUDINARY_API_SECRET="$CLOUDINARY_API_SECRET" \
-  NODE_ENV="$NODE_ENV" \
-  PORT="$PORT" \
-  DATABASE_URL="$DATABASE_URL" \
-  DIRECT_URL="$DIRECT_URL" \
-  WEB_URL="$WEB_URL" \
-  SESSION_COOKIE_NAME="$SESSION_COOKIE_NAME" \
-  SESSION_DAYS="$SESSION_DAYS" \
-  RESEND_API_KEY="$RESEND_API_KEY" \
-  GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID" \
-  node apps/api/dist/server.js
+# Execute node directly — inheriting the full container environment without
+# re-expanding shell variables (which can strip masked secrets on some platforms).
+exec node apps/api/dist/server.js
