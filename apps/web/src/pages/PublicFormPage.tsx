@@ -427,7 +427,7 @@ function QuestionField({
         timestamp: number;
         signature: string;
         folder: string;
-      }>(`/api/forms/public/${slug}/upload-signature`, {});
+      }>(`/api/forms/public/${slug}/upload-signature?t=${Date.now()}`, {});
 
       // 2) Upload the file straight to Cloudinary (bytes never touch our API).
       const body = new FormData();

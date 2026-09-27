@@ -1223,6 +1223,9 @@ formRouter.post(
         return;
       }
       const signature = await getUploadSignatureForForm(slug);
+      // Never cache signatures (they are short-lived + per-request) and stop
+      // any proxy/edge from caching this path's responses.
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
       res.json({ success: true, data: signature });
     } catch (error) {
       next(error);
