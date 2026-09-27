@@ -18,6 +18,13 @@ import app from "./app.js";
 const port = Number(process.env.PORT ?? 3000);
 
 console.log(`Starting Qivo API... (PORT=${process.env.PORT ?? "unset, using 3000"})`);
+console.log(
+  "[server] cloudinary at boot:",
+  "cloud=", Boolean(process.env.CLOUDINARY_CLOUD_NAME),
+  "key=", Boolean(process.env.CLOUDINARY_API_KEY),
+  "secret=", Boolean(process.env.CLOUDINARY_API_SECRET),
+  "| CLOUD keys=", Object.keys(process.env).filter((k) => k.includes("CLOUD")),
+);
 
 // Bind to 0.0.0.0 so Railway's proxy can reach the container (localhost-only
 // binds are unreachable from outside the container).
