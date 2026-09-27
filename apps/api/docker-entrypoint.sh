@@ -22,4 +22,20 @@ ls -la /app/.env 2>/dev/null || echo "  no /app/.env"
 ls -la /app/apps/api/.env 2>/dev/null || echo "  no /app/apps/api/.env"
 
 echo "[entrypoint] Starting server: node apps/api/dist/server.js"
-exec node apps/api/dist/server.js
+# Use 'env' to explicitly forward all current environment variables to the
+# Node process. Without this, some platforms drop vars between the shell
+# entrypoint and the exec'd process.
+exec env \
+  CLOUDINARY_CLOUD_NAME="$CLOUDINARY_CLOUD_NAME" \
+  CLOUDINARY_API_KEY="$CLOUDINARY_API_KEY" \
+  CLOUDINARY_API_SECRET="$CLOUDINARY_API_SECRET" \
+  NODE_ENV="$NODE_ENV" \
+  PORT="$PORT" \
+  DATABASE_URL="$DATABASE_URL" \
+  DIRECT_URL="$DIRECT_URL" \
+  WEB_URL="$WEB_URL" \
+  SESSION_COOKIE_NAME="$SESSION_COOKIE_NAME" \
+  SESSION_DAYS="$SESSION_DAYS" \
+  RESEND_API_KEY="$RESEND_API_KEY" \
+  GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID" \
+  node apps/api/dist/server.js
