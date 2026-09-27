@@ -15,6 +15,8 @@ fi
 
 echo "[entrypoint] node sees cloudinary:"
 node -e "console.log('  node process.env:', !!process.env.CLOUDINARY_CLOUD_NAME, !!process.env.CLOUDINARY_API_KEY, !!process.env.CLOUDINARY_API_SECRET)"
+echo "[entrypoint] compiled cloudinary.js marker check:"
+grep -q "signUpload missing config at request time" apps/api/dist/services/cloudinary.js && echo "  NEW code present" || echo "  OLD code (stale build)"
 echo "[entrypoint] .env files present:"
 ls -la /app/.env 2>/dev/null || echo "  no /app/.env"
 ls -la /app/apps/api/.env 2>/dev/null || echo "  no /app/apps/api/.env"

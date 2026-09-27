@@ -22,7 +22,7 @@ RUN pnpm exec prisma generate
 
 # Cache-bust: bump this value to force a clean TypeScript rebuild (prevents a
 # stale cached dist/ from shipping old request-handling code).
-ARG BUILD_REV=2026-09-27-1
+ARG BUILD_REV=2026-09-27-2
 RUN echo "build rev: $BUILD_REV"
 
 # Build TypeScript. Use the explicit project + outDir so tsc resolves the
