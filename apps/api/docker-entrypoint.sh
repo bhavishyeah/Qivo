@@ -13,5 +13,11 @@ else
   echo "[entrypoint] WARNING: migrate deploy exited non-zero. Continuing to start server."
 fi
 
+echo "[entrypoint] node sees cloudinary:"
+node -e "console.log('  node process.env:', !!process.env.CLOUDINARY_CLOUD_NAME, !!process.env.CLOUDINARY_API_KEY, !!process.env.CLOUDINARY_API_SECRET)"
+echo "[entrypoint] .env files present:"
+ls -la /app/.env 2>/dev/null || echo "  no /app/.env"
+ls -la /app/apps/api/.env 2>/dev/null || echo "  no /app/apps/api/.env"
+
 echo "[entrypoint] Starting server: node apps/api/dist/server.js"
 exec node apps/api/dist/server.js
