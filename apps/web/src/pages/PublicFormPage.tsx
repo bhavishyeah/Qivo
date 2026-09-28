@@ -12,15 +12,23 @@ import type { AnswerValue, PublicForm, Question, Section } from "../types";
 
 // ─── Upload helpers ─────────────────────────────────────────────────────────
 
-// True for URLs that point at an image we can safely render as an <img>.
-// Cloudinary image uploads land under /image/upload/ and carry an image
-// extension, so we check both signals.
+// True only for URLs that point at an actual image we can render as an <img>.
+// The file extension is authoritative: a .pdf served under Cloudinary's
+// /image/ path is still NOT a renderable image, so we key off the extension
+// and never off the path alone. Extensionless URLs fall back to the /image/
+// path hint.
 export function isImageUrl(url: string): boolean {
   if (!/^https?:\/\//.test(url)) return false;
-  return (
-    /\/image\/upload\//.test(url) ||
-    /\.(png|jpe?g|gif|webp|svg|avif|bmp)(\?|$)/i.test(url)
-  );
+
+  const extMatch = /\.([a-z0-9]+)(?:\?|#|$)/i.exec(url);
+  if (extMatch) {
+    const ext = extMatch[1].toLowerCase();
+    const imageExts = ["png", "jpg", "jpeg", "gif", "webp", "svg", "avif", "bmp"];
+    return imageExts.includes(ext);
+  }
+
+  // No extension — trust the Cloudinary image delivery path.
+  return /\/image\/upload\//.test(url);
 }
 
 
@@ -504,9 +512,14 @@ function QuestionField({
         folder: string;
       }>(`/api/forms/public/${slug}/upload-signature?t=${Date.now()}`, {});
 
-      // 2) Upload straight to Cloudinary (bytes never touch our API). Images go
-      // to the image endpoint (skips auto resource detection); everything else
-      // uses auto. Use XHR so we can report real upload progress.
+      // 2) Upload straight to Cloudinary (bytes never touch our API). Use XHR so
+      // we can report real upload progress.
+      //
+      // Resource type matters for delivery: real images use "image" (enables
+      // transformations/thumbnails). Everything else — PDFs and other documents
+      // — MUST use "raw". If a PDF goes through "auto", Cloudinary classifies it
+      // as an image and then blocks public delivery of it (401 "deny or ACL
+      // failure"). "raw" stores/serves it as a plain downloadable file.
       const body = new FormData();
       body.append("file", file);
       body.append("api_key", sig.apiKey);
@@ -514,7 +527,7 @@ function QuestionField({
       body.append("signature", sig.signature);
       body.append("folder", sig.folder);
 
-      const resourceType = file.type.startsWith("image/") ? "image" : "auto";
+      const resourceType = file.type.startsWith("image/") ? "image" : "raw";
       const secureUrl = await new Promise<string>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open(
