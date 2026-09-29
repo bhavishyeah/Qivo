@@ -23,33 +23,6 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Google Sign-In
-  useEffect(() => {
-    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-    if (!clientId) return;
-
-    const script = document.createElement("script");
-    script.src = "https://accounts.google.com/gsi/client";
-    script.async = true;
-    script.onload = () => {
-      window.google?.accounts.id.initialize({
-        client_id: clientId,
-        callback: handleGoogleCallback,
-      });
-      const container = document.getElementById("google-btn");
-      if (container) {
-        window.google?.accounts.id.renderButton(container, {
-          theme: "outline",
-          size: "large",
-          width: "100%",
-          text: "continue_with",
-        });
-      }
-    };
-    document.head.appendChild(script);
-    return () => { script.remove(); };
-  }, []);
-
   async function handleGoogleCallback(response: { credential: string }) {
     setError("");
     setLoading(true);
@@ -65,6 +38,51 @@ export default function LoginPage() {
       setLoading(false);
     }
   }
+
+  // Google Sign-In. Declared after handleGoogleCallback so the effect doesn't
+  // reference it before declaration. Guarded against StrictMode double-mount /
+  // double script injection.
+  useEffect(() => {
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+    if (!clientId) return;
+
+    let script = document.getElementById("google-gsi-script") as HTMLScriptElement | null;
+    const alreadyLoaded = Boolean(script);
+
+    function renderGoogleButton() {
+      window.google?.accounts.id.initialize({
+        client_id: clientId,
+        callback: handleGoogleCallback,
+      });
+      const container = document.getElementById("google-btn");
+      if (container) {
+        container.innerHTML = "";
+        window.google?.accounts.id.renderButton(container, {
+          theme: "outline",
+          size: "large",
+          width: "100%",
+          text: "continue_with",
+        });
+      }
+    }
+
+    if (alreadyLoaded && window.google) {
+      renderGoogleButton();
+      return;
+    }
+
+    if (!script) {
+      script = document.createElement("script");
+      script.id = "google-gsi-script";
+      script.src = "https://accounts.google.com/gsi/client";
+      script.async = true;
+      script.onload = renderGoogleButton;
+      document.head.appendChild(script);
+    }
+    // Intentionally leave the shared GSI script in the DOM across mounts; only
+    // the rendered button is reset (above) on re-mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

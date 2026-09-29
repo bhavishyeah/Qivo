@@ -36,14 +36,6 @@ export function signUpload(folder: string): CloudinarySignature {
   const apiSecret = process.env.CLOUDINARY_API_SECRET;
 
   if (!cloudName || !apiKey || !apiSecret) {
-    // Diagnostic: log what the SERVER process actually sees at request time.
-    console.error(
-      "[cloudinary] signUpload missing config at request time:",
-      "cloud=", Boolean(cloudName),
-      "key=", Boolean(apiKey),
-      "secret=", Boolean(apiSecret),
-      "envKeysWithCLOUD=", Object.keys(process.env).filter((k) => k.includes("CLOUD")),
-    );
     const error = new Error("File uploads are not configured.");
     error.name = "UPLOAD_NOT_CONFIGURED";
     throw error;

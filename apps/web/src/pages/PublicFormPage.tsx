@@ -8,82 +8,8 @@ import {
 import { useParams } from "react-router-dom";
 import { publicGet, publicPost, ApiRequestError } from "../lib/api";
 import { evaluateConditions } from "../lib/conditions";
+import { isImageUrl, maybeCompressImage } from "../lib/upload";
 import type { AnswerValue, PublicForm, Question, Section } from "../types";
-
-// ─── Upload helpers ─────────────────────────────────────────────────────────
-
-// True only for URLs that point at an actual image we can render as an <img>.
-// The file extension is authoritative: a .pdf served under Cloudinary's
-// /image/ path is still NOT a renderable image, so we key off the extension
-// and never off the path alone. Extensionless URLs fall back to the /image/
-// path hint.
-export function isImageUrl(url: string): boolean {
-  if (!/^https?:\/\//.test(url)) return false;
-
-  const extMatch = /\.([a-z0-9]+)(?:\?|#|$)/i.exec(url);
-  if (extMatch) {
-    const ext = extMatch[1].toLowerCase();
-    const imageExts = ["png", "jpg", "jpeg", "gif", "webp", "svg", "avif", "bmp"];
-    return imageExts.includes(ext);
-  }
-
-  // No extension — trust the Cloudinary image delivery path.
-  return /\/image\/upload\//.test(url);
-}
-
-
-// Downscale + recompress an image in the browser before uploading. Large phone
-// photos (several MB) dominate upload time; resizing to a max edge and encoding
-// as JPEG typically shrinks them by 5-20x with no visible quality loss for form
-// attachments. Returns the original file untouched for non-images, for GIFs
-// (animation would be lost), or if anything goes wrong.
-async function maybeCompressImage(file: File): Promise<File> {
-  const MAX_EDGE = 1600; // longest side, in px
-  const QUALITY = 0.82;
-
-  if (!file.type.startsWith("image/") || file.type === "image/gif") {
-    return file;
-  }
-
-  try {
-    const bitmap = await createImageBitmap(file);
-    const { width, height } = bitmap;
-    const scale = Math.min(1, MAX_EDGE / Math.max(width, height));
-
-    // Already small enough — don't re-encode (avoids upsizing tiny images).
-    if (scale === 1 && file.size <= 1_000_000) {
-      bitmap.close();
-      return file;
-    }
-
-    const targetW = Math.round(width * scale);
-    const targetH = Math.round(height * scale);
-    const canvas = document.createElement("canvas");
-    canvas.width = targetW;
-    canvas.height = targetH;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) {
-      bitmap.close();
-      return file;
-    }
-    ctx.drawImage(bitmap, 0, 0, targetW, targetH);
-    bitmap.close();
-
-    const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, "image/jpeg", QUALITY),
-    );
-    if (!blob || blob.size >= file.size) {
-      // Compression didn't help — keep the original.
-      return file;
-    }
-
-    const newName = file.name.replace(/\.[^.]+$/, "") + ".jpg";
-    return new File([blob], newName, { type: "image/jpeg" });
-  } catch {
-    // If the browser can't decode it, upload the original untouched.
-    return file;
-  }
-}
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
@@ -159,10 +85,20 @@ export default function PublicFormPage() {
     event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) {
     const rawValue = event.target.value;
-    updateAnswer(
-      questionId,
-      event.target.type === "number" ? Number(rawValue) : rawValue,
-    );
+    if (event.target.type === "number") {
+      // An empty number input must stay "unanswered" (empty string), not become
+      // 0 — otherwise a cleared required field silently passes validation and
+      // submits 0. Non-numeric intermediate input is also kept as-is rather than
+      // coerced to NaN.
+      if (rawValue === "") {
+        updateAnswer(questionId, "");
+      } else {
+        const parsed = Number(rawValue);
+        updateAnswer(questionId, Number.isNaN(parsed) ? "" : parsed);
+      }
+      return;
+    }
+    updateAnswer(questionId, rawValue);
   }
 
   function validateSection(questions: Question[]): string {
@@ -227,13 +163,15 @@ export default function PublicFormPage() {
 
     setSubmitting(true);
     try {
-      await publicPost(`/api/forms/public/${slug}/responses`, {
-        answers,
-        ...(form?.schema.settings.collectEmail ? { email: email.trim().toLowerCase() } : {}),
-        metadata: { source: "qivo-web" },
-      }).then((data: any) => {
-        if (data?.quizScore) setQuizScore(data.quizScore);
-      });
+      const result = await publicPost<{ quizScore?: { earned: number; total: number; percentage: number } }>(
+        `/api/forms/public/${slug}/responses`,
+        {
+          answers,
+          ...(form?.schema.settings.collectEmail ? { email: email.trim().toLowerCase() } : {}),
+          metadata: { source: "qivo-web" },
+        },
+      );
+      if (result?.quizScore) setQuizScore(result.quizScore);
       setSubmitted(true);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err) {

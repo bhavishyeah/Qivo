@@ -1092,14 +1092,19 @@ export async function publishForm(
 export async function getPublicForm(
   slug: string,
 ) {
-  // Match a published form, OR a not-yet-published one whose scheduled publish
-  // time may have arrived (we confirm in JS since the time lives in the JSON
-  // schema). This lazily enforces scheduledPublishAt without a cron job.
-  let form = await prisma.form.findFirst({
+  // Only PUBLISHED forms are ever publicly reachable. Fetching DRAFT/APPROVED/
+  // CHANGES_REQUESTED forms here would leak unpublished form structure to anyone
+  // who guesses a slug, so we scope strictly to PUBLISHED.
+  //
+  // Scheduled publishing (scheduledPublishAt) is handled by publishDueForms(),
+  // which runs on a timer — NOT lazily on this read path. Mutating form state
+  // inside an unauthenticated GET is both an HTTP-semantics violation and a way
+  // for an anonymous visitor to trigger a permanent publish, so we don't do it.
+  const form = await prisma.form.findFirst({
     where: {
       slug,
       deletedAt: null,
-      status: { in: ["PUBLISHED", "DRAFT", "APPROVED", "CHANGES_REQUESTED"] },
+      status: "PUBLISHED",
     },
     include: {
       workspace: {
@@ -1111,22 +1116,6 @@ export async function getPublicForm(
       },
     },
   });
-
-  if (form && form.status !== "PUBLISHED") {
-    // Not published yet — only serve it if a scheduled publish time has passed.
-    const scheduledAt = getFormSchema(form.schema).settings.scheduledPublishAt;
-    const due = scheduledAt ? new Date(scheduledAt) <= new Date() : false;
-    if (due) {
-      // Publish it now (lazily) so it becomes and stays publicly available.
-      await prisma.form.update({
-        where: { id: form.id },
-        data: { status: "PUBLISHED" },
-      });
-      form = { ...form, status: "PUBLISHED" };
-    } else {
-      form = null;
-    }
-  }
 
   if (!form) {
     const error = new Error(
@@ -1155,7 +1144,9 @@ export async function getPublicForm(
     },
     schema: {
       version: schema.version,
-      sections: schema.sections,
+      // Strip answer-key fields (correctAnswer/points) from every question so
+      // quiz respondents can't read the answers out of the public payload.
+      sections: stripAnswerKeys(schema.sections),
       settings: schema.settings,
       ...(schema.confirmationMessage !==
       undefined
@@ -1166,6 +1157,64 @@ export async function getPublicForm(
         : {}),
     },
   };
+}
+
+/**
+ * Remove quiz answer-key fields from question settings before sending a form to
+ * public respondents. `correctAnswer` and `points` are needed only server-side
+ * (for scoring in submitFormResponse) and must never reach the client.
+ */
+function stripAnswerKeys(sections: FormSection[]): FormSection[] {
+  return sections.map((section) => ({
+    ...section,
+    questions: section.questions.map((q) => {
+      if (!q.settings) return q;
+      const { correctAnswer, points, ...safeSettings } = q.settings as Record<
+        string,
+        unknown
+      >;
+      // Reference the extracted fields so the linter knows they're intentionally
+      // dropped (they carry the answer key).
+      void correctAnswer;
+      void points;
+      return { ...q, settings: safeSettings };
+    }),
+  }));
+}
+
+/**
+ * Publish any forms whose scheduledPublishAt has passed. Intended to be called
+ * from a scheduled task (e.g. a timer/cron), NOT from a request handler. This
+ * replaces the previous lazy-publish-on-GET behaviour, which mutated state on an
+ * unauthenticated read.
+ */
+export async function publishDueForms(now: Date = new Date()): Promise<number> {
+  // Candidate forms: not published yet, not deleted, in a state that a schedule
+  // could legitimately advance from.
+  const candidates = await prisma.form.findMany({
+    where: {
+      deletedAt: null,
+      status: { in: ["DRAFT", "APPROVED", "CHANGES_REQUESTED"] },
+    },
+    select: { id: true, schema: true },
+  });
+
+  const dueIds = candidates
+    .filter((f) => {
+      const scheduledAt = getFormSchema(f.schema).settings.scheduledPublishAt;
+      if (!scheduledAt) return false;
+      const when = new Date(scheduledAt);
+      return !Number.isNaN(when.getTime()) && when <= now;
+    })
+    .map((f) => f.id);
+
+  if (dueIds.length === 0) return 0;
+
+  const result = await prisma.form.updateMany({
+    where: { id: { in: dueIds } },
+    data: { status: "PUBLISHED" },
+  });
+  return result.count;
 }
 
 /**

@@ -135,7 +135,7 @@ export default function AuditLogPage() {
         ) : (
           <div>
             {logs.map((entry) => {
-              const title = (entry.metadata as any)?.title ?? entry.entityId ?? "";
+              const title = (entry.metadata as { title?: string } | null)?.title ?? entry.entityId ?? "";
               const label = ACTION_LABELS[entry.action] ?? entry.action.toLowerCase().replace(/_/g, " ");
               const icon = ACTION_ICONS[entry.action] ?? "📌";
 

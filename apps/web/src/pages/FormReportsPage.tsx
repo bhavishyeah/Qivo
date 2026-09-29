@@ -13,7 +13,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { api, ApiRequestError } from "../lib/api";
-import { isImageUrl } from "./PublicFormPage";
+import { isImageUrl } from "../lib/upload";
 
 // ─── Report shapes (mirror the API's getFormReport output) ──────────────────
 

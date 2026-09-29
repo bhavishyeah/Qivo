@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import * as XLSX from "xlsx";
 import { api, ApiRequestError } from "../lib/api";
-import { isImageUrl } from "./PublicFormPage";
+import { isImageUrl } from "../lib/upload";
 import type { FormRecord, Question, ResponseRecord } from "../types";
 
 function formatResponseValue(value: unknown): string {

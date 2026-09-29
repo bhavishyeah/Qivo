@@ -26,6 +26,55 @@ export class ApiRequestError extends Error {
   }
 }
 
+/**
+ * Parse a fetch Response into our API envelope, turning ANY failure into an
+ * ApiRequestError. Handles the cases the old code didn't: non-JSON bodies
+ * (gateway 502/504 HTML pages, proxy errors), empty/204 responses, and network
+ * hiccups. Also fires the session-expired event on a 401 regardless of body
+ * shape. Returns the unwrapped `data` on success.
+ */
+async function parseApiResponse<T>(response: Response): Promise<T> {
+  // 204 No Content (or an empty body) — success with nothing to unwrap.
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
+  const raw = await response.text();
+  let body: ApiResult<T> | null = null;
+  if (raw) {
+    try {
+      body = JSON.parse(raw) as ApiResult<T>;
+    } catch {
+      body = null; // Non-JSON response (e.g. an HTML error page from a proxy).
+    }
+  }
+
+  if (!response.ok || !body || body.success !== true) {
+    if (response.status === 401) {
+      // Let the app surface the "session expired" banner. Fires even when the
+      // 401 body isn't our JSON envelope (e.g. a gateway-level 401).
+      window.dispatchEvent(new CustomEvent("qivo:session-expired"));
+    }
+
+    if (body && body.success === false) {
+      throw new ApiRequestError(
+        body.error?.code ?? "UNKNOWN",
+        body.error?.message ?? "Something went wrong.",
+      );
+    }
+
+    // No usable JSON envelope — synthesize an error from the HTTP status.
+    throw new ApiRequestError(
+      body === null && raw ? "PARSE_ERROR" : "UNKNOWN",
+      response.status >= 500
+        ? "The server is temporarily unavailable. Please try again."
+        : "Something went wrong.",
+    );
+  }
+
+  return body.data;
+}
+
 // Session token stored in memory + localStorage for persistence
 let sessionToken: string | null = localStorage.getItem("qivo_token");
 
@@ -55,31 +104,14 @@ async function request<T>(
     headers["Authorization"] = `Bearer ${sessionToken}`;
   }
 
+  // Spread caller options FIRST, then set headers, so a caller passing its own
+  // `headers` in options can't accidentally clobber the merged auth headers.
   const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers,
     ...options,
+    headers,
   });
 
-  const body: ApiResult<T> = await response.json();
-
-  if (!response.ok || !body.success) {
-    const err = body as ApiError;
-
-    // On 401, notify the app so it can surface the "session expired" banner.
-    // We intentionally do NOT clear the token here — clearing it immediately
-    // causes the auth guard to redirect and unmount the banner before it shows.
-    // The token is cleared when the user acts on the banner (logs in again).
-    if (response.status === 401) {
-      window.dispatchEvent(new CustomEvent("qivo:session-expired"));
-    }
-
-    throw new ApiRequestError(
-      err.error?.code ?? "UNKNOWN",
-      err.error?.message ?? "Something went wrong.",
-    );
-  }
-
-  return body.data;
+  return parseApiResponse<T>(response);
 }
 
 export const api = {
@@ -112,17 +144,7 @@ export async function publicGet<T>(path: string): Promise<T> {
     method: "GET",
   });
 
-  const body: ApiResult<T> = await response.json();
-
-  if (!response.ok || !body.success) {
-    const err = body as ApiError;
-    throw new ApiRequestError(
-      err.error?.code ?? "UNKNOWN",
-      err.error?.message ?? "Something went wrong.",
-    );
-  }
-
-  return body.data;
+  return parseApiResponse<T>(response);
 }
 
 export async function publicPost<T>(
@@ -135,15 +157,5 @@ export async function publicPost<T>(
     body: JSON.stringify(data),
   });
 
-  const body: ApiResult<T> = await response.json();
-
-  if (!response.ok || !body.success) {
-    const err = body as ApiError;
-    throw new ApiRequestError(
-      err.error?.code ?? "UNKNOWN",
-      err.error?.message ?? "Something went wrong.",
-    );
-  }
-
-  return body.data;
+  return parseApiResponse<T>(response);
 }

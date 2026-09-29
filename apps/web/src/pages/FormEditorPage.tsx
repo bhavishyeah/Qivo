@@ -212,51 +212,59 @@ export default function FormEditorPage() {
     scheduleAutosaveFlush();
   }
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      const isCtrl = e.ctrlKey || e.metaKey;
+  // Keyboard shortcuts. The handler closes over lots of frequently-changing
+  // state (questions, activeQuestionId, undo/redo). To avoid re-binding the
+  // window listener on every render (the old code had no dep array), we keep the
+  // latest handler in a ref and register the listener exactly once.
+  const keyHandlerRef = useRef<(e: KeyboardEvent) => void>(() => {});
+  const currentKeyHandler = (e: KeyboardEvent) => {
+    const isCtrl = e.ctrlKey || e.metaKey;
 
-      // Ctrl+Z/Y for undo/redo
-      if (isCtrl) {
-        if (e.key === "z" && !e.shiftKey) { e.preventDefault(); undo(); return; }
-        if (e.key === "z" && e.shiftKey) { e.preventDefault(); redo(); return; }
-        if (e.key === "y") { e.preventDefault(); redo(); return; }
-      }
+    // Ctrl+Z/Y for undo/redo
+    if (isCtrl) {
+      if (e.key === "z" && !e.shiftKey) { e.preventDefault(); undo(); return; }
+      if (e.key === "z" && e.shiftKey) { e.preventDefault(); redo(); return; }
+      if (e.key === "y") { e.preventDefault(); redo(); return; }
+    }
 
-      // Tab / Shift+Tab to navigate between cards (only when not in an input)
-      if (e.key === "Tab" && activeQuestionId) {
-        const target = e.target as HTMLElement;
-        const isInInput = target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT";
-        if (!isInInput) {
-          e.preventDefault();
-          const currentIdx = questions.findIndex((q) => q.id === activeQuestionId);
-          if (e.shiftKey) {
-            // Previous card
-            if (currentIdx > 0) setActiveQuestionId(questions[currentIdx - 1].id);
-          } else {
-            // Next card
-            if (currentIdx < questions.length - 1) setActiveQuestionId(questions[currentIdx + 1].id);
-          }
-        }
-      }
-
-      // Delete key to remove active card (only when not in input)
-      if (e.key === "Delete" && activeQuestionId) {
-        const target = e.target as HTMLElement;
-        const isInInput = target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT";
-        if (!isInInput) {
-          e.preventDefault();
-          if (confirm("Delete this question?")) {
-            void deleteEditorQuestion(activeQuestionId);
-          }
+    // Tab / Shift+Tab to navigate between cards (only when not in an input)
+    if (e.key === "Tab" && activeQuestionId) {
+      const target = e.target as HTMLElement;
+      const isInInput = target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT";
+      if (!isInInput) {
+        e.preventDefault();
+        const currentIdx = questions.findIndex((q) => q.id === activeQuestionId);
+        if (e.shiftKey) {
+          if (currentIdx > 0) setActiveQuestionId(questions[currentIdx - 1].id);
+        } else {
+          if (currentIdx < questions.length - 1) setActiveQuestionId(questions[currentIdx + 1].id);
         }
       }
     }
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    // Delete key to remove active card (only when not in input)
+    if (e.key === "Delete" && activeQuestionId) {
+      const target = e.target as HTMLElement;
+      const isInInput = target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT";
+      if (!isInInput) {
+        e.preventDefault();
+        if (confirm("Delete this question?")) {
+          void deleteEditorQuestion(activeQuestionId);
+        }
+      }
+    }
+  };
+
+  // Keep the ref pointing at the latest handler (updated in an effect, not
+  // during render), then bind the window listener exactly once.
+  useEffect(() => {
+    keyHandlerRef.current = currentKeyHandler;
   });
+  useEffect(() => {
+    const listener = (e: KeyboardEvent) => keyHandlerRef.current(e);
+    window.addEventListener("keydown", listener);
+    return () => window.removeEventListener("keydown", listener);
+  }, []);
 
   // ─── Question mutations ───────────────────────────────────────────────────
 
@@ -562,7 +570,7 @@ export default function FormEditorPage() {
     } finally { setReviewing(false); }
   }
 
-  async function saveFormSettings(event: FormEvent<HTMLFormElement>) {
+  async function saveFormSettings(event: { preventDefault: () => void }) {
     event.preventDefault();
     if (!formId) return;
     setSavingSettings(true); setError(""); setMessage("");
@@ -1018,7 +1026,7 @@ export default function FormEditorPage() {
         <section className="editor-card settings-card">
           <div className="editor-card-header">
             <div><p className="eyebrow">Settings</p><h2>Form configuration</h2></div>
-            <button className="secondary-button compact" type="button" onClick={(e) => void saveFormSettings(e as any)} disabled={savingSettings}>
+            <button className="secondary-button compact" type="button" onClick={(e) => void saveFormSettings(e)} disabled={savingSettings}>
               {savingSettings ? "Saving..." : "Save all"}
             </button>
           </div>
