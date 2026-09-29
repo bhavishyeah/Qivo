@@ -4,8 +4,10 @@ export const updateFormSettingsSchema = z.object({
   collectEmail: z.boolean(),
   allowMultipleResponses: z.boolean(),
   confirmationMessage: z.string().trim().max(1000),
-  scheduledPublishAt: z.string().nullable().optional(),
-  scheduledCloseAt: z.string().nullable().optional(),
+  // ISO 8601 datetime strings. Validated so a bad value can't silently disable
+  // scheduled publish/close (an Invalid Date makes the comparisons no-op).
+  scheduledPublishAt: z.string().datetime().nullable().optional(),
+  scheduledCloseAt: z.string().datetime().nullable().optional(),
   quizMode: z.boolean().optional(),
   showScore: z.boolean().optional(),
 });

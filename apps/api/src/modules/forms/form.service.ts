@@ -1160,6 +1160,138 @@ export async function getPublicForm(
 }
 
 /**
+ * Validate a single submitted answer against its question definition. Returns a
+ * human-readable problem string if invalid, or null if the answer is acceptable.
+ * Called server-side on submit so a crafted request can't bypass the UI's
+ * checks. Assumes the value is non-empty (empties are filtered by the caller).
+ */
+const MAX_TEXT_LEN = 10_000;
+function validateAnswerAgainstQuestion(
+  question: FormQuestion,
+  value: unknown,
+): string | null {
+  const isString = typeof value === "string";
+  const isArray = Array.isArray(value);
+
+  // Cap any string (and each array member) to guard against giant blobs even
+  // within the 1MB body limit.
+  if (isString && value.length > MAX_TEXT_LEN) {
+    return "answer is too long";
+  }
+  if (isArray) {
+    for (const item of value) {
+      if (typeof item !== "string") return "invalid selection";
+      if (item.length > MAX_TEXT_LEN) return "answer is too long";
+    }
+  }
+
+  const allowedOptionValues = new Set(
+    (question.options ?? []).map((o) => o.value),
+  );
+
+  switch (question.type) {
+    case "SHORT_TEXT":
+    case "LONG_TEXT":
+    case "PHONE":
+      if (!isString) return "expected text";
+      return null;
+
+    case "EMAIL":
+      if (!isString) return "expected text";
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return "invalid email";
+      return null;
+
+    case "URL":
+      if (!isString) return "expected text";
+      try {
+        new URL(value);
+        return null;
+      } catch {
+        return "invalid URL";
+      }
+
+    case "NUMBER":
+    case "RATING":
+    case "LINEAR_SCALE": {
+      const num = typeof value === "number" ? value : Number(value);
+      if (Number.isNaN(num)) return "expected a number";
+      return null;
+    }
+
+    case "DATE":
+      if (!isString || Number.isNaN(new Date(value).getTime())) {
+        return "invalid date";
+      }
+      return null;
+
+    case "YES_NO":
+      if (value !== "yes" && value !== "no" && typeof value !== "boolean") {
+        return "expected yes or no";
+      }
+      return null;
+
+    case "SINGLE_CHOICE":
+      if (!isString) return "expected a single selection";
+      if (allowedOptionValues.size > 0 && !allowedOptionValues.has(value)) {
+        return "selection is not an available option";
+      }
+      return null;
+
+    case "MULTIPLE_CHOICE": {
+      const selections = isArray ? value : [value];
+      if (allowedOptionValues.size > 0) {
+        for (const sel of selections) {
+          if (typeof sel !== "string" || !allowedOptionValues.has(sel)) {
+            return "selection is not an available option";
+          }
+        }
+      }
+      return null;
+    }
+
+    case "FILE_UPLOAD":
+      // Answer is the delivered file URL.
+      if (!isString || !/^https?:\/\//.test(value)) return "expected a file URL";
+      return null;
+
+    default:
+      return null;
+  }
+}
+
+/**
+ * Compare a submitted answer against a question's stored correct answer for quiz
+ * scoring. Handles both single-value answers (SHORT_TEXT/SINGLE_CHOICE/etc.) and
+ * multiple-choice array answers. For arrays, the response is correct only if the
+ * selected set exactly matches the correct set (order-independent). The stored
+ * correctAnswer may be a single value or a comma-separated list for multi-select.
+ */
+function isAnswerCorrect(userAnswer: unknown, correctAnswer: unknown): boolean {
+  const correctSet = new Set(
+    String(correctAnswer)
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
+
+  if (Array.isArray(userAnswer)) {
+    const userSet = new Set(
+      userAnswer.map((v) => String(v).trim()).filter(Boolean),
+    );
+    if (userSet.size !== correctSet.size) return false;
+    for (const v of userSet) {
+      if (!correctSet.has(v)) return false;
+    }
+    return true;
+  }
+
+  // Single-value answer: correct if it matches the (single) correct value, or is
+  // the sole member of a one-item correct set.
+  const user = String(userAnswer ?? "").trim();
+  return correctSet.size === 1 && correctSet.has(user);
+}
+
+/**
  * Remove quiz answer-key fields from question settings before sending a form to
  * public respondents. `correctAnswer` and `points` are needed only server-side
  * (for scoring in submitFormResponse) and must never reach the client.
@@ -1330,6 +1462,23 @@ export async function submitFormResponse(
     throw error;
   }
 
+  // Validate each provided answer against its question's type/shape. The client
+  // enforces these too, but a crafted request can bypass the UI, so the server
+  // is the source of truth. Empty/undefined answers are allowed here (the
+  // required-check above already handled mandatory questions).
+  for (const question of questions) {
+    const value = input.answers[question.id];
+    if (value === undefined || value === null || value === "") continue;
+    const problem = validateAnswerAgainstQuestion(question, value);
+    if (problem) {
+      const error = new Error(
+        `Invalid answer for "${question.label}": ${problem}`,
+      );
+      error.name = "INVALID_RESPONSE";
+      throw error;
+    }
+  }
+
 const normalizedEmail = input.email
   ?.trim()
   .toLowerCase();
@@ -1435,17 +1584,19 @@ void (async () => {
 // Calculate quiz score if quiz mode is enabled
 let quizScore: { earned: number; total: number; percentage: number } | null = null;
 if (schema.settings.quizMode) {
-  const questions = schema.sections.flatMap((s) => s.questions);
+  const scoringQuestions = schema.sections.flatMap((s) => s.questions);
   let earned = 0;
   let total = 0;
-  for (const q of questions) {
-    if (q.settings?.correctAnswer !== undefined) {
-      const points = (q.settings as any)?.points ?? 1;
-      total += points;
-      const userAnswer = String(input.answers[q.id] ?? "");
-      if (userAnswer === q.settings.correctAnswer) {
-        earned += points;
-      }
+  for (const q of scoringQuestions) {
+    const correct = q.settings?.correctAnswer;
+    if (correct === undefined) continue;
+
+    const rawPoints = (q.settings as { points?: unknown } | undefined)?.points;
+    const points = typeof rawPoints === "number" ? rawPoints : 1;
+    total += points;
+
+    if (isAnswerCorrect(input.answers[q.id], correct)) {
+      earned += points;
     }
   }
   quizScore = { earned, total, percentage: total > 0 ? Math.round((earned / total) * 100) : 0 };
@@ -1810,17 +1961,25 @@ export async function getFormReport(formId: string, userId: string) {
 
   // Single read of all responses for this form (answers only — no pagination
   // round trips). Ordered newest-first so text samples show recent answers.
-  const [responses, views, submissions] = await Promise.all([
+  //
+  // Cap how many rows we pull into memory: aggregating hundreds of thousands of
+  // responses at once could OOM the process. We still report the true total via
+  // a separate count; the per-question aggregates are computed over the most
+  // recent REPORT_SAMPLE_CAP responses when a form exceeds that size.
+  const REPORT_SAMPLE_CAP = 5000;
+  const [responses, totalResponses, views, submissions] = await Promise.all([
     prisma.formResponse.findMany({
       where: { formId: form.id },
       orderBy: { submittedAt: "desc" },
       select: { answers: true },
+      take: REPORT_SAMPLE_CAP,
     }),
+    prisma.formResponse.count({ where: { formId: form.id } }),
     prisma.formAnalytics.count({ where: { formId: form.id, event: "view" } }),
     prisma.formAnalytics.count({ where: { formId: form.id, event: "submission" } }),
   ]);
 
-  const totalResponses = responses.length;
+  const sampledResponses = responses.length;
 
   const answerRows = responses.map(
     (r) => (r.answers ?? {}) as Record<string, unknown>,
@@ -1830,7 +1989,8 @@ export async function getFormReport(formId: string, userId: string) {
     const values = answerRows.map((row) => row[question.id]);
     const answers = values.filter(isAnswered);
     const answered = answers.length;
-    const skipped = totalResponses - answered;
+    // skipped is relative to the sampled rows the aggregates were computed over.
+    const skipped = sampledResponses - answered;
 
     const base = {
       questionId: question.id,
