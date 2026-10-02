@@ -1444,10 +1444,42 @@ export async function submitFormResponse(
     throw error;
   }
 
+  // Evaluate conditional visibility server-side so hidden questions are never
+  // flagged as missing. Mirrors the evaluateConditions logic from the frontend.
+  function isQuestionVisible(question: FormQuestion): boolean {
+    const conditions = question.conditions;
+    if (!conditions || conditions.length === 0) return true;
+    return conditions.every((rule) => {
+      const answer = input.answers[rule.questionId];
+      const answerIsArray = Array.isArray(answer);
+      switch (rule.operator) {
+        case "equals":
+          return answerIsArray
+            ? (answer as unknown[]).includes(rule.value ?? "")
+            : String(answer ?? "") === (rule.value ?? "");
+        case "not_equals":
+          return answerIsArray
+            ? !(answer as unknown[]).includes(rule.value ?? "")
+            : String(answer ?? "") !== (rule.value ?? "");
+        case "contains":
+          return answerIsArray
+            ? (answer as string[]).some((a) => a.includes(rule.value ?? ""))
+            : String(answer ?? "").toLowerCase().includes((rule.value ?? "").toLowerCase());
+        case "not_empty":
+          return answerIsArray
+            ? (answer as unknown[]).length > 0
+            : answer !== undefined && answer !== null && answer !== "";
+        default:
+          return true;
+      }
+    });
+  }
+
   const missingRequiredQuestion =
     questions.find(
       (question) =>
         question.required &&
+        isQuestionVisible(question) &&
         (input.answers[question.id] ===
           undefined ||
           input.answers[question.id] === null ||
