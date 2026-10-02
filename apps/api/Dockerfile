@@ -9,10 +9,11 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY prisma ./prisma/
 COPY prisma.config.ts ./
+# Copy both workspace package.json files so pnpm's frozen-lockfile check
+# passes — it validates that every workspace member's package.json matches
+# what's recorded in pnpm-lock.yaml.
 COPY apps/api/package.json ./apps/api/
-# pnpm-workspace.yaml references apps/web; provide a stub so pnpm doesn't
-# reject --frozen-lockfile because the workspace member directory is missing.
-RUN mkdir -p apps/web && echo '{"name":"web","version":"0.0.0","private":true}' > apps/web/package.json
+COPY apps/web/package.json ./apps/web/
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile
@@ -44,10 +45,10 @@ WORKDIR /app
 
 COPY --from=builder /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
 COPY --from=builder /app/apps/api/package.json ./apps/api/
+# Carry the web package.json into the runner too so pnpm --frozen-lockfile passes
+COPY --from=builder /app/apps/web/package.json ./apps/web/
 COPY --from=builder /app/prisma ./prisma/
 COPY --from=builder /app/prisma.config.ts ./
-# Stub out apps/web so pnpm doesn't reject the frozen lockfile
-RUN mkdir -p apps/web && echo '{"name":"web","version":"0.0.0","private":true}' > apps/web/package.json
 
 RUN pnpm install --frozen-lockfile --prod
 
