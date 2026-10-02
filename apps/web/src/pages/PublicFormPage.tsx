@@ -11,6 +11,43 @@ import { evaluateConditions } from "../lib/conditions";
 import { isImageUrl, maybeCompressImage } from "../lib/upload";
 import type { AnswerValue, PublicForm, Question, Section } from "../types";
 
+// ─── File type helpers ────────────────────────────────────────────────────────
+
+/** Maps known MIME types to their file extensions for the accept attribute. */
+const MIME_TO_EXT: Record<string, string> = {
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
+  "application/msword": ".doc",
+  "application/vnd.ms-excel": ".xls",
+  "application/vnd.ms-powerpoint": ".ppt",
+};
+
+function buildAcceptString(mimeTypes: string[]): string {
+  const parts: string[] = [];
+  for (const mime of mimeTypes) {
+    parts.push(mime);
+    const ext = MIME_TO_EXT[mime];
+    if (ext) parts.push(ext);
+  }
+  return parts.join(",");
+}
+
+const MIME_FRIENDLY: Record<string, string> = {
+  "image/*": "Images",
+  "application/pdf": "PDF",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "Word (.docx)",
+  "application/msword": "Word (.doc)",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "Excel (.xlsx)",
+  "application/vnd.ms-excel": "Excel (.xls)",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation": "PowerPoint (.pptx)",
+  "application/vnd.ms-powerpoint": "PowerPoint (.ppt)",
+};
+
+function friendlyFileTypes(mimeTypes: string[]): string {
+  return mimeTypes.map((m) => MIME_FRIENDLY[m] ?? m).join(", ");
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function PublicFormPage() {
@@ -104,6 +141,8 @@ export default function PublicFormPage() {
   function validateSection(questions: Question[]): string {
     const missing = questions.find((q) => {
       if (!q.required) return false;
+      // Skip questions hidden by conditional logic
+      if (!evaluateConditions(q.conditions, answers)) return false;
       const answer = answers[q.id];
       if (Array.isArray(answer)) return answer.length === 0;
       return answer === undefined || answer === null || answer === "";
@@ -698,7 +737,7 @@ function QuestionField({
           <input
             id={inputId}
             type="file"
-            accept={allowedTypes.join(",")}
+            accept={buildAcceptString(allowedTypes)}
             style={{ display: "none" }}
             disabled={uploading}
             onChange={(e) => {
@@ -773,7 +812,7 @@ function QuestionField({
               </p>
               <p style={{ margin: 0, color: "#94a3b8", fontSize: "0.82rem" }}>
                 Max {maxSize}MB
-                {allowedTypes.length > 0 ? ` · ${allowedTypes.join(", ")}` : ""}
+                {allowedTypes.length > 0 ? ` · ${friendlyFileTypes(allowedTypes)}` : ""}
               </p>
             </>
           )}

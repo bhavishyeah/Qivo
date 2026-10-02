@@ -407,7 +407,7 @@ export default function FormEditorPage() {
           ...(CHOICE_TYPES.has(newQuestionType)
             ? { options: [{ value: "option_1", label: "Option 1" }] }
             : {}),
-          ...(newQuestionType === "FILE_UPLOAD" ? { settings: { maxFileSizeMB: 5, allowedFileTypes: ["image/*", "application/pdf"] } } : {}),
+          ...(newQuestionType === "FILE_UPLOAD" ? { settings: { maxFileSizeMB: 5, allowedFileTypes: ["image/*", "application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.openxmlformats-officedocument.presentationml.presentation", "application/msword", "application/vnd.ms-excel", "application/vnd.ms-powerpoint"] } } : {}),
         },
       );
       setQuestions((current) => [...current, data.question]);
@@ -1333,33 +1333,57 @@ function QuestionCard({
 
             {/* File upload settings */}
             {question.type === "FILE_UPLOAD" ? (
-              <div style={{ marginTop: 14 }}>
-                <label style={{ display: "block", fontSize: "0.82rem", fontWeight: 750, marginBottom: 8 }}>File upload settings</label>
-                <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center" }}>
+              <div style={{marginTop: 14}}>
+                <label style={{display: "block", fontSize: "0.82rem", fontWeight: 750, marginBottom: 8}}>File upload settings</label>
+                <div style={{display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-start"}}>
                   <div>
-                    <label style={{ display: "block", fontSize: "0.75rem", color: "#64748b", marginBottom: 4 }}>Max size (MB)</label>
+                    <label style={{display: "block", fontSize: "0.75rem", color: "#64748b", marginBottom: 4}}>Max size (MB)</label>
                     <input
                       type="number"
                       value={question.settings?.maxFileSizeMB ?? 5}
                       min={1}
                       max={50}
                       onChange={(e) => onChange(question.id, { settings: { ...question.settings, maxFileSizeMB: Number(e.target.value) } })}
-                      style={{ width: 80, border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px" }}
+                      style={{width: 80, border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px"}}
                     />
                   </div>
                   <div>
-                    <label style={{ display: "block", fontSize: "0.75rem", color: "#64748b", marginBottom: 4 }}>Allowed types</label>
-                    <input
-                      type="text"
-                      value={(question.settings?.allowedFileTypes ?? []).join(", ")}
-                      onChange={(e) => onChange(question.id, { settings: { ...question.settings, allowedFileTypes: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) } })}
-                      placeholder="image/*, application/pdf"
-                      style={{ width: 220, border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px", fontSize: "0.82rem" }}
-                    />
+                    <label style={{display: "block", fontSize: "0.75rem", color: "#64748b", marginBottom: 4}}>Allowed file types</label>
+                    <div style={{display: "flex", flexDirection: "column", gap: 6}}>
+                      {([
+                        { label: "Images (jpg, png, gif, webp…)", mime: "image/*" },
+                        { label: "PDF", mime: "application/pdf" },
+                        { label: "Word (.docx)", mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" },
+                        { label: "Word legacy (.doc)", mime: "application/msword" },
+                        { label: "Excel (.xlsx)", mime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" },
+                        { label: "Excel legacy (.xls)", mime: "application/vnd.ms-excel" },
+                        { label: "PowerPoint (.pptx)", mime: "application/vnd.openxmlformats-officedocument.presentationml.presentation" },
+                        { label: "PowerPoint legacy (.ppt)", mime: "application/vnd.ms-powerpoint" },
+                      ]).map(({ label, mime }) => {
+                        const allowed = question.settings?.allowedFileTypes ?? [];
+                        const checked = allowed.includes(mime);
+                        return (
+                          <label key={mime} style={{display: "flex", alignItems: "center", gap: 8, fontSize: "0.82rem", cursor: "pointer"}}>
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) => {
+                                const current = question.settings?.allowedFileTypes ?? [];
+                                const next = e.target.checked
+                                  ? [...current, mime]
+                                  : current.filter((t) => t !== mime);
+                                onChange(question.id, { settings: { ...question.settings, allowedFileTypes: next } });
+                              }}
+                            />
+                            {label}
+                          </label>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
-                <p className="muted" style={{ marginTop: 6, fontSize: "0.75rem" }}>
-                  Comma-separated MIME types. E.g. image/*, application/pdf, .docx
+                <p className="muted" style={{marginTop: 6, fontSize: "0.75rem"}}>
+                  Select which file types respondents may upload.
                 </p>
               </div>
             ) : null}
