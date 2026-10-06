@@ -2121,6 +2121,26 @@ export async function getFormReport(formId: string, userId: string) {
       };
     }
 
+    // MULTI_ENTRY: each answer is a string[]; flatten to individual entries so
+    // the report shows one entry per row rather than "Name1,Name2" as a single
+    // concatenated string.
+    if (question.type === "MULTI_ENTRY") {
+      const entries: string[] = [];
+      for (const answer of answers) {
+        if (Array.isArray(answer)) {
+          for (const entry of answer) {
+            const s = String(entry).trim();
+            if (s) entries.push(s);
+          }
+        } else {
+          const s = String(answer).trim();
+          if (s) entries.push(s);
+        }
+      }
+      const sample = entries.slice(0, 20);
+      return { ...base, kind: "text", sample };
+    }
+
     // Text-based (SHORT_TEXT, LONG_TEXT, EMAIL, DATE, PHONE, URL, FILE_UPLOAD)
     const sample = answers.slice(0, 20).map((a) => String(a));
     return { ...base, kind: "text", sample };
