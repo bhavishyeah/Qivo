@@ -293,6 +293,84 @@ function PreviewQuestion({
     );
   }
 
+  if (question.type === "MULTI_ENTRY") {
+    const entries: string[] = Array.isArray(value)
+      ? (value as string[])
+      : [""];
+
+    return (
+      <div className="question-field">
+        <label>{label}</label>
+        {desc}
+        <div style={{ display: "grid", gap: 8 }}>
+          {entries.map((entry, idx) => (
+            <div
+              key={idx}
+              style={{ display: "flex", gap: 8, alignItems: "center" }}
+            >
+              <input
+                type="text"
+                value={entry}
+                onChange={(e) => {
+                  const next = [...entries];
+                  next[idx] = e.target.value;
+                  onChange(question.id, next);
+                }}
+                placeholder={`Entry ${idx + 1}`}
+                aria-label={`${question.label} — entry ${idx + 1}`}
+                style={{
+                  flex: 1,
+                  border: "1px solid #cbd5e1",
+                  borderRadius: 10,
+                  padding: "10px 12px",
+                  fontSize: "inherit",
+                }}
+              />
+              {entries.length > 1 ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = entries.filter((_, i) => i !== idx);
+                    onChange(question.id, next.length > 0 ? next : [""]);
+                  }}
+                  aria-label={`Remove entry ${idx + 1}`}
+                  style={{
+                    border: "none",
+                    background: "none",
+                    color: "#94a3b8",
+                    fontSize: "1.2rem",
+                    cursor: "pointer",
+                    padding: "4px 8px",
+                    borderRadius: 6,
+                    lineHeight: 1,
+                  }}
+                >
+                  ×
+                </button>
+              ) : null}
+            </div>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={() => onChange(question.id, [...entries, ""])}
+          style={{
+            marginTop: 8,
+            background: "none",
+            border: "none",
+            color: "#2563eb",
+            fontSize: "0.85rem",
+            fontWeight: 600,
+            cursor: "pointer",
+            padding: "4px 0",
+          }}
+        >
+          + Add another
+        </button>
+      </div>
+    );
+  }
+
   const inputType = question.type === "EMAIL" ? "email" : question.type === "NUMBER" ? "number" : question.type === "DATE" ? "date" : question.type === "URL" ? "url" : question.type === "PHONE" ? "tel" : "text";
   const placeholder = question.type === "PHONE" ? "+91 98765 43210" : question.type === "URL" ? "https://example.com" : "Your answer...";
   return (

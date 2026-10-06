@@ -144,7 +144,10 @@ export default function PublicFormPage() {
       // Skip questions hidden by conditional logic
       if (!evaluateConditions(q.conditions, answers)) return false;
       const answer = answers[q.id];
-      if (Array.isArray(answer)) return answer.length === 0;
+      if (Array.isArray(answer)) {
+        return answer.length === 0 ||
+          (answer as string[]).every((e) => !e.trim());
+      }
       return answer === undefined || answer === null || answer === "";
     });
     if (missing) return `Please answer: ${missing.label}`;
@@ -162,7 +165,10 @@ export default function PublicFormPage() {
       // Skip questions hidden by conditional logic
       if (!evaluateConditions(q.conditions, answers)) continue;
       const answer = answers[q.id];
-      if (Array.isArray(answer) && answer.length === 0) return `Please answer: ${q.label}`;
+      if (
+        Array.isArray(answer) &&
+        (answer.length === 0 || (answer as string[]).every((e) => !e.trim()))
+      ) return `Please answer: ${q.label}`;
       if (answer === undefined || answer === null || answer === "") return `Please answer: ${q.label}`;
     }
     return "";
@@ -820,6 +826,95 @@ function QuestionField({
         {uploadError ? (
           <p className="submit-error" style={{ marginTop: 8 }}>{uploadError}</p>
         ) : null}
+      </div>
+    );
+  }
+
+  // Multi-entry: dynamic list of text inputs
+  if (question.type === "MULTI_ENTRY") {
+    const entries: string[] = Array.isArray(value)
+      ? (value as string[])
+      : [""];
+
+    function updateEntry(idx: number, text: string) {
+      const next = [...entries];
+      next[idx] = text;
+      onChange(question.id, next);
+    }
+
+    function addEntry() {
+      onChange(question.id, [...entries, ""]);
+    }
+
+    function removeEntry(idx: number) {
+      const next = entries.filter((_, i) => i !== idx);
+      onChange(question.id, next.length > 0 ? next : [""]);
+    }
+
+    return (
+      <div className="question-field">
+        <label htmlFor={`${inputId}-0`}>{label}</label>
+        {descriptionElement}
+        <div style={{ display: "grid", gap: 8 }}>
+          {entries.map((entry, idx) => (
+            <div
+              key={idx}
+              style={{ display: "flex", gap: 8, alignItems: "center" }}
+            >
+              <input
+                id={idx === 0 ? `${inputId}-0` : undefined}
+                type="text"
+                value={entry}
+                onChange={(e) => updateEntry(idx, e.target.value)}
+                placeholder={`Entry ${idx + 1}`}
+                aria-label={`${question.label} — entry ${idx + 1}`}
+                aria-describedby={description && idx === 0 ? descriptionId : undefined}
+                style={{
+                  flex: 1,
+                  border: "1px solid #cbd5e1",
+                  borderRadius: 10,
+                  padding: "10px 12px",
+                  fontSize: "inherit",
+                }}
+              />
+              {entries.length > 1 ? (
+                <button
+                  type="button"
+                  onClick={() => removeEntry(idx)}
+                  aria-label={`Remove entry ${idx + 1}`}
+                  style={{
+                    border: "none",
+                    background: "none",
+                    color: "#94a3b8",
+                    fontSize: "1.2rem",
+                    cursor: "pointer",
+                    padding: "4px 8px",
+                    borderRadius: 6,
+                    lineHeight: 1,
+                  }}
+                >
+                  ×
+                </button>
+              ) : null}
+            </div>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={addEntry}
+          style={{
+            marginTop: 8,
+            background: "none",
+            border: "none",
+            color: "#2563eb",
+            fontSize: "0.85rem",
+            fontWeight: 600,
+            cursor: "pointer",
+            padding: "4px 0",
+          }}
+        >
+          + Add another
+        </button>
       </div>
     );
   }

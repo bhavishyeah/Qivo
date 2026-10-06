@@ -1,0 +1,24 @@
+## Build results — MULTI_ENTRY implementation
+
+### API type-check
+Command: pnpm exec tsc --project tsconfig.json --noEmit
+Result: Exit code 0, no errors.
+
+### Web build
+Command: pnpm run build
+Result: Exit code 0, Vite built successfully in ~12.75s.
+  dist/index.html                            0.66 kB
+  dist/assets/index-BKRs0yxy.css            33.34 kB
+  dist/assets/FormReportsPage-tlF6qGZO.js  396.47 kB
+  dist/assets/index-x4YM86ng.js            695.16 kB
+
+Both checks pass with zero TypeScript errors.
+
+### Files changed
+- apps/web/src/types/index.ts — added "MULTI_ENTRY" to QuestionType union
+- apps/api/src/modules/forms/form.schemas.ts — added "MULTI_ENTRY" to questionTypeSchema Zod enum
+- apps/api/src/modules/forms/form.service.ts — added "MULTI_ENTRY" to local QuestionType union; added MULTI_ENTRY case in validateAnswerAgainstQuestion; fixed required-answer check in submitFormResponse
+- apps/web/src/pages/FormEditorPage.tsx — added MULTI_ENTRY: "Multi-Entry" to QUESTION_TYPE_LABELS; added static preview block
+- apps/web/src/pages/PublicFormPage.tsx — added MULTI_ENTRY branch in QuestionField; fixed validateSection and validateAll emptiness checks
+- apps/web/src/pages/FormPreviewPage.tsx — added MULTI_ENTRY branch in PreviewQuestion
+- apps/web/src/pages/FormReportsPage.tsx — added "MULTI_ENTRY" to local QuestionType union

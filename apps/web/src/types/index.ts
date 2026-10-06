@@ -11,7 +11,8 @@ export type QuestionType =
   | "PHONE"
   | "URL"
   | "FILE_UPLOAD"
-  | "LINEAR_SCALE";
+  | "LINEAR_SCALE"
+  | "MULTI_ENTRY";
 
 export type QuestionOption = {
   value: string;

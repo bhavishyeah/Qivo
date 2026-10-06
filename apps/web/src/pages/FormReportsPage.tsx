@@ -52,7 +52,7 @@ function renderSampleAnswer(answer: string) {
 type QuestionType =
   | "SHORT_TEXT" | "LONG_TEXT" | "EMAIL" | "NUMBER" | "DATE"
   | "SINGLE_CHOICE" | "MULTIPLE_CHOICE" | "RATING" | "YES_NO"
-  | "PHONE" | "URL" | "FILE_UPLOAD" | "LINEAR_SCALE";
+  | "PHONE" | "URL" | "FILE_UPLOAD" | "LINEAR_SCALE" | "MULTI_ENTRY";
 
 type BaseReport = {
   questionId: string;

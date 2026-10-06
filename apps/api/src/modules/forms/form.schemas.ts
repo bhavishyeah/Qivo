@@ -41,6 +41,7 @@ const questionTypeSchema = z.enum([
   "URL",
   "FILE_UPLOAD",
   "LINEAR_SCALE",
+  "MULTI_ENTRY",
 ]);
 
 const questionOptionSchema = z.object({

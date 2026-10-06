@@ -45,6 +45,7 @@ const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
   URL: "URL",
   FILE_UPLOAD: "File upload",
   LINEAR_SCALE: "Linear scale",
+  MULTI_ENTRY: "Multi-Entry",
 };
 
 const CHOICE_TYPES = new Set<QuestionType>(["SINGLE_CHOICE", "MULTIPLE_CHOICE"]);
@@ -1385,6 +1386,38 @@ function QuestionCard({
                 <p className="muted" style={{marginTop: 6, fontSize: "0.75rem"}}>
                   Select which file types respondents may upload.
                 </p>
+              </div>
+            ) : null}
+
+            {/* Multi-entry preview */}
+            {question.type === "MULTI_ENTRY" ? (
+              <div style={{ marginTop: 14 }}>
+                <div style={{ display: "grid", gap: 8 }}>
+                  <input
+                    type="text"
+                    disabled
+                    placeholder="Entry 1"
+                    style={{
+                      border: "1px solid #cbd5e1",
+                      borderRadius: 10,
+                      padding: "10px 12px",
+                      background: "#f8fafc",
+                      color: "#94a3b8",
+                      width: "100%",
+                    }}
+                  />
+                </div>
+                <span
+                  style={{
+                    display: "inline-block",
+                    marginTop: 8,
+                    fontSize: "0.82rem",
+                    color: "#94a3b8",
+                    cursor: "default",
+                  }}
+                >
+                  + Add another
+                </span>
               </div>
             ) : null}
 

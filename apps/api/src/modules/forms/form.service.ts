@@ -22,7 +22,8 @@ type QuestionType =
   | "PHONE"
   | "URL"
   | "FILE_UPLOAD"
-  | "LINEAR_SCALE";
+  | "LINEAR_SCALE"
+  | "MULTI_ENTRY";
 
 type FormQuestionOption = {
   value: string;
@@ -1254,6 +1255,15 @@ function validateAnswerAgainstQuestion(
       if (!isString || !/^https?:\/\//.test(value)) return "expected a file URL";
       return null;
 
+    case "MULTI_ENTRY":
+      if (!isArray) return "expected an array of text entries";
+      for (const item of value) {
+        if (typeof item !== "string") return "expected an array of text entries";
+        if (item.trim() === "") return "entries must not be blank";
+        if (item.length > MAX_TEXT_LEN) return "answer is too long";
+      }
+      return null;
+
     default:
       return null;
   }
@@ -1476,15 +1486,24 @@ export async function submitFormResponse(
   }
 
   const missingRequiredQuestion =
-    questions.find(
-      (question) =>
-        question.required &&
-        isQuestionVisible(question) &&
-        (input.answers[question.id] ===
-          undefined ||
-          input.answers[question.id] === null ||
-          input.answers[question.id] === ""),
-    );
+    questions.find((question) => {
+      if (!question.required) return false;
+      if (!isQuestionVisible(question)) return false;
+      const answer = input.answers[question.id];
+      if (question.type === "MULTI_ENTRY") {
+        return (
+          !Array.isArray(answer) ||
+          (answer as unknown[]).every(
+            (v) => v === "" || v === null || v === undefined,
+          )
+        );
+      }
+      return (
+        answer === undefined ||
+        answer === null ||
+        answer === ""
+      );
+    });
 
   if (missingRequiredQuestion) {
     const error = new Error(
