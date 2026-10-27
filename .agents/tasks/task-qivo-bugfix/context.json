@@ -1,0 +1,31 @@
+{
+  "project_type": "pnpm monorepo: React 19 + Vite SPA (apps/web) and Express 5 + Prisma 7 API (apps/api)",
+  "language": "TypeScript (ESM, NodeNext). API tsconfig is strict with noUncheckedIndexedAccess + exactOptionalPropertyTypes + verbatimModuleSyntax; use .js extensions on relative imports.",
+  "build_system": "pnpm workspaces. API builds with tsc (plain). Web builds with 'tsc -b && vite build'. Root scripts: typecheck = api tsc --noEmit then web tsc --noEmit.",
+  "test_framework": "No unit test framework is configured (apps/api test script is a placeholder 'exit 1'; apps/web has eslint only). Verification is the TypeScript typecheck/build plus manual code-trace of the save/load round trip and auth token delivery.",
+  "build_command": "API: (in c:/Qivo/apps/api) pnpm exec tsc --project tsconfig.json --noEmit. WEB: (in c:/Qivo/apps/web) pnpm exec tsc -b --noEmit (equivalently pnpm build).",
+  "test_command": "Same as build_command — typecheck IS the gate. No test runner exists.",
+  "verification_instructions": "1) In c:/Qivo/apps/api run `pnpm exec tsc --project tsconfig.json --noEmit` — must exit 0. 2) In c:/Qivo/apps/web run `pnpm exec tsc -b --noEmit` — must exit 0. IMPORTANT: the web tsconfig.json is a solution file with \"files\": [] and project references, so `tsc --project tsconfig.json --noEmit` compiles nothing — you MUST use build mode `-b`. Both baselines pass clean before any edits. 3) For CRITICAL-1, trace by reading code: datetime-local value -> toISOString() on save -> stored ISO -> toDatetimeLocal() on load. 4) For HIGH-2, read the handlers and confirm login/signup/google still return token in the JSON body and logout still deletes the DB session.",
+  "snapshot_or_generated_files": "None relevant to these edits. Prisma client is generated under apps/api/src/generated/prisma; no schema change is made by this task (CLOSED enum already exists). Do not run prisma migrate.",
+  "environment_constraints": "Windows + PowerShell. Do not start the dev servers. Do not push. Commit locally only. Do not run prisma migrate dev (no DB connection expected).",
+  "contribution_requirements": "No AGENTS.md/CONTRIBUTING at repo root. DEPLOY.md documents env vars (SESSION_COOKIE_NAME, SESSION_DAYS both documented and operator-settable) and the Vercel(web) -> Railway(api) -> Supabase topology. Keep edits minimal and localized; no unrelated refactors.",
+  "key_patterns": "env values are centralized in apps/api/src/config/env.ts (env.SESSION_COOKIE_NAME default 'qivo_session'; env.SESSION_DAYS parsed as Number default 30). Auth uses a localStorage Bearer token (apps/web/src/lib/api.ts never sets credentials:'include'); login/signup/google all return { token, user, workspace } in the response body. Scheduled publish runs via publishDueForms() on a 60s setInterval in server.ts (runPublishSweep). getFormSchema(f.schema).settings holds scheduledPublishAt/scheduledCloseAt. FormStatus enum includes CLOSED; closeForm() already sets status:'CLOSED'. The QuestionType union is defined (not yet exported) in form.service.ts and mirrored by questionTypeSchema (z.enum) in form.schemas.ts.",
+  "relevant_files": [
+    "apps/web/src/pages/FormEditorPage.tsx (CRITICAL-1: state load ~L143-144, save payload ~L585-586, datetime-local inputs ~L1043-1044)",
+    "apps/web/src/pages/FormPreviewPage.tsx (HIGH-1: handleInputChange ~L47-51)",
+    "apps/web/src/pages/PublicFormPage.tsx (HIGH-1 reference: correct number handling ~L120-137)",
+    "apps/api/src/config/env.ts (SESSION_COOKIE_NAME, SESSION_DAYS already exposed)",
+    "apps/api/src/middleware/auth.ts (HIGH-3/HIGH-2: cookie read ~L26)",
+    "apps/api/src/modules/auth/auth.routes.ts (HIGH-3/HIGH-2: res.cookie/clearCookie on signup/login/google/logout)",
+    "apps/api/src/config/cookie.ts (HIGH-2: getSessionCookieOptions/getClearCookieOptions become unused in routes; keep the file)",
+    "apps/api/src/modules/auth/auth.service.ts (MEDIUM-2: const SESSION_DAYS=30 L11, createSessionExpiry)",
+    "apps/api/src/modules/auth/google.service.ts (MEDIUM-2: const SESSION_DAYS=30 L19, createSessionExpiry)",
+    "apps/api/src/modules/forms/form.service.ts (MEDIUM-1: publishDueForms ~L1333, close check ~L1415; MEDIUM-4: QuestionType union ~L12)",
+    "apps/api/src/server.ts (MEDIUM-1: runPublishSweep + setInterval ~L34-45)",
+    "apps/api/src/modules/forms/templates.ts (MEDIUM-3: event-registration Phone Number; MEDIUM-4: TemplateQuestion.type is string)",
+    "apps/api/src/modules/forms/form.routes.ts (MEDIUM-4: /from-template handler, q.type as any ~L154)",
+    "apps/api/src/modules/forms/form.schemas.ts (CRITICAL-1 context: updateFormSettingsSchema scheduledPublishAt/scheduledCloseAt z.string().datetime() L9-10 — DO NOT change)",
+    "prisma/schema.prisma (FormStatus enum includes CLOSED L28)"
+  ],
+  "directory_structure": "c:/Qivo root has package.json, DEPLOY.md, prisma/. apps/api/src has config/, middleware/, db/, modules/{auth,forms,...}, services/, server.ts, app.ts. apps/web/src has pages/, lib/, components/. Artifacts live under c:/Qivo/.agents/tasks/ (never inside a commit)."
+}

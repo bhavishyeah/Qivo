@@ -1,0 +1,27 @@
+{
+  "verdict": "APPROVED",
+  "findings": [
+    {
+      "id": 1,
+      "severity": "NIT",
+      "location": "Feature 2, \u00a72.5 step 4 vs step 7",
+      "problem": "Step 4 loads the response but does not pin the columns the query must return; step 7 reads existing.metadata. A narrow select would leave metadata absent. Intent is clear but not pinned to the design's usual precision.",
+      "fix": "Pin the load: prisma.formResponse.findFirst({ where: { id: responseId, formId: form.id }, select: { id: true, metadata: true, submittedAt: true } }); throw RESPONSE_NOT_FOUND (404) when null. answers come from the request body, not the row."
+    },
+    {
+      "id": 2,
+      "severity": "NIT",
+      "location": "\u00a71.7 and Files touched summary",
+      "problem": "apps/web/src/lib/upload.ts already exists and exports maybeCompressImage and isImageUrl (consumed by PublicFormPage). The design phrases it as if net-new, risking a scaffold that clobbers existing exports.",
+      "fix": "Reword to 'extend existing src/lib/upload.ts (currently exports maybeCompressImage, isImageUrl) with uploadToCloudinary(slug, file, onProgress?), reusing maybeCompressImage already in that module and publicPost from src/lib/api.ts.'"
+    },
+    {
+      "id": 3,
+      "severity": "NIT",
+      "location": "Feature 2, \u00a72.5 step 6 (validateSubmission extraction)",
+      "problem": "isQuestionVisible is currently a nested closure over input.answers inside submitFormResponse (form.service.ts ~1676-1706). Extracting the three gates into validateSubmission(schema, answers) requires moving/parameterizing that closure, which the design does not call out.",
+      "fix": "Add: 'isQuestionVisible closes over input.answers; move it inside validateSubmission (or give it an explicit answers param) so the helper is self-contained. Operator logic copied verbatim \u2014 no behavior change.'"
+    }
+  ],
+  "reviewDoc": "c:\\Qivo\\.agents\\tasks\\polish-batch\\design-review.md"
+}

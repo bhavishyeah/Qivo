@@ -1,0 +1,12 @@
+{
+  "verdict": "APPROVED",
+  "findings": [
+    {
+      "severity": "minor",
+      "location": "apps/api/src/modules/forms/form.service.ts ~line 2125",
+      "title": "MULTI_ENTRY report sample stringification",
+      "description": "getFormReport has no explicit MULTI_ENTRY branch, so it falls through to the generic text bucket where String(answer) on a string[] produces a comma-joined string like 'Alice,Bob' as a single sample entry rather than two separate rows. The answered/skipped counters are correct (isAnswered handles non-empty arrays properly), but the per-entry breakdown in the Reports UI is lost. Fix: add an explicit MULTI_ENTRY branch before the text fallthrough that flatMaps the arrays into individual strings. One-liner: `const sample = answers.flatMap(a => Array.isArray(a) ? a : [String(a)]).filter(s => typeof s === 'string' && s.trim() !== '').slice(0, 20);`"
+    }
+  ],
+  "reviewDoc": "c:\\Qivo\\.agents\\tasks\\review.md"
+}

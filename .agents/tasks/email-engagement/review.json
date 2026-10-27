@@ -1,0 +1,18 @@
+{
+  "verdict": "APPROVED",
+  "findings": [
+    {
+      "label": "Owner-authored title not HTML-escaped in email bodies",
+      "confidence": "possible",
+      "blocking": false,
+      "detail": "formTitle is interpolated raw into the HTML of all three new email builders. It is owner-authored and identical to the pre-existing email.ts templates (e.g. sendFormShareExistingUserEmail) the design said to mirror, so it is consistent-with-existing, not a regression. Optional hardening, not blocking."
+    },
+    {
+      "label": "Per-submit owner lookup on immediate path",
+      "confidence": "possible",
+      "blocking": false,
+      "detail": "The immediate-notify block does its own prisma.user.findUnique on every submission instead of selecting the owner email alongside the initial form fetch. Matches the design's A.1 text and is negligible at current scale; could fold the owner select into the form fetch later. Not blocking."
+    }
+  ],
+  "reviewDoc": "c:\\Qivo\\.agents\\tasks\\email-engagement\\review.md"
+}

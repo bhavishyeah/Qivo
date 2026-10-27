@@ -1,0 +1,24 @@
+{
+  "verdict": "APPROVED",
+  "findings": [
+    {
+      "severity": "NIT",
+      "location": "form.schemas.ts — updateFormSettingsSchema / design Settings-field additions",
+      "problem": "updateFormSettingsSchema declares collectEmail, allowMultipleResponses, and confirmationMessage as required (not optional). The design's 'omit to leave untouched' merge behavior applies only to the two genuinely optional new fields; the existing PATCH already requires the other three on every call.",
+      "fix": "Keep responseNotification (z.enum([...]).optional()) and sendConfirmationEmail (z.boolean().optional()) optional as specified; do not loosen the existing required fields."
+    },
+    {
+      "severity": "NIT",
+      "location": "design Decision 4 / Feature B defensive-render table — MULTIPLE_CHOICE",
+      "problem": "MULTIPLE_CHOICE is labeled 'array', but validateAnswerAgainstQuestion accepts it as either an array or a bare string (isArray ? value : [value]), so a single selection can reach the answer blob as a plain string.",
+      "fix": "Render defensively for both shapes: Array.isArray(v) ? v.filter(Boolean).join(', ') : String(v). The plain-string catch-all already covers it, but make the handling explicit."
+    },
+    {
+      "severity": "NIT",
+      "location": "design Feature A.1 — owner lookup for immediate notification",
+      "problem": "The owner lookup selects email without a presence guard. User.email is non-nullable unique in schema.prisma, so the only failure mode is a missing row (already covered by the block's .catch). No correctness issue.",
+      "fix": "Optional: add if (!owner?.email) return; for symmetry with the digest path. Not required."
+    }
+  ],
+  "reviewDoc": "c:\\Qivo\\.agents\\tasks\\email-engagement\\design-review.md"
+}

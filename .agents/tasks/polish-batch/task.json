@@ -1,0 +1,7 @@
+{
+  "task_id": "task-polish-batch",
+  "task_description": "Three polish features for the Qivo form builder, per the APPROVED design at .agents/tasks/polish-batch/design.md: (1) per-form theme / Appearance tab, (2) same-session secure response editing via stateless HMAC edit token, (3) array answers rendered as chips (display only). No Prisma migration. Commit locally only, no push/PR.",
+  "status": "pending",
+  "feature_order": ["FEAT-001", "FEAT-002", "FEAT-003"],
+  "blocked_reason": null
+}

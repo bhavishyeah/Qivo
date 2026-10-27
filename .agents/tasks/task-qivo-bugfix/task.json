@@ -1,0 +1,7 @@
+{
+  "task_id": "task-qivo-bugfix",
+  "task_description": "Prioritized, sequential bug-fix pass on the Qivo form-builder monorepo per the pre-deployment audit. CRITICAL-1 scheduled publish/close datetime format mismatch (client-side fix); HIGH-1 preview NUMBER coercion parity; HIGH-3 SESSION_COOKIE_NAME single source of truth; HIGH-2 remove dead cookie code keeping Bearer/localStorage auth; MEDIUM-1 closeDueForms sweep; MEDIUM-2 SESSION_DAYS from env in both auth services; MEDIUM-3 Event Registration phone field to PHONE; MEDIUM-4 remove q.type as any in template path. No unrelated changes.",
+  "status": "completed",
+  "feature_order": ["FEAT-001", "FEAT-002"],
+  "blocked_reason": null
+}
