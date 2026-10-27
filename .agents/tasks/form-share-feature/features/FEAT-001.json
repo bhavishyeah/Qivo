@@ -1,0 +1,29 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "Data layer: add the FormShare model, FormShareRole + FormShareStatus enums, the FORM_SHARED NotificationType value, and the required relation back-references to prisma/schema.prisma; write the two hand-authored migration folders (the ALTER TYPE ... ADD VALUE isolated in its own folder, the FormShare table in a second); regenerate the Prisma client. This is the foundation: FEAT-002 and FEAT-003 both depend on the regenerated client exporting FormShare/FormShareRole/FormShareStatus/FORM_SHARED. Depends on nothing.",
+  "status": "completed",
+  "steps": [
+    "Edit c:\\Qivo\\prisma\\schema.prisma: add `enum FormShareRole { RESPONDER EDITOR VIEWER }` and `enum FormShareStatus { PENDING ACCEPTED }`.",
+    "Add the `FormShare` model to c:\\Qivo\\prisma\\schema.prisma exactly as in design.md: fields id (cuid), formId, email, userId String?, role FormShareRole, status FormShareStatus @default(PENDING), token String @unique, invitedById, createdAt @default(now()), acceptedAt DateTime?; relations form Form @relation(fields:[formId],references:[id],onDelete:Cascade), user User? @relation(\"FormShareUser\",fields:[userId],references:[id],onDelete:SetNull), invitedBy User @relation(\"FormShareInviter\",fields:[invitedById],references:[id]); `@@unique([formId, email])`, `@@index([formId])`, `@@index([userId])`. Do NOT add `@@index([token])` (the unique already indexes it).",
+    "Add back-references: on `model Form` add `shares FormShare[]`; on `model User` add `formShares FormShare[] @relation(\"FormShareUser\")` and `formSharesInvited FormShare[] @relation(\"FormShareInviter\")`.",
+    "Add `FORM_SHARED` to `enum NotificationType` in c:\\Qivo\\prisma\\schema.prisma.",
+    "Create c:\\Qivo\\prisma\\migrations\\20260926000000_add_form_shared_notification_type\\migration.sql containing ONLY the statement `ALTER TYPE \"NotificationType\" ADD VALUE 'FORM_SHARED';` with the explanatory comment from design.md (standalone so it is not wrapped in a transaction with dependent DDL).",
+    "Create c:\\Qivo\\prisma\\migrations\\20260926000100_add_form_share\\migration.sql with the exact SQL from design.md's Migration 2 block: CREATE TYPE for FormShareRole and FormShareStatus; CREATE TABLE \"FormShare\" (all columns, PK FormShare_pkey); CREATE UNIQUE INDEX FormShare_token_key; CREATE UNIQUE INDEX FormShare_formId_email_key; CREATE INDEX FormShare_formId_idx; CREATE INDEX FormShare_userId_idx; the three ALTER TABLE ADD CONSTRAINT foreign keys (formId CASCADE, userId SET NULL, invitedById RESTRICT), all ON UPDATE CASCADE. Mirror the style of the latest existing migration at c:\\Qivo\\prisma\\migrations\\20260925000000_add_google_id_and_respondent_email\\migration.sql. Do NOT emit FormShare_token_idx.",
+    "Run `pnpm db:generate` from c:\\Qivo to regenerate the client in apps/api/src/generated/prisma."
+  ],
+  "acceptance_criteria": [
+    "`pnpm --filter api exec prisma validate` reports the schema is valid.",
+    "`pnpm db:generate` completes without error.",
+    "The generated client exports FormShare, FormShareRole, FormShareStatus and the NotificationType union includes FORM_SHARED (verifiable by inspecting apps/api/src/generated/prisma).",
+    "Two new migration folders exist with the exact folder names and a single migration.sql each; the enum-value ADD is isolated in its own folder.",
+    "`pnpm --filter api exec tsc --noEmit` still passes (no pre-existing code broke from the schema change)."
+  ],
+  "verification": [
+    "Run `pnpm --filter api exec prisma validate` and confirm it passes.",
+    "Run `pnpm db:generate` and confirm success.",
+    "Run `pnpm --filter api exec tsc --noEmit` and confirm it passes."
+  ],
+  "blocked_reason": null,
+  "findings": "Done. schema.prisma updated: added FormShareRole {RESPONDER,EDITOR,VIEWER} + FormShareStatus {PENDING,ACCEPTED} enums, FormShare model (unique token, @@unique([formId,email]), @@index([formId]), @@index([userId]); NO @@index([token])), back-refs (Form.shares, User.formShares @relation(\"FormShareUser\") + User.formSharesInvited @relation(\"FormShareInviter\")), and FORM_SHARED added to NotificationType. Two migration folders created: 20260926000000_add_form_shared_notification_type (isolated ALTER TYPE ... ADD VALUE) and 20260926000100_add_form_share (CREATE TYPE enums + FormShare table + 4 indexes + 3 FKs: formId CASCADE, userId SET NULL, invitedById RESTRICT, all ON UPDATE CASCADE). Prisma client REGENERATED via `pnpm db:generate` to apps/api/src/generated/prisma — confirmed it exports FormShare, FormShareRole, FormShareStatus and NotificationType now includes FORM_SHARED (FEAT-002/FEAT-003 can import these). Did NOT run pnpm db:migrate. Verification results: `pnpm exec prisma validate` = valid; `pnpm db:generate` = success; `pnpm --filter api exec tsc --noEmit` = pass (exit 0). NOTE on verification command: the spec's `pnpm --filter api exec prisma validate` fails on its own because the project's schema is located via prisma.config.ts at the repo ROOT (schema: 'prisma/schema.prisma'), and --filter api changes cwd to apps/api where prisma can't find the config/schema. Equivalent passing gates used: `pnpm exec prisma validate` from repo root (uses prisma.config.ts) AND `pnpm --filter api exec prisma validate --schema ../../prisma/schema.prisma` — both report valid. Later steps running prisma commands should invoke them from the repo root (or pass --schema), not from apps/api."
+}

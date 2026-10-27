@@ -29,6 +29,17 @@ enum FormStatus {
   ARCHIVED
 }
 
+enum FormShareRole {
+  RESPONDER
+  EDITOR
+  VIEWER
+}
+
+enum FormShareStatus {
+  PENDING
+  ACCEPTED
+}
+
 model User {
   id                  String    @id @default(cuid())
   name                String
@@ -44,12 +55,14 @@ model User {
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
-  sessions      Session[]
-  memberships   WorkspaceMember[]
-  workspaces    Workspace[]       @relation("WorkspaceOwner")
-  forms         Form[]
-  responses     FormResponse[]
-  notifications Notification[]
+  sessions          Session[]
+  memberships       WorkspaceMember[]
+  workspaces        Workspace[]       @relation("WorkspaceOwner")
+  forms             Form[]
+  responses         FormResponse[]
+  notifications     Notification[]
+  formShares        FormShare[]       @relation("FormShareUser")
+  formSharesInvited FormShare[]       @relation("FormShareInviter")
 }
 
 model Session {
@@ -138,6 +151,7 @@ model Form {
   owner     User           @relation(fields: [ownerId], references: [id])
   responses FormResponse[]
   versions  FormVersion[]
+  shares    FormShare[]
 
   @@index([workspaceId])
   @@index([folderId])
@@ -202,6 +216,27 @@ model FormResponse {
   @@index([submittedAt])
 }
 
+model FormShare {
+  id          String          @id @default(cuid())
+  formId      String
+  email       String
+  userId      String?
+  role        FormShareRole
+  status      FormShareStatus @default(PENDING)
+  token       String          @unique
+  invitedById String
+  createdAt   DateTime        @default(now())
+  acceptedAt  DateTime?
+
+  form      Form  @relation(fields: [formId], references: [id], onDelete: Cascade)
+  user      User? @relation("FormShareUser", fields: [userId], references: [id], onDelete: SetNull)
+  invitedBy User  @relation("FormShareInviter", fields: [invitedById], references: [id])
+
+  @@unique([formId, email])
+  @@index([formId])
+  @@index([userId])
+}
+
 enum NotificationType {
   FORM_SUBMITTED_FOR_REVIEW
   FORM_APPROVED
@@ -211,6 +246,7 @@ enum NotificationType {
   MEMBER_INVITED
   MEMBER_REMOVED
   RESPONSE_MILESTONE
+  FORM_SHARED
 }
 
 model Notification {
