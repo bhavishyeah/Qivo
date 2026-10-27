@@ -14,12 +14,13 @@ import {
 } from "recharts";
 import { api, ApiRequestError } from "../lib/api";
 import { isImageUrl } from "../lib/upload";
+import { Chips } from "../components/Chips";
 
 // ─── Report shapes (mirror the API's getFormReport output) ──────────────────
 
 // Render a single text-report sample. File-upload answers are URLs: images
 // become thumbnails, other files become "View file" links, plain text is shown
-// as-is.
+// as a chip.
 function renderSampleAnswer(answer: string) {
   if (/^https?:\/\//.test(answer)) {
     if (isImageUrl(answer)) {
@@ -46,7 +47,7 @@ function renderSampleAnswer(answer: string) {
       </a>
     );
   }
-  return answer;
+  return <Chips items={[answer]} />;
 }
 
 type QuestionType =

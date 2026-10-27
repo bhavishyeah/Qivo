@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import * as XLSX from "xlsx";
 import { api, ApiRequestError } from "../lib/api";
 import { isImageUrl } from "../lib/upload";
+import { Chips } from "../components/Chips";
 import type { FormRecord, Question, ResponseRecord } from "../types";
 
 function formatResponseValue(value: unknown): string {
@@ -20,6 +21,10 @@ function escapeCsvValue(value: unknown): string {
 // Render an answer value; uploaded-file answers are https URLs. Images render
 // as a clickable thumbnail; other files fall back to a "View file" link.
 function renderAnswerValue(value: unknown) {
+  if (Array.isArray(value)) {
+    const items = value.map((v) => String(v).trim()).filter(Boolean);
+    return <Chips items={items} />;
+  }
   if (typeof value === "string" && /^https?:\/\//.test(value)) {
     if (isImageUrl(value)) {
       return (

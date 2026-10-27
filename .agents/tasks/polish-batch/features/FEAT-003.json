@@ -1,0 +1,24 @@
+{
+  "id": "FEAT-003",
+  "type": "feat",
+  "description": "Array answers as chips, display only (design §3). Renders Array.isArray answers as visual chips in ResponseDashboardPage (detail modal) and FormReportsPage (text-report samples) via a reusable Chips component. Exports (CSV/Excel) stay comma-joined; single-string selections stay plain text. Fully independent of FEAT-001/FEAT-002 — touches only web display files + a new component + its test.",
+  "status": "completed",
+  "steps": [
+    "Reusable component (§3.2): new apps/web/src/components/Chips.tsx — `Chips({ items: string[] })` rendering a `—` span for an empty array, else index-keyed inline pill chips (indigo background #eef2ff, color #3730a3, borderRadius 999, fontSize 0.8rem, fontWeight 600, overflowWrap 'anywhere') inside a flex-wrap container.",
+    "ResponseDashboardPage (§3.3): in renderAnswerValue add an `Array.isArray(value)` branch at the TOP → `<Chips items={value.map(v => String(v).trim()).filter(Boolean)} />`. Do NOT modify formatResponseValue, downloadResponsesCsv, or downloadResponsesExcel (exports must stay comma-joined). The existing http-URL thumbnail/link branch and formatResponseValue fallback remain for non-array values.",
+    "FormReportsPage (§3.3): update the `report.sample.map(...)` render block so each non-URL sample renders via `<Chips items={[answer]} />`, keeping renderSampleAnswer's URL/file thumbnail+link handling for URL samples (wrap only the plain-text case in a chip).",
+    "Component unit test (§3.5): new apps/web/src/components/Chips.test.tsx — renders N chips for N items, `—` for an empty array, coerces non-string members; if easily importable, also assert formatResponseValue still comma-joins arrays."
+  ],
+  "acceptance_criteria": [
+    "`cd apps/web && pnpm exec tsc -b --noEmit` exits 0.",
+    "`cd apps/web && pnpm test` passes including Chips.test.tsx.",
+    "An array-valued answer renders as chips in the response detail modal and as chips in report text samples; a plain-string answer renders as plain text (unchanged); CSV/Excel export of the same response still contains a comma-joined cell.",
+    "No Prisma migration was created."
+  ],
+  "verification": [
+    "cd apps/web && pnpm exec tsc -b --noEmit && pnpm test",
+    "cd apps/web && pnpm build"
+  ],
+  "blocked_reason": null,
+  "findings": "Implemented per design §3. New apps/web/src/components/Chips.tsx (indigo pills, em-dash for empty array, overflow-wrap:anywhere). ResponseDashboardPage.renderAnswerValue gains an Array.isArray(value) branch at the TOP mapping/trimming/filtering to <Chips>; formatResponseValue and both export paths (CSV/Excel) left comma-joined and untouched. FormReportsPage.renderSampleAnswer now returns <Chips items={[answer]} /> for the plain-text case while keeping the http-URL image-thumbnail/View-file-link branches. Single-string selections stay plain text (array-only test). No Prisma migration.\n\nTest-infra note: the test is named Chips.test.tsx per the design's Files-touched list, but apps/web/vitest.config.ts only globbed src/**/*.test.ts, so I widened include to also match src/**/*.test.tsx (one-line config change). The web vitest environment is node (no DOM) and @testing-library/react is NOT installed; the test renders via react-dom/server renderToStaticMarkup (react-dom already a dependency) and asserts on the static HTML string — no new deps added. formatResponseValue is a module-local (non-exported) function in ResponseDashboardPage, so the optional 'assert formatResponseValue still comma-joins' sub-assertion was skipped to avoid changing the page's exports; the comma-joined export behavior is instead guaranteed by leaving formatResponseValue/downloadResponsesCsv/downloadResponsesExcel byte-unchanged.\n\nVerification: `cd apps/web && pnpm exec tsc -b --noEmit` exit 0; `pnpm test` 29 passed (incl. 4 Chips tests); `pnpm build` succeeded (pre-existing >500kB chunk-size advisory only, not an error)."
+}
