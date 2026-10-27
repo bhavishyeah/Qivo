@@ -45,7 +45,21 @@ export default function FormPreviewPage() {
   }
 
   function handleInputChange(questionId: string, event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) {
-    updateAnswer(questionId, event.target.type === "number" ? Number(event.target.value) : event.target.value);
+    const rawValue = event.target.value;
+    if (event.target.type === "number") {
+      // An empty number input must stay "unanswered" (empty string), not become
+      // 0 — otherwise a cleared required field silently passes validation and
+      // submits 0. Non-numeric intermediate input is also kept as-is rather than
+      // coerced to NaN.
+      if (rawValue === "") {
+        updateAnswer(questionId, "");
+      } else {
+        const parsed = Number(rawValue);
+        updateAnswer(questionId, Number.isNaN(parsed) ? "" : parsed);
+      }
+      return;
+    }
+    updateAnswer(questionId, rawValue);
   }
 
   if (loading) {

@@ -51,6 +51,25 @@ const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
 const CHOICE_TYPES = new Set<QuestionType>(["SINGLE_CHOICE", "MULTIPLE_CHOICE"]);
 const RATING_TYPES = new Set<QuestionType>(["RATING", "LINEAR_SCALE"]);
 
+// Convert a datetime-local value (local wall-clock, no timezone) into a full
+// ISO instant (…Z) the backend's z.string().datetime() accepts. Empty or
+// invalid input becomes null.
+function toIsoInstant(local: string): string | null {
+  if (!local) return null;
+  const d = new Date(local);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+// Convert a stored ISO instant back into the YYYY-MM-DDTHH:mm shape a
+// datetime-local input expects, in the viewer's local timezone. Empty or
+// invalid input becomes "".
+function toDatetimeLocal(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function FormEditorPage() {
@@ -140,8 +159,8 @@ export default function FormEditorPage() {
         setCollectEmail(schema.settings?.collectEmail ?? false);
         setAllowMultipleResponses(schema.settings?.allowMultipleResponses ?? true);
         setConfirmationMessage(schema.confirmationMessage ?? "");
-        setScheduledPublishAt(schema.settings?.scheduledPublishAt ?? "");
-        setScheduledCloseAt(schema.settings?.scheduledCloseAt ?? "");
+        setScheduledPublishAt(toDatetimeLocal(schema.settings?.scheduledPublishAt));
+        setScheduledCloseAt(toDatetimeLocal(schema.settings?.scheduledCloseAt));
         setQuizMode(schema.settings?.quizMode ?? false);
         setShowScore(schema.settings?.showScore ?? false);
       } catch (err) {
@@ -582,8 +601,8 @@ export default function FormEditorPage() {
           collectEmail,
           allowMultipleResponses,
           confirmationMessage,
-          scheduledPublishAt: scheduledPublishAt || null,
-          scheduledCloseAt: scheduledCloseAt || null,
+          scheduledPublishAt: toIsoInstant(scheduledPublishAt),
+          scheduledCloseAt: toIsoInstant(scheduledCloseAt),
           quizMode,
           showScore,
         },

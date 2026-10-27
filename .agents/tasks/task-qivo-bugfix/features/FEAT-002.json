@@ -1,0 +1,23 @@
+{
+  "id": "FEAT-002",
+  "type": "fix",
+  "description": "Web-side fixes (independent of FEAT-001, which is API-only — no shared files). Covers CRITICAL-1 (scheduled publish/close datetime format mismatch, client-side boundary conversion only — do NOT change the backend Zod schema) and HIGH-1 (preview NUMBER coercion parity with the public form).",
+  "status": "completed",
+  "steps": [
+    "CRITICAL-1 helpers: In apps/web/src/pages/FormEditorPage.tsx add two module-scope helpers near the top. toIsoInstant(local: string): string | null -> `if (!local) return null; const d = new Date(local); return Number.isNaN(d.getTime()) ? null : d.toISOString();`. toDatetimeLocal(iso: string | null | undefined): string -> `if (!iso) return \"\"; const d = new Date(iso); if (Number.isNaN(d.getTime())) return \"\"; return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);`.",
+    "CRITICAL-1 on load (~L143-144): change `setScheduledPublishAt(schema.settings?.scheduledPublishAt ?? \"\");` to `setScheduledPublishAt(toDatetimeLocal(schema.settings?.scheduledPublishAt));` and `setScheduledCloseAt(schema.settings?.scheduledCloseAt ?? \"\");` to `setScheduledCloseAt(toDatetimeLocal(schema.settings?.scheduledCloseAt));`.",
+    "CRITICAL-1 on save (~L585-586): change `scheduledPublishAt: scheduledPublishAt || null,` to `scheduledPublishAt: toIsoInstant(scheduledPublishAt),` and `scheduledCloseAt: scheduledCloseAt || null,` to `scheduledCloseAt: toIsoInstant(scheduledCloseAt),`. Leave the datetime-local inputs (~L1043-1044) and the backend schema untouched.",
+    "HIGH-1 preview parity: In apps/web/src/pages/FormPreviewPage.tsx replace the body of handleInputChange (~L47-51) so it matches PublicFormPage.tsx (~L120-137) exactly: for a number input, empty string stays \"\" (unanswered); otherwise parse with Number and if NaN store \"\" else the parsed number; non-number inputs pass the raw value through. Read PublicFormPage's handleInputChange first and replicate its logic precisely."
+  ],
+  "acceptance_criteria": [
+    "In c:/Qivo/apps/web, `pnpm exec tsc -b --noEmit` exits 0.",
+    "FormEditorPage save sends a full ISO instant (…Z) or null for scheduledPublishAt/scheduledCloseAt; load reformats a stored ISO string back to YYYY-MM-DDTHH:mm local for the datetime-local input; invalid dates become null/empty.",
+    "FormPreviewPage handleInputChange number handling matches PublicFormPage: cleared number field -> \"\", non-numeric -> \"\", valid -> number."
+  ],
+  "verification": [
+    "cd c:/Qivo/apps/web && pnpm exec tsc -b --noEmit  (expect exit 0; NOTE build mode -b is required, the solution-style tsconfig.json has files:[] so --project alone typechecks nothing)",
+    "Code-trace the CRITICAL-1 round trip: datetime-local -> toIsoInstant -> stored ISO (accepted by z.string().datetime()) -> toDatetimeLocal -> datetime-local."
+  ],
+  "blocked_reason": null,
+  "findings": "CRITICAL-1: Added module-scope helpers toIsoInstant(local): string | null and toDatetimeLocal(iso): string in FormEditorPage.tsx (placed right after CHOICE_TYPES/RATING_TYPES constants). Wired them into on-load state (setScheduledPublishAt/setScheduledCloseAt via toDatetimeLocal) and into the save payload (scheduledPublishAt/scheduledCloseAt via toIsoInstant). datetime-local inputs and the backend Zod schema (z.string().datetime()) were left untouched. HIGH-1: Replaced FormPreviewPage.tsx handleInputChange body to match PublicFormPage.tsx exactly — number inputs: empty -> \"\", NaN -> \"\", valid -> parsed number; non-number inputs pass raw value through. Verification: pnpm exec tsc -b --noEmit exits 0."
+}
