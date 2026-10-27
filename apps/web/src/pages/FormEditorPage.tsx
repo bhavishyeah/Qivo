@@ -9,6 +9,13 @@ import {
 import { Link, useParams } from "react-router-dom";
 import { api, ApiRequestError } from "../lib/api";
 import { PIPING_TOKEN_RE } from "../lib/piping";
+import { uploadToCloudinary } from "../lib/upload";
+import {
+  DEFAULT_ACCENT,
+  ensureFontLoaded,
+  FONT_ALLOW_LIST,
+  resolveTheme,
+} from "../lib/theme";
 import type { FormRecord, Question, QuestionOption, QuestionType, ConditionRule } from "../types";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -118,6 +125,14 @@ export default function FormEditorPage() {
   const [sendConfirmationEmail, setSendConfirmationEmail] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
 
+  // Appearance (per-form theme). "" means inherit / default.
+  const [coverImageUrl, setCoverImageUrl] = useState("");
+  const [accentColor, setAccentColor] = useState("");
+  const [backgroundColor, setBackgroundColor] = useState("");
+  const [fontFamily, setFontFamily] = useState("");
+  const [uploadingCover, setUploadingCover] = useState(false);
+  const [coverError, setCoverError] = useState("");
+
   // Approval workflow
   const [showReviewPanel, setShowReviewPanel] = useState(false);
   const [reviewers, setReviewers] = useState<MemberRecord[]>([]);
@@ -140,7 +155,7 @@ export default function FormEditorPage() {
   const [titleDraft, setTitleDraft] = useState("");
 
   // Workspace tabs
-  type EditorTab = "builder" | "responses" | "settings";
+  type EditorTab = "builder" | "responses" | "settings" | "appearance";
   const [activeTab, setActiveTab] = useState<EditorTab>("builder");
 
   // ─── Load ──────────────────────────────────────────────────────────────────
@@ -168,6 +183,11 @@ export default function FormEditorPage() {
         setShowScore(schema.settings?.showScore ?? false);
         setResponseNotification(schema.settings?.responseNotification ?? "off");
         setSendConfirmationEmail(schema.settings?.sendConfirmationEmail ?? false);
+        const theme = schema.settings?.theme;
+        setCoverImageUrl(theme?.coverImageUrl ?? "");
+        setAccentColor(theme?.accentColor ?? "");
+        setBackgroundColor(theme?.backgroundColor ?? "");
+        setFontFamily(theme?.fontFamily ?? "");
       } catch (err) {
         setError(err instanceof ApiRequestError ? err.message : "Unable to load editor.");
       } finally {
@@ -595,10 +615,37 @@ export default function FormEditorPage() {
     } finally { setReviewing(false); }
   }
 
+  async function handleCoverUpload(file: File) {
+    if (!form) return;
+    setCoverError("");
+    setUploadingCover(true);
+    try {
+      const url = await uploadToCloudinary(form.slug, file);
+      setCoverImageUrl(url);
+    } catch (err) {
+      setCoverError(
+        err instanceof ApiRequestError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : "Upload failed. Please try again.",
+      );
+    } finally {
+      setUploadingCover(false);
+    }
+  }
+
   async function saveFormSettings(event: { preventDefault: () => void }) {
     event.preventDefault();
     if (!formId) return;
     setSavingSettings(true); setError(""); setMessage("");
+    // Build the theme from set fields only. An empty object clears all theming
+    // back to inherit/default (the API does a whole-object replace on `theme`).
+    const theme: Record<string, string> = {};
+    if (coverImageUrl) theme.coverImageUrl = coverImageUrl;
+    if (accentColor) theme.accentColor = accentColor;
+    if (backgroundColor) theme.backgroundColor = backgroundColor;
+    if (fontFamily) theme.fontFamily = fontFamily;
     try {
       const data = await api.patch<{ form: FormRecord }>(
         `/api/forms/${formId}/settings`,
@@ -612,6 +659,7 @@ export default function FormEditorPage() {
           showScore,
           responseNotification,
           sendConfirmationEmail,
+          theme,
         },
       );
       setForm(data.form); setMessage("Settings saved.");
@@ -772,6 +820,9 @@ export default function FormEditorPage() {
         </button>
         <button type="button" className={`editor-tab ${activeTab === "settings" ? "active" : ""}`} onClick={() => setActiveTab("settings")}>
           Settings
+        </button>
+        <button type="button" className={`editor-tab ${activeTab === "appearance" ? "active" : ""}`} onClick={() => setActiveTab("appearance")}>
+          Appearance
         </button>
       </div>
 
@@ -1079,7 +1130,192 @@ export default function FormEditorPage() {
         </section>
       ) : null}
 
+      {/* ── TAB: Appearance ── */}
+      {activeTab === "appearance" ? (
+        <section className="editor-card settings-card">
+          <div className="editor-card-header">
+            <div><p className="eyebrow">Appearance</p><h2>Theme &amp; branding</h2></div>
+            <button className="secondary-button compact" type="button" onClick={(e) => void saveFormSettings(e)} disabled={savingSettings}>
+              {savingSettings ? "Saving..." : "Save all"}
+            </button>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 320px)", gap: 24 }}>
+            {/* Controls */}
+            <div style={{ display: "grid", gap: 20 }}>
+              {/* Cover image */}
+              <div className="question-field">
+                <label>Cover image</label>
+                <small className="muted" style={{ display: "block", marginBottom: 8 }}>
+                  Shown as a banner at the top of the form.
+                </small>
+                {form.status === "PUBLISHED" ? (
+                  <input
+                    type="file"
+                    accept="image/*"
+                    disabled={uploadingCover}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) void handleCoverUpload(file);
+                      e.target.value = "";
+                    }}
+                  />
+                ) : (
+                  <small className="muted">
+                    Publish the form to upload a cover image, or paste an image URL below.
+                  </small>
+                )}
+                {uploadingCover ? <small className="muted">Uploading…</small> : null}
+                {coverError ? <p className="submit-error" role="alert">{coverError}</p> : null}
+                <input
+                  type="url"
+                  value={coverImageUrl}
+                  onChange={(e) => setCoverImageUrl(e.target.value)}
+                  placeholder="https://example.com/cover.jpg"
+                  style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px", marginTop: 8 }}
+                />
+                {coverImageUrl ? (
+                  <button type="button" className="secondary-button compact" style={{ marginTop: 8 }} onClick={() => setCoverImageUrl("")}>
+                    Remove cover
+                  </button>
+                ) : null}
+              </div>
+
+              {/* Accent color */}
+              <div className="question-field">
+                <label htmlFor="a-accent">Accent color</label>
+                <small className="muted" style={{ display: "block", marginBottom: 8 }}>
+                  Overrides the workspace brand color for this form.
+                </small>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <input
+                    id="a-accent"
+                    type="color"
+                    value={accentColor || DEFAULT_ACCENT}
+                    onChange={(e) => setAccentColor(e.target.value)}
+                  />
+                  <span className="muted">{accentColor || "Inherit workspace color"}</span>
+                  {accentColor ? (
+                    <button type="button" className="secondary-button compact" onClick={() => setAccentColor("")}>
+                      Reset to workspace color
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+
+              {/* Background */}
+              <div className="question-field">
+                <label htmlFor="a-bg">Background color</label>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <input
+                    id="a-bg"
+                    type="color"
+                    value={backgroundColor || "#f8fafc"}
+                    onChange={(e) => setBackgroundColor(e.target.value)}
+                  />
+                  <span className="muted">{backgroundColor || "Default"}</span>
+                  {backgroundColor ? (
+                    <button type="button" className="secondary-button compact" onClick={() => setBackgroundColor("")}>
+                      Reset
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+
+              {/* Font */}
+              <div className="question-field">
+                <label htmlFor="a-font">Font</label>
+                <select
+                  id="a-font"
+                  value={fontFamily}
+                  onChange={(e) => setFontFamily(e.target.value)}
+                  style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }}
+                >
+                  <option value="">Default</option>
+                  {FONT_ALLOW_LIST.map((f) => (
+                    <option key={f} value={f}>{f}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Live preview */}
+            <AppearancePreview
+              title={form.title}
+              coverImageUrl={coverImageUrl}
+              accentColor={accentColor}
+              backgroundColor={backgroundColor}
+              fontFamily={fontFamily}
+            />
+          </div>
+        </section>
+      ) : null}
+
     </main>
+  );
+}
+
+/**
+ * Scaled-down live preview of the public form header + a sample question,
+ * reusing resolveTheme + ensureFontLoaded so it matches the real public form.
+ * It intentionally resolves the per-form theme only (no workspace primaryColor);
+ * the caption notes that the workspace brand color applies on the live form.
+ */
+function AppearancePreview({
+  title,
+  coverImageUrl,
+  accentColor,
+  backgroundColor,
+  fontFamily,
+}: {
+  title: string;
+  coverImageUrl: string;
+  accentColor: string;
+  backgroundColor: string;
+  fontFamily: string;
+}) {
+  const resolved = resolveTheme({
+    ...(coverImageUrl ? { coverImageUrl } : {}),
+    ...(accentColor ? { accentColor } : {}),
+    ...(backgroundColor ? { backgroundColor } : {}),
+    ...(fontFamily ? { fontFamily } : {}),
+  });
+  ensureFontLoaded(fontFamily || undefined);
+  const previewAccent = resolved.accent ?? DEFAULT_ACCENT;
+
+  return (
+    <div>
+      <p className="eyebrow" style={{ marginBottom: 8 }}>Live preview</p>
+      <div
+        style={{
+          border: "1px solid #e2e8f0",
+          borderRadius: 12,
+          padding: 16,
+          background: resolved.background ?? "#ffffff",
+          ...(resolved.fontFamily ? { fontFamily: resolved.fontFamily } : {}),
+        }}
+      >
+        {resolved.coverImageUrl ? (
+          <img
+            src={resolved.coverImageUrl}
+            alt=""
+            style={{ width: "100%", height: "auto", borderRadius: 8, marginBottom: 12, objectFit: "cover" }}
+          />
+        ) : null}
+        <p className="eyebrow" style={{ color: previewAccent, margin: 0 }}>Your workspace</p>
+        <h3 style={{ margin: "4px 0 12px" }}>{title || "Form title"}</h3>
+        <div className="question-field" style={{ marginBottom: 12 }}>
+          <label><span className="question-label">Sample question</span></label>
+          <input type="text" placeholder="Your answer..." disabled style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }} />
+        </div>
+        <button type="button" className="submit-button" style={{ background: previewAccent, maxWidth: 200 }} disabled>
+          Submit response
+        </button>
+      </div>
+      <small className="muted" style={{ display: "block", marginTop: 8 }}>
+        Workspace brand color is applied on the live form.
+      </small>
+    </div>
   );
 }
 

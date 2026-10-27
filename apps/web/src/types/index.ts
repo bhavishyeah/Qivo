@@ -55,6 +55,13 @@ export type Section = {
   questions: Question[];
 };
 
+export type FormTheme = {
+  coverImageUrl?: string;
+  accentColor?: string;
+  backgroundColor?: string;
+  fontFamily?: string;
+};
+
 export type FormSchema = {
   version: number;
   sections: Section[];
@@ -67,6 +74,9 @@ export type FormSchema = {
     showScore?: boolean;
     responseNotification?: "off" | "immediate" | "daily";
     sendConfirmationEmail?: boolean;
+    theme?: FormTheme;
+    responseEditing?: "disabled" | "timed" | "until_close";
+    responseEditMinutes?: number;
   };
   confirmationMessage?: string;
 };

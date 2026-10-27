@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { api, ApiRequestError } from "../lib/api";
 import { evaluateConditions } from "../lib/conditions";
 import { resolvePipedLabel } from "../lib/piping";
+import { DEFAULT_ACCENT, ensureFontLoaded, resolveTheme } from "../lib/theme";
 import type { AnswerValue, FormRecord, Question } from "../types";
 
 /**
@@ -92,9 +93,36 @@ export default function FormPreviewPage() {
     );
   }
 
+  // FormRecord carries no workspace branding, so the preview resolves the
+  // per-form theme only. Buttons use `accent ?? DEFAULT_ACCENT` because the
+  // scaled custom container has no `.submit-button` CSS default to inherit.
+  const resolved = resolveTheme(form.schema.settings.theme);
+  ensureFontLoaded(form.schema.settings.theme?.fontFamily);
+  const previewAccent = resolved.accent ?? DEFAULT_ACCENT;
+
   return (
-    <main className="public-form-shell">
+    <main
+      className="public-form-shell"
+      style={{
+        ...(resolved.background ? { background: resolved.background } : {}),
+        ...(resolved.fontFamily ? { fontFamily: resolved.fontFamily } : {}),
+      }}
+    >
       <div className="public-form-wrap">
+        {resolved.coverImageUrl ? (
+          <img
+            className="public-form-cover"
+            src={resolved.coverImageUrl}
+            alt=""
+            style={{
+              width: "100%",
+              height: "auto",
+              borderRadius: 12,
+              marginBottom: 16,
+              objectFit: "cover",
+            }}
+          />
+        ) : null}
         {/* Preview banner */}
         <div
           style={{
@@ -131,7 +159,7 @@ export default function FormPreviewPage() {
 
         {/* Header */}
         <header className="public-form-header">
-          <p className="eyebrow">Qivo Form (Preview)</p>
+          <p className="eyebrow" style={{ color: previewAccent }}>Qivo Form (Preview)</p>
           <h1 className="public-form-title">{form.title}</h1>
           {form.description ? <p className="public-form-description">{form.description}</p> : null}
           {totalSections > 1 ? (
@@ -173,14 +201,17 @@ export default function FormPreviewPage() {
               <button type="button" className="secondary-button" onClick={() => setCurrentSection((i) => i - 1)}>← Back</button>
             ) : <span />}
             {currentSection < totalSections - 1 ? (
-              <button type="button" className="submit-button" style={{ maxWidth: 240 }} onClick={() => setCurrentSection((i) => i + 1)}>Next →</button>
+              <button type="button" className="submit-button" style={{ maxWidth: 240, background: previewAccent }} onClick={() => setCurrentSection((i) => i + 1)}>Next →</button>
             ) : (
-              <button type="button" className="submit-button" style={{ maxWidth: 240, opacity: 0.7 }} disabled>Submit (preview only)</button>
+              <button type="button" className="submit-button" style={{ maxWidth: 240, opacity: 0.7, background: previewAccent }} disabled>Submit (preview only)</button>
             )}
           </div>
         </div>
 
         <p className="public-form-brand">Preview mode — this is what respondents will see</p>
+        <p className="muted" style={{ textAlign: "center", fontSize: "0.8rem", marginTop: 4 }}>
+          Workspace brand color is applied on the live form.
+        </p>
       </div>
     </main>
   );

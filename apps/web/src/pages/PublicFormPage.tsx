@@ -9,7 +9,8 @@ import { useParams } from "react-router-dom";
 import { publicGet, publicPost, ApiRequestError } from "../lib/api";
 import { evaluateConditions } from "../lib/conditions";
 import { resolvePipedLabel } from "../lib/piping";
-import { isImageUrl, maybeCompressImage } from "../lib/upload";
+import { isImageUrl, uploadToCloudinary } from "../lib/upload";
+import { ensureFontLoaded, resolveTheme } from "../lib/theme";
 import type { AnswerValue, PublicForm, Question, Section } from "../types";
 
 // ─── File type helpers ────────────────────────────────────────────────────────
@@ -318,9 +319,35 @@ export default function PublicFormPage() {
   const isLastSection = currentSectionIndex === totalSections - 1;
   const isFirstSection = currentSectionIndex === 0;
 
+  const resolved = resolveTheme(
+    form.schema.settings.theme,
+    form.branding?.primaryColor,
+  );
+  ensureFontLoaded(form.schema.settings.theme?.fontFamily);
+
   return (
-    <main className="public-form-shell">
+    <main
+      className="public-form-shell"
+      style={{
+        ...(resolved.background ? { background: resolved.background } : {}),
+        ...(resolved.fontFamily ? { fontFamily: resolved.fontFamily } : {}),
+      }}
+    >
       <div className="public-form-wrap">
+        {resolved.coverImageUrl ? (
+          <img
+            className="public-form-cover"
+            src={resolved.coverImageUrl}
+            alt=""
+            style={{
+              width: "100%",
+              height: "auto",
+              borderRadius: 12,
+              marginBottom: 16,
+              objectFit: "cover",
+            }}
+          />
+        ) : null}
         {/* Progress bar */}
         {isMultiSection ? (
           <div className="public-progress-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progressPercent}>
@@ -340,7 +367,7 @@ export default function PublicFormPage() {
               style={{ height: 40, width: "auto", borderRadius: 8, marginBottom: 12 }}
             />
           ) : null}
-          <p className="eyebrow" style={form.branding?.primaryColor ? { color: form.branding.primaryColor } : undefined}>
+          <p className="eyebrow" style={resolved.accent ? { color: resolved.accent } : undefined}>
             {form.branding?.workspaceName ?? "Qivo Form"}
           </p>
           <h1 className="public-form-title">{form.title}</h1>
@@ -427,7 +454,7 @@ export default function PublicFormPage() {
               <button
                 type="button"
                 className="submit-button"
-                style={{ flex: 1, maxWidth: 240, ...(form.branding?.primaryColor ? { background: form.branding.primaryColor } : {}) }}
+                style={{ flex: 1, maxWidth: 240, ...(resolved.accent ? { background: resolved.accent } : {}) }}
                 onClick={handleNext}
               >
                 Next →
@@ -436,7 +463,7 @@ export default function PublicFormPage() {
               <button
                 className="submit-button"
                 type="submit"
-                style={{ flex: 1, maxWidth: 240, ...(form.branding?.primaryColor ? { background: form.branding.primaryColor } : {}) }}
+                style={{ flex: 1, maxWidth: 240, ...(resolved.accent ? { background: resolved.accent } : {}) }}
                 disabled={submitting || allQuestions.length === 0}
               >
                 {submitting ? "Submitting..." : "Submit response"}
@@ -487,66 +514,10 @@ function QuestionField({
     setUploading(true);
     setUploadProgress(0);
     try {
-      // 0) For images, downscale + recompress in the browser before sending.
-      // A phone photo is often several MB; shrinking it to a sane max dimension
-      // cuts the bytes on the wire (the real bottleneck) by an order of
-      // magnitude, so uploads finish far faster. Non-images pass through as-is.
-      const file = await maybeCompressImage(rawFile);
-
-      // 1) Get a short-lived signature from our API (form must be published).
-      const sig = await publicPost<{
-        cloudName: string;
-        apiKey: string;
-        timestamp: number;
-        signature: string;
-        folder: string;
-      }>(`/api/forms/public/${slug}/upload-signature?t=${Date.now()}`, {});
-
-      // 2) Upload straight to Cloudinary (bytes never touch our API). Use XHR so
-      // we can report real upload progress.
-      //
-      // Resource type matters for delivery: real images use "image" (enables
-      // transformations/thumbnails). Everything else — PDFs and other documents
-      // — MUST use "raw". If a PDF goes through "auto", Cloudinary classifies it
-      // as an image and then blocks public delivery of it (401 "deny or ACL
-      // failure"). "raw" stores/serves it as a plain downloadable file.
-      const body = new FormData();
-      body.append("file", file);
-      body.append("api_key", sig.apiKey);
-      body.append("timestamp", String(sig.timestamp));
-      body.append("signature", sig.signature);
-      body.append("folder", sig.folder);
-
-      const resourceType = file.type.startsWith("image/") ? "image" : "raw";
-      const secureUrl = await new Promise<string>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open(
-          "POST",
-          `https://api.cloudinary.com/v1_1/${sig.cloudName}/${resourceType}/upload`,
-        );
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) {
-            setUploadProgress(Math.round((e.loaded / e.total) * 100));
-          }
-        };
-        xhr.onload = () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            try {
-              const data = JSON.parse(xhr.responseText) as { secure_url?: string };
-              if (data.secure_url) resolve(data.secure_url);
-              else reject(new Error("Upload failed. Please try again."));
-            } catch {
-              reject(new Error("Upload failed. Please try again."));
-            }
-          } else {
-            reject(new Error("Upload failed. Please try again."));
-          }
-        };
-        xhr.onerror = () => reject(new Error("Upload failed. Please try again."));
-        xhr.send(body);
-      });
-
-      // 3) Store the delivered URL as the answer.
+      const secureUrl = await uploadToCloudinary(slug, rawFile, (percent) =>
+        setUploadProgress(percent),
+      );
+      // Store the delivered URL as the answer.
       onChange(question.id, secureUrl);
     } catch (err) {
       setUploadError(

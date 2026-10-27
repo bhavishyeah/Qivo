@@ -56,6 +56,39 @@ type FormSection = {
   questions: FormQuestion[];
 };
 
+type FormTheme = {
+  coverImageUrl?: string;
+  accentColor?: string;
+  backgroundColor?: string;
+  fontFamily?: string;
+};
+
+// Zod infers theme fields as `string | undefined`, which can't assign to
+// FormTheme under exactOptionalPropertyTypes. Rebuild via conditional-spread so
+// only defined fields are present (an absent field clears, matching the
+// whole-object replace semantics).
+function normalizeTheme(theme: {
+  coverImageUrl?: string | undefined;
+  accentColor?: string | undefined;
+  backgroundColor?: string | undefined;
+  fontFamily?: string | undefined;
+}): FormTheme {
+  return {
+    ...(theme.coverImageUrl !== undefined
+      ? { coverImageUrl: theme.coverImageUrl }
+      : {}),
+    ...(theme.accentColor !== undefined
+      ? { accentColor: theme.accentColor }
+      : {}),
+    ...(theme.backgroundColor !== undefined
+      ? { backgroundColor: theme.backgroundColor }
+      : {}),
+    ...(theme.fontFamily !== undefined
+      ? { fontFamily: theme.fontFamily }
+      : {}),
+  };
+}
+
 type FormSchema = {
   version: number;
   sections: FormSection[];
@@ -68,6 +101,7 @@ type FormSchema = {
     showScore?: boolean;
     responseNotification?: "off" | "immediate" | "daily";
     sendConfirmationEmail?: boolean;
+    theme?: FormTheme;
   };
   confirmationMessage?: string;
 };
@@ -107,6 +141,9 @@ function getFormSchema(value: unknown): FormSchema {
         candidate?.settings?.responseNotification ?? "off",
       sendConfirmationEmail:
         candidate?.settings?.sendConfirmationEmail ?? false,
+      ...(candidate?.settings?.theme !== undefined
+        ? { theme: candidate.settings.theme }
+        : {}),
     },
     ...(candidate?.confirmationMessage !== undefined
       ? {
@@ -533,6 +570,9 @@ export async function updateFormSettings(
         : {}),
       ...(input.sendConfirmationEmail !== undefined
         ? { sendConfirmationEmail: input.sendConfirmationEmail }
+        : {}),
+      ...(input.theme !== undefined
+        ? { theme: normalizeTheme(input.theme) }
         : {}),
     },
     ...(input.confirmationMessage !== undefined

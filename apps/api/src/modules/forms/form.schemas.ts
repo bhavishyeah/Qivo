@@ -1,5 +1,37 @@
 import { z } from "zod";
 
+// Curated Google Fonts allow-list. This is the AUTHORITATIVE copy; it is
+// enforced server-side via z.enum below (the only injection surface, since
+// fontFamily flows into a stylesheet href). Mirror lives in
+// apps/web/src/lib/theme.ts — keep in sync: the API enum is authoritative; a
+// font present on the web but not here is rejected with a 400, a font here but
+// not on the web is never selectable.
+export const FONT_ALLOW_LIST = [
+  "Inter",
+  "Roboto",
+  "Poppins",
+  "Montserrat",
+  "Open Sans",
+  "Lora",
+  "Playfair Display",
+  "Source Sans 3",
+] as const;
+
+const HEX_COLOR = z
+  .string()
+  .regex(/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/, "must be a hex color");
+
+// z.strictObject rejects unknown keys so a crafted PATCH can't smuggle extra
+// JSON into stored settings.
+const themeSchema = z
+  .strictObject({
+    coverImageUrl: z.string().trim().url().max(2000).optional(),
+    accentColor: HEX_COLOR.optional(),
+    backgroundColor: HEX_COLOR.optional(),
+    fontFamily: z.enum(FONT_ALLOW_LIST).optional(),
+  })
+  .optional();
+
 export const updateFormSettingsSchema = z.object({
   collectEmail: z.boolean(),
   allowMultipleResponses: z.boolean(),
@@ -12,6 +44,7 @@ export const updateFormSettingsSchema = z.object({
   showScore: z.boolean().optional(),
   responseNotification: z.enum(["off", "immediate", "daily"]).optional(),
   sendConfirmationEmail: z.boolean().optional(),
+  theme: themeSchema,
 });
 
 export type UpdateFormSettingsInput = z.infer<
