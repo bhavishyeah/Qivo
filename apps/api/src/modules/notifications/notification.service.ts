@@ -8,7 +8,8 @@ type NotificationType =
   | "FORM_PUBLISHED"
   | "MEMBER_INVITED"
   | "MEMBER_REMOVED"
-  | "RESPONSE_MILESTONE";
+  | "RESPONSE_MILESTONE"
+  | "FORM_SHARED";
 
 export async function createNotification(input: {
   userId: string;
@@ -93,6 +94,7 @@ export async function notifyFormEvent(input: {
     MEMBER_INVITED: `${input.actorName} added you to the workspace.`,
     MEMBER_REMOVED: `You were removed from the workspace.`,
     RESPONSE_MILESTONE: `"${input.formTitle}" reached a response milestone.`,
+    FORM_SHARED: `A form was shared with you.`,
   };
 
   const titles: Record<NotificationType, string> = {
@@ -104,6 +106,7 @@ export async function notifyFormEvent(input: {
     MEMBER_INVITED: "Team invitation",
     MEMBER_REMOVED: "Removed from team",
     RESPONSE_MILESTONE: "Response milestone",
+    FORM_SHARED: "Form shared with you",
   };
 
   // Don't notify the actor themselves

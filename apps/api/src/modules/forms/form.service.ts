@@ -5,6 +5,10 @@ import prisma from "../../db/prisma.js";
 import { logAction } from "../audit/audit.service.js";
 import { notifyFormEvent } from "../notifications/notification.service.js";
 import { signUpload, type CloudinarySignature } from "../../services/cloudinary.js";
+import {
+  hasEditorShare,
+  hasResponseViewShare,
+} from "../formShares/formShare.access.js";
 import type {
   UpdateFormSettingsInput,
 } from "./form.schemas.js";
@@ -160,6 +164,7 @@ async function getEditableForm(
   formId: string,
   userId: string,
 ) {
+  // 1) existing workspace path — UNCHANGED
   const form = await prisma.form.findFirst({
     where: {
       id: formId,
@@ -177,13 +182,19 @@ async function getEditableForm(
     },
   });
 
-  if (!form) {
-    throw formNotFoundError(
-      "Form not found or not editable.",
-    );
+  if (form) return form;
+
+  // 2) NEW fallback: per-form EDITOR share grants edit access to this one form.
+  if (await hasEditorShare(formId, userId)) {
+    const shared = await prisma.form.findFirst({
+      where: { id: formId, deletedAt: null },
+    });
+    if (shared) return shared;
   }
 
-  return form;
+  throw formNotFoundError(
+    "Form not found or not editable.",
+  );
 }
 
 export async function createForm(input: {
@@ -326,6 +337,7 @@ export async function getForm(
   formId: string,
   userId: string,
 ) {
+  // 1) existing workspace path — UNCHANGED (any member may read the definition)
   const form = await prisma.form.findFirst({
     where: {
       id: formId,
@@ -340,11 +352,19 @@ export async function getForm(
     },
   });
 
-  if (!form) {
-    throw formNotFoundError();
+  if (form) return form;
+
+  // 2) NEW fallback: an EDITOR/VIEWER share may load the form document.
+  //    RESPONDER may NOT (that is why this is hasResponseViewShare, not
+  //    getAcceptedShareRole !== null — RESPONDER reaches the form via /f/<slug>).
+  if (await hasResponseViewShare(formId, userId)) {
+    const shared = await prisma.form.findFirst({
+      where: { id: formId, deletedAt: null },
+    });
+    if (shared) return shared;
   }
 
-  return form;
+  throw formNotFoundError();
 }
 
 /**
@@ -369,6 +389,16 @@ async function getFormForResponseAccess(
   });
 
   if (!form) {
+    // NEW fallback: an ACCEPTED EDITOR/VIEWER share may read this form's
+    // responses. Runs before the 404-vs-403 disambiguation so a share grantee
+    // is never wrongly rejected.
+    if (await hasResponseViewShare(formId, userId)) {
+      const shared = await prisma.form.findFirst({
+        where: { id: formId, deletedAt: null },
+      });
+      if (shared) return shared;
+    }
+
     // Distinguish "not a member at all" (404) from "member but not allowed" (403).
     const isMember = await prisma.form.findFirst({
       where: {
@@ -395,7 +425,10 @@ export async function updateForm(
     description?: string | null | undefined;
   },
 ) {
-  const form = await prisma.form.findFirst({
+  // 1) workspace path: a NON-VIEWER member (the VIEWER -> FORBIDDEN check is
+  //    folded into the query, so a VIEWER no longer matches here and instead
+  //    falls through to the share fallback below).
+  let form = await prisma.form.findFirst({
     where: {
       id: formId,
       deletedAt: null,
@@ -403,36 +436,24 @@ export async function updateForm(
         members: {
           some: {
             userId,
-          },
-        },
-      },
-    },
-    include: {
-      workspace: {
-        include: {
-          members: {
-            where: {
-              userId,
-            },
+            role: { not: "VIEWER" },
           },
         },
       },
     },
   });
 
-  if (!form) {
-    throw formNotFoundError();
+  // 2) NEW fallback: per-form EDITOR share. Runs for BOTH the non-member case
+  //    (external HOD/principal) AND the VIEWER-member case — both leave `form`
+  //    null above.
+  if (!form && (await hasEditorShare(formId, userId))) {
+    form = await prisma.form.findFirst({
+      where: { id: formId, deletedAt: null },
+    });
   }
 
-  const membership = form.workspace.members[0];
-
-  if (
-    !membership ||
-    membership.role === "VIEWER"
-  ) {
-    throw forbiddenError(
-      "You do not have permission to edit this form.",
-    );
+  if (!form) {
+    throw formNotFoundError();
   }
 
   return prisma.form.update({

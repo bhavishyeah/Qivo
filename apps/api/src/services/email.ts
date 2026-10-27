@@ -157,3 +157,87 @@ export async function sendTeamInviteEmail(
     text: `${inviterName} added you to ${workspaceName} on Qivo. Log in at ${webUrl}/login`,
   });
 }
+
+type FormShareRole = "RESPONDER" | "EDITOR" | "VIEWER";
+
+// Keeps the invite copy consistent across the two form-share templates.
+const roleLabel: Record<FormShareRole, string> = {
+  EDITOR: "editor",
+  VIEWER: "viewer",
+  RESPONDER: "responder",
+};
+const roleVerb: Record<FormShareRole, string> = {
+  EDITOR: "edit",
+  VIEWER: "view responses for",
+  RESPONDER: "respond to",
+};
+
+/**
+ * Invite a NEW user (no account yet) to a shared form. Links to the signup page
+ * carrying the invite token so the acceptance flow can resume post-signup.
+ */
+export async function sendFormShareInviteEmail(
+  to: string,
+  opts: {
+    inviterName: string;
+    formTitle: string;
+    role: FormShareRole;
+    token: string;
+  },
+): Promise<void> {
+  const webUrl = getWebUrl();
+  const signupUrl = `${webUrl}/signup?invite=${opts.token}`;
+
+  await sendEmail({
+    to,
+    subject: `${opts.inviterName} invited you to ${roleVerb[opts.role]} the form "${opts.formTitle}" on Qivo`,
+    html: layout(
+      "You've been invited to a form",
+      `<p style="color:#475569;font-size:15px;line-height:1.6;">${opts.inviterName} invited you to ${roleLabel[opts.role]} the form <strong>${opts.formTitle}</strong> on Qivo Forms. Create your account to accept:</p>
+       ${button(signupUrl, "Accept invite")}
+       <p style="color:#94a3b8;font-size:13px;margin-top:16px;">Or copy this link: ${signupUrl}</p>`,
+    ),
+    text: `${opts.inviterName} invited you to ${roleVerb[opts.role]} the form "${opts.formTitle}" on Qivo. Create your account to accept: ${signupUrl}`,
+  });
+}
+
+/**
+ * Notify an EXISTING user that a form was shared with them. Links straight to
+ * the role-appropriate destination (edit / responses / public form).
+ */
+export async function sendFormShareExistingUserEmail(
+  to: string,
+  opts: {
+    inviterName: string;
+    formTitle: string;
+    role: FormShareRole;
+    slug: string;
+    formId: string;
+  },
+): Promise<void> {
+  const webUrl = getWebUrl();
+  const link =
+    opts.role === "EDITOR"
+      ? `${webUrl}/forms/${opts.formId}/edit`
+      : opts.role === "VIEWER"
+        ? `${webUrl}/forms/${opts.formId}/responses`
+        : `${webUrl}/f/${opts.slug}`;
+  const buttonLabel =
+    opts.role === "EDITOR"
+      ? "Open form editor"
+      : opts.role === "VIEWER"
+        ? "View responses"
+        : "Open form";
+
+  await sendEmail({
+    to,
+    subject: `You've been given ${roleLabel[opts.role]} access to "${opts.formTitle}" on Qivo`,
+    html: layout(
+      "A form was shared with you",
+      `<p style="color:#475569;font-size:15px;line-height:1.6;">${opts.inviterName} gave you ${roleLabel[opts.role]} access to the form <strong>${opts.formTitle}</strong> on Qivo Forms.</p>
+       ${button(link, buttonLabel)}
+       <p style="color:#94a3b8;font-size:13px;margin-top:16px;">Or copy this link: ${link}</p>`,
+    ),
+    text: `${opts.inviterName} gave you ${roleLabel[opts.role]} access to "${opts.formTitle}" on Qivo. Open it: ${link}`,
+  });
+}

@@ -14,6 +14,8 @@ import prisma from "./db/prisma.js";
 import { csrfProtection } from "./middleware/csrf.js";
 import authRouter from "./modules/auth/auth.routes.js";
 import formRouter from "./modules/forms/form.routes.js";
+import formShareRouter from "./modules/formShares/formShare.routes.js";
+import inviteRouter from "./modules/formShares/invite.routes.js";
 import folderRouter from "./modules/folders/folder.routes.js";
 import memberRouter from "./modules/members/member.routes.js";
 import approvalRouter from "./modules/approvals/approval.routes.js";
@@ -115,7 +117,11 @@ app.use("/api/auth", authLimiter);
 
 app.use("/api", csrfProtection(allowedOrigins));
 
+// formShareRouter MUST be mounted before formRouter so its literal
+// GET /shared-with-me resolves before formRouter's parameterized GET /:formId.
+app.use("/api/forms", formShareRouter);
 app.use("/api/forms", formRouter);
+app.use("/api/invites", inviteRouter);
 app.use("/api/folders", folderRouter);
 app.use("/api/members", memberRouter);
 app.use("/api/approvals", approvalRouter);
@@ -242,6 +248,16 @@ const errorHandler: ErrorRequestHandler = (
         success: false,
         error: {
           code: "FORM_NOT_FOUND",
+          message: error.message,
+        },
+      });
+      return;
+
+    case "SHARE_NOT_FOUND":
+      res.status(404).json({
+        success: false,
+        error: {
+          code: "SHARE_NOT_FOUND",
           message: error.message,
         },
       });
