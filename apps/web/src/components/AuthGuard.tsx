@@ -55,7 +55,13 @@ export default function AuthGuard({
   }
 
   if (!user) {
-    return <Navigate to="/login" state={{ from: location.pathname }} replace />;
+    const params = new URLSearchParams(location.search);
+    const inviteToken =
+      location.pathname === "/accept-invite" ? params.get("token") : null;
+    const to = inviteToken
+      ? `/login?invite=${encodeURIComponent(inviteToken)}`
+      : "/login";
+    return <Navigate to={to} replace />;
   }
 
   return <>{children(user)}</>;

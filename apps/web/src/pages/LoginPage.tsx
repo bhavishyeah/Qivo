@@ -1,5 +1,5 @@
 import { useState, useEffect, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { api, ApiRequestError, setToken } from "../lib/api";
 
 declare global {
@@ -17,6 +17,8 @@ declare global {
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const inviteToken = new URLSearchParams(location.search).get("invite");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -31,7 +33,11 @@ export default function LoginPage() {
         idToken: response.credential,
       });
       setToken(data.token);
-      navigate("/dashboard");
+      navigate(
+        inviteToken
+          ? `/accept-invite?token=${encodeURIComponent(inviteToken)}`
+          : "/dashboard",
+      );
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : "Google sign-in failed.");
     } finally {
@@ -92,7 +98,11 @@ export default function LoginPage() {
     try {
       const data = await api.post<{ token: string }>("/api/auth/login", { email, password });
       setToken(data.token);
-      navigate("/dashboard");
+      navigate(
+        inviteToken
+          ? `/accept-invite?token=${encodeURIComponent(inviteToken)}`
+          : "/dashboard",
+      );
     } catch (err) {
       setError(
         err instanceof ApiRequestError ? err.message : "Unable to log in.",
@@ -161,7 +171,10 @@ export default function LoginPage() {
 
         <p className="muted" style={{ marginTop: 20, textAlign: "center" }}>
           Don't have an account?{" "}
-          <Link className="secondary-link" to="/signup">
+          <Link
+            className="secondary-link"
+            to={inviteToken ? `/signup?invite=${inviteToken}` : "/signup"}
+          >
             Sign up
           </Link>
           {" · "}

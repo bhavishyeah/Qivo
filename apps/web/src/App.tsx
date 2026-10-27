@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
+import { BrowserRouter, Route, Routes, Navigate, useLocation } from "react-router-dom";
 
 import "./App.css";
 
@@ -26,6 +26,7 @@ import SettingsPage from "./pages/SettingsPage";
 import AuditLogPage from "./pages/AuditLogPage";
 import EventsPage from "./pages/EventsPage";
 import AdminPanelPage from "./pages/AdminPanelPage";
+import AcceptInvitePage from "./pages/AcceptInvitePage";
 import { getToken } from "./lib/api";
 
 // Lazy-loaded pages (heavy dependencies like recharts)
@@ -43,8 +44,15 @@ function LazyFallback() {
 
 /** Redirects logged-in users away from auth pages */
 function GuestOnly({ children }: { children: React.ReactNode }) {
+  const location = useLocation();
   if (getToken()) {
-    return <Navigate to="/dashboard" replace />;
+    const invite = new URLSearchParams(location.search).get("invite");
+    return (
+      <Navigate
+        to={invite ? `/accept-invite?token=${encodeURIComponent(invite)}` : "/dashboard"}
+        replace
+      />
+    );
   }
   return <>{children}</>;
 }
@@ -86,6 +94,7 @@ function App() {
         <Route path="/forms/:formId/responses" element={<Protected>{() => <ResponseDashboardPage />}</Protected>} />
         <Route path="/forms/:formId/reports" element={<Protected>{() => <Suspense fallback={<LazyFallback />}><FormReportsPage /></Suspense>}</Protected>} />
         <Route path="/forms/:formId/share" element={<Protected>{() => <FormSharePage />}</Protected>} />
+        <Route path="/accept-invite" element={<Protected>{() => <AcceptInvitePage />}</Protected>} />
         <Route path="/folders" element={<Protected>{() => <FoldersPage />}</Protected>} />
         <Route path="/team" element={<Protected>{() => <TeamPage />}</Protected>} />
         <Route path="/notifications" element={<Protected>{() => <NotificationsPage />}</Protected>} />

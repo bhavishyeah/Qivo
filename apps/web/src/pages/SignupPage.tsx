@@ -1,9 +1,11 @@
 import { useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { api, ApiRequestError, setToken } from "../lib/api";
 
 export default function SignupPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const inviteToken = new URLSearchParams(location.search).get("invite");
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -23,7 +25,11 @@ export default function SignupPage() {
         password,
       });
       setToken(data.token);
-      navigate("/dashboard");
+      navigate(
+        inviteToken
+          ? `/accept-invite?token=${encodeURIComponent(inviteToken)}`
+          : "/dashboard",
+      );
     } catch (err) {
       setError(
         err instanceof ApiRequestError
@@ -97,7 +103,10 @@ export default function SignupPage() {
 
         <p className="muted" style={{ marginTop: 20, textAlign: "center" }}>
           Already have an account?{" "}
-          <Link className="secondary-link" to="/login">
+          <Link
+            className="secondary-link"
+            to={inviteToken ? `/login?invite=${inviteToken}` : "/login"}
+          >
             Log in
           </Link>
         </p>

@@ -116,6 +116,33 @@ export type WorkspaceRecord = {
   primaryColor?: string | null;
 };
 
+export type FormShareRole = "RESPONDER" | "EDITOR" | "VIEWER";
+export type FormShareStatus = "PENDING" | "ACCEPTED";
+
+export type FormShare = {
+  id: string;
+  formId: string;
+  email: string;
+  role: FormShareRole;
+  status: FormShareStatus;
+  createdAt: string;
+  acceptedAt?: string | null;
+  user?: { id: string; name: string; email: string; avatarUrl?: string | null } | null;
+};
+
+export type SharedWithMeItem = {
+  shareId: string;
+  role: FormShareRole;
+  form: { id: string; title: string; slug: string; status: string };
+};
+
+export type InvitePreview = {
+  formTitle: string;
+  role: FormShareRole;
+  inviterName: string;
+  status: FormShareStatus;
+};
+
 export type AnswerValue = string | number | string[] | boolean | null;
 
 export type UserInfo = {
