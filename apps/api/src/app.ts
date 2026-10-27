@@ -333,6 +333,36 @@ const errorHandler: ErrorRequestHandler = (
       });
       return;
 
+    case "INVALID_EDIT_TOKEN":
+      res.status(403).json({
+        success: false,
+        error: {
+          code: "INVALID_EDIT_TOKEN",
+          message: error.message,
+        },
+      });
+      return;
+
+    case "EDITING_DISABLED":
+      res.status(403).json({
+        success: false,
+        error: {
+          code: "EDITING_DISABLED",
+          message: error.message,
+        },
+      });
+      return;
+
+    case "EDIT_WINDOW_EXPIRED":
+      res.status(403).json({
+        success: false,
+        error: {
+          code: "EDIT_WINDOW_EXPIRED",
+          message: error.message,
+        },
+      });
+      return;
+
     case "EMAIL_REQUIRED":
       res.status(400).json({
         success: false,

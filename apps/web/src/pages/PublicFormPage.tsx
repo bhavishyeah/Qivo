@@ -67,6 +67,21 @@ export default function PublicFormPage() {
   const [quizScore, setQuizScore] = useState<{ earned: number; total: number; percentage: number } | null>(null);
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
 
+  // Same-session response editing (never persisted — lost on reload by design).
+  const [responseId, setResponseId] = useState<string | null>(null);
+  const [editToken, setEditToken] = useState<string | null>(null);
+  const [editWindowExpiresAt, setEditWindowExpiresAt] = useState<number | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  // A ticking "now" so the confirmation screen hides the edit button client-side
+  // once the window passes. UX only — the server re-check is the real guard.
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!editToken || editWindowExpiresAt === null) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [editToken, editWindowExpiresAt]);
+
   useEffect(() => {
     async function loadForm() {
       if (!slug) {
@@ -210,26 +225,97 @@ export default function PublicFormPage() {
 
     setSubmitting(true);
     try {
-      const result = await publicPost<{ quizScore?: { earned: number; total: number; percentage: number } }>(
+      const collectEmail = Boolean(form?.schema.settings.collectEmail);
+      const body = {
+        answers,
+        ...(collectEmail ? { email: email.trim().toLowerCase() } : {}),
+        metadata: { source: "qivo-web" },
+      };
+
+      if (isEditing && responseId && editToken) {
+        // Editing an existing response: re-use the same-session token.
+        const result = await publicPost<{
+          quizScore?: { earned: number; total: number; percentage: number };
+        }>(
+          `/api/forms/public/${slug}/responses/${responseId}/edit`,
+          { ...body, editToken },
+        );
+        if (result?.quizScore) setQuizScore(result.quizScore);
+        // Keep the same token/window so the respondent can edit again.
+        setIsEditing(false);
+        setSubmitted(true);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+      }
+
+      const result = await publicPost<{
+        response?: { id: string; submittedAt: string };
+        quizScore?: { earned: number; total: number; percentage: number };
+        editToken?: string;
+      }>(
         `/api/forms/public/${slug}/responses`,
-        {
-          answers,
-          ...(form?.schema.settings.collectEmail ? { email: email.trim().toLowerCase() } : {}),
-          metadata: { source: "qivo-web" },
-        },
+        body,
       );
       if (result?.quizScore) setQuizScore(result.quizScore);
+
+      // Capture the edit token + compute the client-side window end for the UI.
+      if (result?.editToken && result.response?.id) {
+        setResponseId(result.response.id);
+        setEditToken(result.editToken);
+        setEditWindowExpiresAt(computeEditWindowEnd(result.response.submittedAt));
+        setNow(Date.now());
+      }
+
       setSubmitted(true);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err) {
       setSubmitError(
         err instanceof ApiRequestError
-          ? err.message
+          ? mapEditErrorMessage(err)
           : "Unable to submit your response.",
       );
     } finally {
       setSubmitting(false);
     }
+  }
+
+  // Client-side edit-window end (ms epoch), or null when open until the server
+  // rejects (until_close with no close date). Mirrors the server's derivation.
+  function computeEditWindowEnd(submittedAt: string): number | null {
+    const mode = form?.schema.settings.responseEditing ?? "disabled";
+    if (mode === "timed") {
+      const minutes = form?.schema.settings.responseEditMinutes ?? 15;
+      return new Date(submittedAt).getTime() + minutes * 60_000;
+    }
+    if (mode === "until_close") {
+      const closeAt = form?.schema.settings.scheduledCloseAt;
+      return closeAt ? new Date(closeAt).getTime() : null;
+    }
+    return null;
+  }
+
+  // Map the edit-path 403 codes to the design's user-facing messages.
+  function mapEditErrorMessage(err: ApiRequestError): string {
+    switch (err.code) {
+      case "EDIT_WINDOW_EXPIRED":
+        return "Your edit window has closed.";
+      case "EDITING_DISABLED":
+        return "Editing is no longer allowed.";
+      case "INVALID_EDIT_TOKEN":
+        return "This edit link is no longer valid.";
+      default:
+        return err.message;
+    }
+  }
+
+  // Begin editing the just-submitted response: answers are still in memory, so
+  // re-rendering the form shows them prefilled.
+  function startEditing() {
+    setIsEditing(true);
+    setSubmitted(false);
+    setSubmitError("");
+    setCurrentSectionIndex(0);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   // ─── Loading ───────────────────────────────────────────────────────────────
@@ -308,6 +394,29 @@ export default function PublicFormPage() {
             {form.schema.confirmationMessage ||
               "Thank you! Your response has been recorded."}
           </p>
+          {editToken &&
+          (editWindowExpiresAt === null || now < editWindowExpiresAt) ? (
+            <div style={{ marginTop: 20 }}>
+              <button
+                type="button"
+                className="submit-button"
+                style={{ maxWidth: 220 }}
+                onClick={startEditing}
+              >
+                Edit my response
+              </button>
+              <p
+                className="muted"
+                style={{ marginTop: 10, fontSize: "0.85rem" }}
+              >
+                {editWindowExpiresAt === null
+                  ? "You can edit your response until this form closes."
+                  : `You can edit your response until ${new Date(
+                      editWindowExpiresAt,
+                    ).toLocaleTimeString()}.`}
+              </p>
+            </div>
+          ) : null}
           <p className="public-status-brand">Powered by Qivo Forms</p>
         </div>
       </main>
@@ -466,7 +575,13 @@ export default function PublicFormPage() {
                 style={{ flex: 1, maxWidth: 240, ...(resolved.accent ? { background: resolved.accent } : {}) }}
                 disabled={submitting || allQuestions.length === 0}
               >
-                {submitting ? "Submitting..." : "Submit response"}
+                {submitting
+                  ? isEditing
+                    ? "Saving..."
+                    : "Submitting..."
+                  : isEditing
+                    ? "Save changes"
+                    : "Submit response"}
               </button>
             )}
           </div>

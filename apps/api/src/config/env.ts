@@ -19,6 +19,24 @@ export const env = {
   WEB_URL: optional("WEB_URL", "http://localhost:5173"),
   SESSION_COOKIE_NAME: optional("SESSION_COOKIE_NAME", "qivo_session"),
   SESSION_DAYS: Number(optional("SESSION_DAYS", "30")),
+  RESPONSE_EDIT_SECRET: optional(
+    "RESPONSE_EDIT_SECRET",
+    "dev-insecure-response-edit-secret-change-me",
+  ),
 } as const;
+
+// Same-session response-edit tokens are HMAC-signed with RESPONSE_EDIT_SECRET.
+// In production an unset secret falls back to a well-known insecure default, so
+// warn loudly rather than crash (editing is opt-in per form, so a hard throw
+// would take down the whole server for a feature most forms won't use).
+if (
+  env.NODE_ENV === "production" &&
+  !process.env.RESPONSE_EDIT_SECRET
+) {
+  console.warn(
+    "[env] RESPONSE_EDIT_SECRET is unset in production; same-session " +
+      "response-edit tokens use an insecure dev default. Set a random value.",
+  );
+}
 
 export type Env = typeof env;

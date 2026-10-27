@@ -16,6 +16,7 @@ import {
   reorderQuestionsSchema,
   responseListQuerySchema,
   submitResponseSchema,
+  editResponseSchema,
   updateFormSchema,
   updateQuestionSchema,
   updateFormSettingsSchema,
@@ -51,6 +52,7 @@ import {
   publishForm,
   reorderQuestions,
   submitFormResponse,
+  editFormResponse,
   updateForm,
   updateQuestion,
   updateFormSettings,
@@ -1273,6 +1275,56 @@ formRouter.post(
             submittedAt: response.submittedAt,
           },
           ...(response.quizScore ? { quizScore: response.quizScore } : {}),
+          ...(response.editToken ? { editToken: response.editToken } : {}),
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+formRouter.post(
+  "/public/:slug/responses/:responseId/edit",
+  async (req, res, next) => {
+    try {
+      const slug = req.params.slug;
+      const responseId = req.params.responseId;
+
+      if (typeof slug !== "string" || typeof responseId !== "string") {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "INVALID_FORM_SLUG",
+            message: "A valid form slug and response id are required.",
+          },
+        });
+        return;
+      }
+
+      const input = editResponseSchema.parse(req.body);
+
+      // The token is read from the validated body ONLY — never from a query
+      // string or header — so it stays out of access/proxy logs and Referer.
+      const result = await editFormResponse(
+        slug,
+        responseId,
+        {
+          answers: input.answers,
+          ...(input.email !== undefined ? { email: input.email } : {}),
+          ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
+        },
+        input.editToken,
+      );
+
+      res.json({
+        success: true,
+        data: {
+          response: {
+            id: result.id,
+            submittedAt: result.submittedAt,
+          },
+          ...(result.quizScore ? { quizScore: result.quizScore } : {}),
         },
       });
     } catch (error) {

@@ -6,6 +6,10 @@ import { logAction } from "../audit/audit.service.js";
 import { notifyFormEvent } from "../notifications/notification.service.js";
 import { signUpload, type CloudinarySignature } from "../../services/cloudinary.js";
 import {
+  signEditToken,
+  verifyEditToken,
+} from "../../services/responseEditToken.js";
+import {
   sendNewResponseNotificationEmail,
   sendResponseConfirmationEmail,
   sendResponseDigestEmail,
@@ -102,6 +106,8 @@ type FormSchema = {
     responseNotification?: "off" | "immediate" | "daily";
     sendConfirmationEmail?: boolean;
     theme?: FormTheme;
+    responseEditing?: "disabled" | "timed" | "until_close";
+    responseEditMinutes?: number;
   };
   confirmationMessage?: string;
 };
@@ -144,6 +150,10 @@ function getFormSchema(value: unknown): FormSchema {
       ...(candidate?.settings?.theme !== undefined
         ? { theme: candidate.settings.theme }
         : {}),
+      responseEditing:
+        candidate?.settings?.responseEditing ?? "disabled",
+      responseEditMinutes:
+        candidate?.settings?.responseEditMinutes ?? 15,
     },
     ...(candidate?.confirmationMessage !== undefined
       ? {
@@ -573,6 +583,12 @@ export async function updateFormSettings(
         : {}),
       ...(input.theme !== undefined
         ? { theme: normalizeTheme(input.theme) }
+        : {}),
+      ...(input.responseEditing !== undefined
+        ? { responseEditing: input.responseEditing }
+        : {}),
+      ...(input.responseEditMinutes !== undefined
+        ? { responseEditMinutes: input.responseEditMinutes }
         : {}),
     },
     ...(input.confirmationMessage !== undefined
@@ -1388,6 +1404,144 @@ function isAnswerCorrect(userAnswer: unknown, correctAnswer: unknown): boolean {
 }
 
 /**
+ * Evaluate a question's conditional-visibility rules against a set of answers.
+ * Mirrors the evaluateConditions logic from the frontend so hidden questions are
+ * never flagged as missing.
+ */
+function isQuestionVisibleFor(
+  question: FormQuestion,
+  answers: Record<string, unknown>,
+): boolean {
+  const conditions = question.conditions;
+  if (!conditions || conditions.length === 0) return true;
+  return conditions.every((rule) => {
+    const answer = answers[rule.questionId];
+    const answerIsArray = Array.isArray(answer);
+    switch (rule.operator) {
+      case "equals":
+        return answerIsArray
+          ? (answer as unknown[]).includes(rule.value ?? "")
+          : String(answer ?? "") === (rule.value ?? "");
+      case "not_equals":
+        return answerIsArray
+          ? !(answer as unknown[]).includes(rule.value ?? "")
+          : String(answer ?? "") !== (rule.value ?? "");
+      case "contains":
+        return answerIsArray
+          ? (answer as string[]).some((a) => a.includes(rule.value ?? ""))
+          : String(answer ?? "")
+              .toLowerCase()
+              .includes((rule.value ?? "").toLowerCase());
+      case "not_empty":
+        return answerIsArray
+          ? (answer as unknown[]).length > 0
+          : answer !== undefined && answer !== null && answer !== "";
+      default:
+        return true;
+    }
+  });
+}
+
+/**
+ * Shared answer-validation gate run byte-identically by submit and edit. It
+ * contains ONLY the three answer rules — unknown-question rejection, the
+ * visibility-aware required check (incl. the MULTI_ENTRY empty-array
+ * special-case), and the per-answer validateAnswerAgainstQuestion loop. It does
+ * NOT check email-required or duplicates: those are submit-only concerns
+ * (identity + email are fixed at first submit). Throws INVALID_RESPONSE on the
+ * first problem.
+ */
+export function validateSubmission(
+  schema: FormSchema,
+  answers: Record<string, unknown>,
+): void {
+  const questions = schema.sections.flatMap(
+    (section) => section.questions,
+  );
+
+  const questionIds = new Set(questions.map((question) => question.id));
+
+  const unknownQuestionId = Object.keys(answers).find(
+    (questionId) => !questionIds.has(questionId),
+  );
+
+  if (unknownQuestionId) {
+    const error = new Error(`Unknown question ID: ${unknownQuestionId}`);
+    error.name = "INVALID_RESPONSE";
+    throw error;
+  }
+
+  const missingRequiredQuestion = questions.find((question) => {
+    if (!question.required) return false;
+    if (!isQuestionVisibleFor(question, answers)) return false;
+    const answer = answers[question.id];
+    if (question.type === "MULTI_ENTRY") {
+      return (
+        !Array.isArray(answer) ||
+        (answer as unknown[]).every(
+          (v) => v === "" || v === null || v === undefined,
+        )
+      );
+    }
+    return answer === undefined || answer === null || answer === "";
+  });
+
+  if (missingRequiredQuestion) {
+    const error = new Error(
+      `Answer required for question: ${missingRequiredQuestion.label}`,
+    );
+    error.name = "INVALID_RESPONSE";
+    throw error;
+  }
+
+  for (const question of questions) {
+    const value = answers[question.id];
+    if (value === undefined || value === null || value === "") continue;
+    const problem = validateAnswerAgainstQuestion(question, value);
+    if (problem) {
+      const error = new Error(
+        `Invalid answer for "${question.label}": ${problem}`,
+      );
+      error.name = "INVALID_RESPONSE";
+      throw error;
+    }
+  }
+}
+
+/**
+ * Compute a quiz score from answers using the same rules as submit. Returns null
+ * when the form is not in quiz mode. Shared by submit + edit so a corrected quiz
+ * answer yields the correct on-screen score.
+ */
+function computeQuizScore(
+  schema: FormSchema,
+  answers: Record<string, unknown>,
+): { earned: number; total: number; percentage: number } | null {
+  if (!schema.settings.quizMode) return null;
+
+  const scoringQuestions = schema.sections.flatMap((s) => s.questions);
+  let earned = 0;
+  let total = 0;
+  for (const q of scoringQuestions) {
+    const correct = q.settings?.correctAnswer;
+    if (correct === undefined) continue;
+
+    const rawPoints = (q.settings as { points?: unknown } | undefined)?.points;
+    const points = typeof rawPoints === "number" ? rawPoints : 1;
+    total += points;
+
+    if (isAnswerCorrect(answers[q.id], correct)) {
+      earned += points;
+    }
+  }
+  return {
+    earned,
+    total,
+    percentage: total > 0 ? Math.round((earned / total) * 100) : 0,
+  };
+}
+
+/**
  * Remove quiz answer-key fields from question settings before sending a form to
  * public respondents. `correctAnswer` and `points` are needed only server-side
  * (for scoring in submitFormResponse) and must never reach the client.
@@ -1695,100 +1849,10 @@ export async function submitFormResponse(
     (section) => section.questions,
   );
 
-  const questionIds = new Set(
-    questions.map((question) => question.id),
-  );
-
-  const answerIds = Object.keys(input.answers);
-
-  const unknownQuestionId = answerIds.find(
-    (questionId) =>
-      !questionIds.has(questionId),
-  );
-
-  if (unknownQuestionId) {
-    const error = new Error(
-      `Unknown question ID: ${unknownQuestionId}`,
-    );
-    error.name = "INVALID_RESPONSE";
-    throw error;
-  }
-
-  // Evaluate conditional visibility server-side so hidden questions are never
-  // flagged as missing. Mirrors the evaluateConditions logic from the frontend.
-  function isQuestionVisible(question: FormQuestion): boolean {
-    const conditions = question.conditions;
-    if (!conditions || conditions.length === 0) return true;
-    return conditions.every((rule) => {
-      const answer = input.answers[rule.questionId];
-      const answerIsArray = Array.isArray(answer);
-      switch (rule.operator) {
-        case "equals":
-          return answerIsArray
-            ? (answer as unknown[]).includes(rule.value ?? "")
-            : String(answer ?? "") === (rule.value ?? "");
-        case "not_equals":
-          return answerIsArray
-            ? !(answer as unknown[]).includes(rule.value ?? "")
-            : String(answer ?? "") !== (rule.value ?? "");
-        case "contains":
-          return answerIsArray
-            ? (answer as string[]).some((a) => a.includes(rule.value ?? ""))
-            : String(answer ?? "").toLowerCase().includes((rule.value ?? "").toLowerCase());
-        case "not_empty":
-          return answerIsArray
-            ? (answer as unknown[]).length > 0
-            : answer !== undefined && answer !== null && answer !== "";
-        default:
-          return true;
-      }
-    });
-  }
-
-  const missingRequiredQuestion =
-    questions.find((question) => {
-      if (!question.required) return false;
-      if (!isQuestionVisible(question)) return false;
-      const answer = input.answers[question.id];
-      if (question.type === "MULTI_ENTRY") {
-        return (
-          !Array.isArray(answer) ||
-          (answer as unknown[]).every(
-            (v) => v === "" || v === null || v === undefined,
-          )
-        );
-      }
-      return (
-        answer === undefined ||
-        answer === null ||
-        answer === ""
-      );
-    });
-
-  if (missingRequiredQuestion) {
-    const error = new Error(
-      `Answer required for question: ${missingRequiredQuestion.label}`,
-    );
-    error.name = "INVALID_RESPONSE";
-    throw error;
-  }
-
-  // Validate each provided answer against its question's type/shape. The client
-  // enforces these too, but a crafted request can bypass the UI, so the server
-  // is the source of truth. Empty/undefined answers are allowed here (the
-  // required-check above already handled mandatory questions).
-  for (const question of questions) {
-    const value = input.answers[question.id];
-    if (value === undefined || value === null || value === "") continue;
-    const problem = validateAnswerAgainstQuestion(question, value);
-    if (problem) {
-      const error = new Error(
-        `Invalid answer for "${question.label}": ${problem}`,
-      );
-      error.name = "INVALID_RESPONSE";
-      throw error;
-    }
-  }
+  // Shared answer-only validation (unknown-question, visibility-aware required,
+  // per-answer type checks). Submit wraps its EMAIL_REQUIRED / DUPLICATE gates
+  // around this; edit calls the same helper so answer rules never drift.
+  validateSubmission(schema, input.answers);
 
 const normalizedEmail = input.email
   ?.trim()
@@ -1928,28 +1992,186 @@ if (
   })().catch((err) => console.error("confirmation email failed:", err));
 }
 
-// Calculate quiz score if quiz mode is enabled
-let quizScore: { earned: number; total: number; percentage: number } | null = null;
-if (schema.settings.quizMode) {
-  const scoringQuestions = schema.sections.flatMap((s) => s.questions);
-  let earned = 0;
-  let total = 0;
-  for (const q of scoringQuestions) {
-    const correct = q.settings?.correctAnswer;
-    if (correct === undefined) continue;
+// Calculate quiz score if quiz mode is enabled (shared with the edit path).
+const quizScore = computeQuizScore(schema, input.answers);
 
-    const rawPoints = (q.settings as { points?: unknown } | undefined)?.points;
-    const points = typeof rawPoints === "number" ? rawPoints : 1;
-    total += points;
+// Issue a same-session edit token when editing is enabled. The expiry is
+// derived from the mode; the server re-checks the live window on edit, so this
+// is a cap, not the authoritative guard.
+const editToken = computeEditToken(schema, response.id);
 
-    if (isAnswerCorrect(input.answers[q.id], correct)) {
-      earned += points;
-    }
-  }
-  quizScore = { earned, total, percentage: total > 0 ? Math.round((earned / total) * 100) : 0 };
+return { ...response, quizScore, editToken };
 }
 
-return { ...response, quizScore };
+const UNTIL_CLOSE_CAP_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Derive the edit-token expiry from the form's responseEditing mode and sign a
+ * stateless token for `responseId`. Returns null when editing is disabled.
+ */
+function computeEditToken(
+  schema: FormSchema,
+  responseId: string,
+): string | null {
+  const mode = schema.settings.responseEditing ?? "disabled";
+  if (mode === "disabled") return null;
+
+  const now = Date.now();
+  let expiresAtMs: number;
+
+  if (mode === "timed") {
+    const minutes = schema.settings.responseEditMinutes ?? 15;
+    expiresAtMs = now + minutes * 60_000;
+  } else {
+    // until_close: cap at 24h; when a close date is set, use the earlier of the
+    // close time and now+24h so editing never outlives the form.
+    const cap = now + UNTIL_CLOSE_CAP_MS;
+    if (schema.settings.scheduledCloseAt) {
+      const closeMs = new Date(schema.settings.scheduledCloseAt).getTime();
+      expiresAtMs = Number.isNaN(closeMs) ? cap : Math.min(closeMs, cap);
+    } else {
+      expiresAtMs = cap;
+    }
+  }
+
+  return signEditToken(responseId, new Date(expiresAtMs));
+}
+
+/**
+ * Overwrite a respondent's own just-submitted response within the edit window,
+ * authorized by a stateless HMAC edit token. The server is the single owner of
+ * every guard: token signature + rid-matches-path binding, a decoupled
+ * PUBLISHED-or-CLOSED form lookup, response scoping by formId, and a live
+ * mode/window re-check that ignores a stale token's optimistic expiry. No
+ * emails, no analytics submission event, and no respondentEmail/duplicate
+ * changes — an edit is a correction, not a new submission.
+ */
+export async function editFormResponse(
+  slug: string,
+  responseId: string,
+  input: {
+    answers: Record<string, unknown>;
+    email?: string | undefined;
+    metadata?: Record<string, unknown> | undefined;
+  },
+  editToken: string,
+) {
+  // 1) Verify the token signature (constant-time) + parse payload.
+  const verified = verifyEditToken(editToken);
+  if (!verified) {
+    const error = new Error("This edit link is no longer valid.");
+    error.name = "INVALID_EDIT_TOKEN";
+    throw error;
+  }
+
+  // 2) The token's rid MUST match the path responseId — a client can't present
+  //    a token for response A to edit response B. A mismatch is a tamper signal.
+  if (verified.responseId !== responseId) {
+    console.warn(
+      `[editFormResponse] token rid (${verified.responseId}) !== path responseId (${responseId}) — possible tampering`,
+    );
+    const error = new Error("This edit link is no longer valid.");
+    error.name = "INVALID_EDIT_TOKEN";
+    throw error;
+  }
+
+  // 3) Dedicated lookup accepting PUBLISHED or CLOSED (decoupled from the
+  //    PUBLISHED-only submit lookup) so the until_close CLOSED branch below is
+  //    reachable and returns EDIT_WINDOW_EXPIRED, not FORM_CLOSED.
+  const form = await prisma.form.findFirst({
+    where: {
+      slug,
+      deletedAt: null,
+      status: { in: ["PUBLISHED", "CLOSED"] },
+    },
+  });
+
+  if (!form) {
+    const error = new Error("Form not available.");
+    error.name = "PUBLIC_FORM_NOT_FOUND";
+    throw error;
+  }
+
+  // 4) Load the response, scoped by formId so a guessed id from another form
+  //    can't be edited through this form's slug.
+  const existing = await prisma.formResponse.findFirst({
+    where: { id: responseId, formId: form.id },
+  });
+
+  if (!existing) {
+    const error = new Error("Response not found.");
+    error.name = "RESPONSE_NOT_FOUND";
+    throw error;
+  }
+
+  const schema = getFormSchema(form.schema);
+  const mode = schema.settings.responseEditing ?? "disabled";
+  const now = Date.now();
+
+  // 5) Re-check mode + window against live state (authoritative).
+  if (mode === "disabled") {
+    const error = new Error("Editing is no longer allowed.");
+    error.name = "EDITING_DISABLED";
+    throw error;
+  }
+
+  if (mode === "timed") {
+    const minutes = schema.settings.responseEditMinutes ?? 15;
+    const windowEnd = existing.submittedAt.getTime() + minutes * 60_000;
+    if (now > windowEnd) {
+      const error = new Error("Your edit window has closed.");
+      error.name = "EDIT_WINDOW_EXPIRED";
+      throw error;
+    }
+  } else {
+    // until_close: closed form OR an elapsed scheduledCloseAt both end the
+    // window. NEVER throw FORM_CLOSED here (that maps to 410 and mis-signals
+    // the client, which maps EDIT_WINDOW_EXPIRED to "edit window closed").
+    if (form.status === "CLOSED") {
+      const error = new Error("Your edit window has closed.");
+      error.name = "EDIT_WINDOW_EXPIRED";
+      throw error;
+    }
+    if (schema.settings.scheduledCloseAt) {
+      const closeMs = new Date(schema.settings.scheduledCloseAt).getTime();
+      if (!Number.isNaN(closeMs) && now > closeMs) {
+        const error = new Error("Your edit window has closed.");
+        error.name = "EDIT_WINDOW_EXPIRED";
+        throw error;
+      }
+    }
+  }
+
+  // Token exp as an upper bound (belt-and-suspenders; live recompute wins).
+  if (now > verified.exp * 1000) {
+    const error = new Error("Your edit window has closed.");
+    error.name = "EDIT_WINDOW_EXPIRED";
+    throw error;
+  }
+
+  // 6) Re-run the SAME answer validation as submit (no email/duplicate gates).
+  validateSubmission(schema, input.answers);
+
+  // 7) Overwrite answers + stamp metadata.editedAt (merge existing metadata).
+  //    submittedAt is NOT written, so the original submit time is preserved.
+  const mergedMetadata = {
+    ...((existing.metadata as Record<string, unknown> | null) ?? {}),
+    editedAt: new Date().toISOString(),
+  };
+
+  const updated = await prisma.formResponse.update({
+    where: { id: responseId },
+    data: {
+      answers: input.answers as Prisma.InputJsonValue,
+      metadata: mergedMetadata as Prisma.InputJsonValue,
+    },
+    select: { id: true, submittedAt: true },
+  });
+
+  // Recompute the quiz score from the edited answers (display-only; no emails).
+  const quizScore = computeQuizScore(schema, input.answers);
+
+  return { id: updated.id, submittedAt: updated.submittedAt, quizScore };
 }
 
 export async function listFormResponses(

@@ -45,6 +45,8 @@ export const updateFormSettingsSchema = z.object({
   responseNotification: z.enum(["off", "immediate", "daily"]).optional(),
   sendConfirmationEmail: z.boolean().optional(),
   theme: themeSchema,
+  responseEditing: z.enum(["disabled", "timed", "until_close"]).optional(),
+  responseEditMinutes: z.coerce.number().int().min(1).max(1440).optional(),
 });
 
 export type UpdateFormSettingsInput = z.infer<
@@ -125,6 +127,10 @@ export const submitResponseSchema = z.object({
   metadata: z
     .record(z.string(), z.unknown())
     .optional(),
+});
+
+export const editResponseSchema = submitResponseSchema.extend({
+  editToken: z.string().min(1).max(2000),
 });
 
 export const responseListQuerySchema = z.object({

@@ -123,6 +123,8 @@ export default function FormEditorPage() {
   const [showScore, setShowScore] = useState(false);
   const [responseNotification, setResponseNotification] = useState<"off" | "immediate" | "daily">("off");
   const [sendConfirmationEmail, setSendConfirmationEmail] = useState(false);
+  const [responseEditing, setResponseEditing] = useState<"disabled" | "timed" | "until_close">("disabled");
+  const [responseEditMinutes, setResponseEditMinutes] = useState(15);
   const [savingSettings, setSavingSettings] = useState(false);
 
   // Appearance (per-form theme). "" means inherit / default.
@@ -183,6 +185,8 @@ export default function FormEditorPage() {
         setShowScore(schema.settings?.showScore ?? false);
         setResponseNotification(schema.settings?.responseNotification ?? "off");
         setSendConfirmationEmail(schema.settings?.sendConfirmationEmail ?? false);
+        setResponseEditing(schema.settings?.responseEditing ?? "disabled");
+        setResponseEditMinutes(schema.settings?.responseEditMinutes ?? 15);
         const theme = schema.settings?.theme;
         setCoverImageUrl(theme?.coverImageUrl ?? "");
         setAccentColor(theme?.accentColor ?? "");
@@ -659,6 +663,8 @@ export default function FormEditorPage() {
           showScore,
           responseNotification,
           sendConfirmationEmail,
+          responseEditing,
+          responseEditMinutes,
           theme,
         },
       );
@@ -1122,6 +1128,8 @@ export default function FormEditorPage() {
                 <div className="question-field" style={{ flex: 1, minWidth: 200 }}><label htmlFor="s-publish">Scheduled publish</label><input id="s-publish" type="datetime-local" value={scheduledPublishAt} onChange={(e) => setScheduledPublishAt(e.target.value)} style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }} /><small className="muted">Form becomes public at this time.</small></div>
                 <div className="question-field" style={{ flex: 1, minWidth: 200 }}><label htmlFor="s-close">Scheduled close</label><input id="s-close" type="datetime-local" value={scheduledCloseAt} onChange={(e) => setScheduledCloseAt(e.target.value)} style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }} /><small className="muted">Stops accepting responses at this time.</small></div>
               </div>
+              <div className="question-field"><label htmlFor="s-response-editing">Let respondents edit their response</label><select id="s-response-editing" value={responseEditing} onChange={(e) => setResponseEditing(e.target.value as "disabled" | "timed" | "until_close")} style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }}><option value="disabled">Off</option><option value="timed">Allow editing for a few minutes</option><option value="until_close">Allow editing until the form closes</option></select><small className="muted">Respondents can correct their own just-submitted response in the same session.</small></div>
+              {responseEditing === "timed" ? (<div className="question-field"><label htmlFor="s-response-edit-minutes">Editing window (minutes)</label><input id="s-response-edit-minutes" type="number" min={1} max={1440} value={responseEditMinutes} onChange={(e) => setResponseEditMinutes(Math.max(1, Math.min(1440, Number(e.target.value) || 1)))} style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }} /><small className="muted">How long after submitting a respondent can edit (1–1440).</small></div>) : null}
             </SettingsGroup>
             <SettingsGroup title="Presentation" description="What respondents see after submitting" summary={confirmationMessage ? "Custom message set" : "Default message"}>
               <div className="question-field"><label htmlFor="s-confirm">Confirmation message</label><textarea id="s-confirm" rows={3} value={confirmationMessage} onChange={(e) => setConfirmationMessage(e.target.value)} placeholder="Thanks for your response." /><small className="muted">Shown to respondents after they submit.</small></div>
