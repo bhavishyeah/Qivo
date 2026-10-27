@@ -8,6 +8,7 @@ import {
 } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, ApiRequestError } from "../lib/api";
+import { PIPING_TOKEN_RE } from "../lib/piping";
 import type { FormRecord, Question, QuestionOption, QuestionType, ConditionRule } from "../types";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -1084,6 +1085,21 @@ export default function FormEditorPage() {
 
 // ─── Question Card ────────────────────────────────────────────────────────────
 
+/**
+ * Editor-only helper: replaces each `{{id}}` token in a raw label with the
+ * referenced question's label wrapped in brackets, e.g.
+ * `Confirm {{question_x}}'s size` -> `Confirm [Team captain name]'s size`.
+ * Unknown ids become `[unknown reference]`. This gives the author a readable
+ * sense of the token without live answers; it never reaches respondents.
+ */
+function previewLabelWithPlaceholders(label: string, allQuestions: Question[]): string {
+  // `.replace` with a fresh call manages the global regex's lastIndex safely.
+  return label.replace(PIPING_TOKEN_RE, (_match, id: string) => {
+    const ref = allQuestions.find((q) => q.id === id);
+    return ref ? `[${ref.label.trim() || "Untitled question"}]` : "[unknown reference]";
+  });
+}
+
 function QuestionCard({
   question,
   index,
@@ -1238,6 +1254,49 @@ function QuestionCard({
               onClick={(e) => e.stopPropagation()}
               autoFocus
             />
+
+            {/* Answer piping: insert a reference to an EARLIER question's answer */}
+            {(() => {
+              // Only questions BEFORE this one can be piped (same filter as
+              // ConditionEditor). A hand-crafted forward/self reference still
+              // degrades gracefully at render time, but the UI never offers one.
+              const earlierQuestions = allQuestions.filter(
+                (q) => q.id !== question.id && allQuestions.indexOf(q) < allQuestions.indexOf(question),
+              );
+              const hasTokens = question.label.match(PIPING_TOKEN_RE) !== null;
+              return (
+                <div style={{ marginTop: 6 }}>
+                  <select
+                    value=""
+                    disabled={earlierQuestions.length === 0}
+                    title={earlierQuestions.length === 0 ? "Add questions above first" : "Insert answer reference"}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      if (!id) return;
+                      const sep = question.label && !question.label.endsWith(" ") ? " " : "";
+                      onChange(question.id, { label: `${question.label}${sep}{{${id}}}` });
+                      // Reset back to the placeholder so the same reference can
+                      // be inserted again.
+                      e.target.value = "";
+                    }}
+                    style={{ border: "1px solid #cbd5e1", borderRadius: 8, padding: "5px 10px", fontSize: "0.78rem", color: "#334155", background: "#f8fafc" }}
+                  >
+                    <option value="" disabled>
+                      Insert answer reference
+                    </option>
+                    {earlierQuestions.map((q) => (
+                      <option key={q.id} value={q.id}>{q.label.slice(0, 30) || "Untitled question"}</option>
+                    ))}
+                  </select>
+                  {hasTokens ? (
+                    <p className="muted" style={{ fontSize: "0.78rem", marginTop: 6 }}>
+                      Preview: {previewLabelWithPlaceholders(question.label, allQuestions)}
+                    </p>
+                  ) : null}
+                </div>
+              );
+            })()}
 
             {/* Description */}
             <label

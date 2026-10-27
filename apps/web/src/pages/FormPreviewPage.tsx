@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, ApiRequestError } from "../lib/api";
 import { evaluateConditions } from "../lib/conditions";
+import { resolvePipedLabel } from "../lib/piping";
 import type { AnswerValue, FormRecord, Question } from "../types";
 
 /**
@@ -32,12 +33,18 @@ export default function FormPreviewPage() {
     void loadForm();
   }, [formId]);
 
-  const sections = form?.schema?.sections ?? [];
+  const sections = useMemo(() => form?.schema?.sections ?? [], [form]);
   const totalSections = sections.length;
   const section = sections[currentSection];
   const questions = useMemo(
     () => (section?.questions ?? []).filter((q) => evaluateConditions(q.conditions, answers)),
     [section, answers],
+  );
+  // Form-wide flattened list so piped labels can reference questions in any
+  // section (distinct from the current-section `questions` above).
+  const allQuestions = useMemo(
+    () => sections.flatMap((s) => s.questions),
+    [sections],
   );
 
   function updateAnswer(questionId: string, value: AnswerValue) {
@@ -149,6 +156,8 @@ export default function FormPreviewPage() {
               key={question.id}
               question={question}
               value={answers[question.id]}
+              allQuestions={allQuestions}
+              answers={answers}
               onChange={updateAnswer}
               onInputChange={handleInputChange}
             />
@@ -180,17 +189,23 @@ export default function FormPreviewPage() {
 function PreviewQuestion({
   question,
   value,
+  allQuestions,
+  answers,
   onChange,
   onInputChange,
 }: {
   question: Question;
   value: AnswerValue | undefined;
+  allQuestions: Question[];
+  answers: Record<string, AnswerValue>;
   onChange: (id: string, value: AnswerValue) => void;
   onInputChange: (id: string, event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
 }) {
+  const resolvedLabel = resolvePipedLabel(question.label, allQuestions, answers);
+
   const label = (
     <span className="question-label">
-      {question.label}
+      {resolvedLabel}
       {question.required ? <span className="required-mark"> *</span> : null}
     </span>
   );

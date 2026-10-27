@@ -8,6 +8,7 @@ import {
 import { useParams } from "react-router-dom";
 import { publicGet, publicPost, ApiRequestError } from "../lib/api";
 import { evaluateConditions } from "../lib/conditions";
+import { resolvePipedLabel } from "../lib/piping";
 import { isImageUrl, maybeCompressImage } from "../lib/upload";
 import type { AnswerValue, PublicForm, Question, Section } from "../types";
 
@@ -393,6 +394,8 @@ export default function PublicFormPage() {
                       question={question}
                       value={answers[question.id]}
                       slug={slug ?? ""}
+                      allQuestions={allQuestions}
+                      answers={answers}
                       onChange={updateAnswer}
                       onInputChange={handleInputChange}
                     />
@@ -454,12 +457,16 @@ function QuestionField({
   question,
   value,
   slug,
+  allQuestions,
+  answers,
   onChange,
   onInputChange,
 }: {
   question: Question;
   value: AnswerValue | undefined;
   slug: string;
+  allQuestions: Question[];
+  answers: Record<string, AnswerValue>;
   onChange: (questionId: string, value: AnswerValue) => void;
   onInputChange: (
     questionId: string,
@@ -555,9 +562,11 @@ function QuestionField({
     }
   }
 
+  const resolvedLabel = resolvePipedLabel(question.label, allQuestions, answers);
+
   const label = (
     <span className="question-label">
-      {question.label}
+      {resolvedLabel}
       {question.required ? <span className="required-mark"> *</span> : null}
     </span>
   );
@@ -637,7 +646,7 @@ function QuestionField({
       <fieldset className="question-field">
         <legend>{label}</legend>
         {descriptionElement}
-        <div className="rating-list" role="radiogroup" aria-label={question.label}>
+        <div className="rating-list" role="radiogroup" aria-label={resolvedLabel}>
           {range.map((rating) => (
             <label className="rating-item" key={rating}>
               <input
@@ -691,7 +700,7 @@ function QuestionField({
       <fieldset className="question-field">
         <legend>{label}</legend>
         {descriptionElement}
-        <div className="rating-list" role="radiogroup" aria-label={question.label}>
+        <div className="rating-list" role="radiogroup" aria-label={resolvedLabel}>
           {range.map((rating) => (
             <label className="rating-item" key={rating}>
               <input
