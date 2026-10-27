@@ -1,0 +1,27 @@
+{
+  "verdict": "APPROVED",
+  "findings": [
+    {
+      "id": 1,
+      "severity": "NIT",
+      "title": "SignupPage/LoginPage need an explicit useLocation import",
+      "location": "design.md — Signup -> acceptance flow (web): SignupPage.tsx and LoginPage.tsx subsections",
+      "problem": "The design instructs reading the invite token via useLocation().search in both pages, but SignupPage.tsx and LoginPage.tsx currently import only { Link, useNavigate } from react-router-dom. The design only explicitly calls out adding the useLocation import for GuestOnly/AuthGuard, so a verbatim implementer hits a compile error in these two pages.",
+      "fix": "In the SignupPage/LoginPage subsections, change the import to `import { Link, useNavigate, useLocation } from \"react-router-dom\"`, add `const location = useLocation();`, and read `new URLSearchParams(location.search).get(\"invite\")`."
+    },
+    {
+      "id": 2,
+      "severity": "NIT",
+      "title": "LoginPage has two post-auth redirect sites; pin that both handlers change",
+      "location": "design.md — Signup -> acceptance flow (web): LoginPage.tsx subsection",
+      "problem": "LoginPage.tsx has two independent `setToken(data.token); navigate(\"/dashboard\")` sites: handleSubmit (password) and handleGoogleCallback (Google). The design says '(password + Google)' but does not pin that inviteToken must be read once at component scope and the invite-aware redirect duplicated into BOTH handlers, risking the Google path silently dropping the token.",
+      "fix": "State: read inviteToken once at component top from location.search; apply `navigate(inviteToken ? '/accept-invite?token=' + encodeURIComponent(inviteToken) : '/dashboard')` in both handleSubmit and handleGoogleCallback."
+    }
+  ],
+  "counts": {
+    "HIGH": 0,
+    "MEDIUM": 0,
+    "NIT": 2
+  },
+  "reviewDoc": "c:\\Qivo\\.agents\\tasks\\form-share-feature\\design-review.md"
+}

@@ -1,0 +1,7 @@
+{
+  "task_id": "task-form-share-feature",
+  "task_description": "Implement per-form sharing + email invites for Qivo: a new FormShare Prisma model (RESPONDER/EDITOR/VIEWER roles, PENDING/ACCEPTED status), a formShares API module (routes/service/schemas/access helpers) plus an invites surface, OR-fallback effective-access integration in form.service.ts that never weakens workspace checks, two Resend email templates (silent no-op without a key), a FORM_SHARED notification type, and the frontend share card + AcceptInvitePage + signup/login invite-token carry. Follows the approved design at .agents/tasks/form-share-feature/design.md.",
+  "status": "completed",
+  "feature_order": ["FEAT-001", "FEAT-002", "FEAT-003"],
+  "blocked_reason": null
+}
