@@ -4,7 +4,6 @@ import {
   requireAuth,
   type AuthenticatedRequest,
 } from "../../middleware/auth.js";
-import { getClearCookieOptions, getSessionCookieOptions } from "../../config/cookie.js";
 import {
   changePassword,
   forgotPassword,
@@ -17,6 +16,8 @@ import {
 } from "./auth.service.js";
 import { googleSignIn } from "./google.service.js";
 const authRouter: ExpressRouter = Router();
+// SESSION_COOKIE_NAME retained for reference; cookie delivery was removed in
+// favour of the Bearer token returned in the JSON response body. See env.ts.
 
 const signupSchema = z.object({
   name: z.string().trim().min(2).max(100),
@@ -38,8 +39,6 @@ authRouter.post(
         await logout(req.sessionId);
       }
 
-      res.clearCookie("qivo_session", getClearCookieOptions());
-
       res.json({
         success: true,
         data: {
@@ -56,8 +55,6 @@ authRouter.post("/signup", async (req, res, next) => {
   try {
     const input = signupSchema.parse(req.body);
     const result = await signup(input);
-
-    res.cookie("qivo_session", result.sessionToken, getSessionCookieOptions());
 
     res.status(201).json({
       success: true,
@@ -76,8 +73,6 @@ authRouter.post("/login", async (req, res, next) => {
   try {
     const input = loginSchema.parse(req.body);
     const result = await login(input);
-
-    res.cookie("qivo_session", result.sessionToken, getSessionCookieOptions());
 
     res.json({
       success: true,
@@ -226,8 +221,6 @@ authRouter.post("/google", async (req, res, next) => {
     const input = z.object({ idToken: z.string().min(1) }).parse(req.body);
 
     const result = await googleSignIn(input.idToken);
-
-    res.cookie("qivo_session", result.sessionToken, getSessionCookieOptions());
 
     res.json({
       success: true,

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
 
 import prisma from "../db/prisma.js";
+import { env } from "../config/env.js";
 
 export type AuthenticatedRequest = Request & {
   user?: {
@@ -23,7 +24,7 @@ export async function requireAuth(
 ) {
   try {
     // Accept token from cookie OR Authorization header
-    let token = req.cookies?.qivo_session;
+    let token = req.cookies?.[env.SESSION_COOKIE_NAME];
 
     if (!token) {
       const authHeader = req.get("Authorization");

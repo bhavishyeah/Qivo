@@ -6,8 +6,7 @@ import {
   sendPasswordResetEmail,
   sendVerificationEmail,
 } from "../../services/email.js";
-
-const SESSION_DAYS = 30;
+import { env } from "../../config/env.js";
 
 /**
  * Stored in passwordHash for accounts that have no password (e.g. created via
@@ -37,7 +36,7 @@ function createSlug(name: string): string {
 
 function createSessionExpiry(): Date {
   return new Date(
-    Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000,
+    Date.now() + env.SESSION_DAYS * 24 * 60 * 60 * 1000,
   );
 }
 export async function logout(sessionId: string) {

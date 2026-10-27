@@ -1,8 +1,10 @@
 // Built-in form templates
 
+import type { QuestionType } from "./form.service.js";
+
 type TemplateQuestion = {
   label: string;
-  type: string;
+  type: QuestionType;
   required: boolean;
   options?: { value: string; label: string }[];
   settings?: Record<string, unknown>;
@@ -49,7 +51,7 @@ export const TEMPLATES: Template[] = [
     questions: [
       { label: "Full Name", type: "SHORT_TEXT", required: true },
       { label: "Email Address", type: "EMAIL", required: true },
-      { label: "Phone Number", type: "SHORT_TEXT", required: true },
+      { label: "Phone Number", type: "PHONE", required: true },
       { label: "Department / Branch", type: "SHORT_TEXT", required: true },
       { label: "Year of Study", type: "SHORT_TEXT", required: true },
       {

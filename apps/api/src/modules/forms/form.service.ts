@@ -9,7 +9,7 @@ import type {
   UpdateFormSettingsInput,
 } from "./form.schemas.js";
 
-type QuestionType =
+export type QuestionType =
   | "SHORT_TEXT"
   | "LONG_TEXT"
   | "EMAIL"
@@ -1355,6 +1355,38 @@ export async function publishDueForms(now: Date = new Date()): Promise<number> {
   const result = await prisma.form.updateMany({
     where: { id: { in: dueIds } },
     data: { status: "PUBLISHED" },
+  });
+  return result.count;
+}
+
+/**
+ * Close any published forms whose scheduledCloseAt has passed. Intended to be
+ * called from a scheduled task (e.g. a timer/cron), mirroring publishDueForms.
+ * The per-request close check in submitFormResponse remains as a safety net.
+ */
+export async function closeDueForms(now: Date = new Date()): Promise<number> {
+  const candidates = await prisma.form.findMany({
+    where: {
+      deletedAt: null,
+      status: "PUBLISHED",
+    },
+    select: { id: true, schema: true },
+  });
+
+  const dueIds = candidates
+    .filter((f) => {
+      const scheduledAt = getFormSchema(f.schema).settings.scheduledCloseAt;
+      if (!scheduledAt) return false;
+      const when = new Date(scheduledAt);
+      return !Number.isNaN(when.getTime()) && when <= now;
+    })
+    .map((f) => f.id);
+
+  if (dueIds.length === 0) return 0;
+
+  const result = await prisma.form.updateMany({
+    where: { id: { in: dueIds } },
+    data: { status: "CLOSED" },
   });
   return result.count;
 }

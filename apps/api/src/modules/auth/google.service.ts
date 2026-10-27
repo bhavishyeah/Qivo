@@ -1,6 +1,7 @@
 import { OAuth2Client } from "google-auth-library";
 import { createHash, randomBytes } from "node:crypto";
 import prisma from "../../db/prisma.js";
+import { env } from "../../config/env.js";
 
 function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
@@ -15,10 +16,8 @@ function createSlug(name: string): string {
   return `${base || "workspace"}-${randomBytes(4).toString("hex")}`;
 }
 
-const SESSION_DAYS = 30;
-
 function createSessionExpiry(): Date {
-  return new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
+  return new Date(Date.now() + env.SESSION_DAYS * 24 * 60 * 60 * 1000);
 }
 
 /**

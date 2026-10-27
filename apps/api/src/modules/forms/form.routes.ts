@@ -151,7 +151,7 @@ formRouter.post(
       for (const q of template.questions) {
         await createQuestion(form.id, req.user.id, {
           label: q.label,
-          type: q.type as any,
+          type: q.type,
           required: q.required,
           ...(q.options ? { options: q.options } : {}),
           ...(q.settings ? { settings: q.settings } : {}),
