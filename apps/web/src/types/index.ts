@@ -65,6 +65,8 @@ export type FormSchema = {
     scheduledCloseAt?: string | null;
     quizMode?: boolean;
     showScore?: boolean;
+    responseNotification?: "off" | "immediate" | "daily";
+    sendConfirmationEmail?: boolean;
   };
   confirmationMessage?: string;
 };

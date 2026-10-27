@@ -14,7 +14,7 @@ if (!process.env.DATABASE_URL) {
 }
 
 import app from "./app.js";
-import { publishDueForms, closeDueForms } from "./modules/forms/form.service.js";
+import { publishDueForms, closeDueForms, sendResponseDigests } from "./modules/forms/form.service.js";
 
 const port = Number(process.env.PORT ?? 3000);
 
@@ -36,6 +36,8 @@ async function runPublishSweep() {
     if (count > 0) console.log(`[scheduler] published ${count} scheduled form(s)`);
     const closed = await closeDueForms();
     if (closed > 0) console.log(`[scheduler] closed ${closed} scheduled form(s)`);
+    const digests = await sendResponseDigests();
+    if (digests > 0) console.log(`[scheduler] sent ${digests} response digest(s)`);
   } catch (err) {
     console.error("[scheduler] publish/close sweep failed:", err);
   }

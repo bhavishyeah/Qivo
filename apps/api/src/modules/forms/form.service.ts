@@ -6,6 +6,11 @@ import { logAction } from "../audit/audit.service.js";
 import { notifyFormEvent } from "../notifications/notification.service.js";
 import { signUpload, type CloudinarySignature } from "../../services/cloudinary.js";
 import {
+  sendNewResponseNotificationEmail,
+  sendResponseConfirmationEmail,
+  sendResponseDigestEmail,
+} from "../../services/email.js";
+import {
   hasEditorShare,
   hasResponseViewShare,
 } from "../formShares/formShare.access.js";
@@ -61,6 +66,8 @@ type FormSchema = {
     scheduledCloseAt?: string | null;
     quizMode?: boolean;
     showScore?: boolean;
+    responseNotification?: "off" | "immediate" | "daily";
+    sendConfirmationEmail?: boolean;
   };
   confirmationMessage?: string;
 };
@@ -96,6 +103,10 @@ function getFormSchema(value: unknown): FormSchema {
       ...(candidate?.settings?.showScore !== undefined
         ? { showScore: candidate.settings.showScore }
         : {}),
+      responseNotification:
+        candidate?.settings?.responseNotification ?? "off",
+      sendConfirmationEmail:
+        candidate?.settings?.sendConfirmationEmail ?? false,
     },
     ...(candidate?.confirmationMessage !== undefined
       ? {
@@ -516,6 +527,12 @@ export async function updateFormSettings(
         : {}),
       ...(input.showScore !== undefined
         ? { showScore: input.showScore }
+        : {}),
+      ...(input.responseNotification !== undefined
+        ? { responseNotification: input.responseNotification }
+        : {}),
+      ...(input.sendConfirmationEmail !== undefined
+        ? { sendConfirmationEmail: input.sendConfirmationEmail }
         : {}),
     },
     ...(input.confirmationMessage !== undefined
@@ -1154,6 +1171,14 @@ export async function getPublicForm(
 
   const schema = getFormSchema(form.schema);
 
+  // Strip owner-only settings (email engagement toggles) from the public
+  // payload so anonymous respondents never see them. Mirrors stripAnswerKeys'
+  // destructure-and-`void` pattern for intentional omission.
+  const { responseNotification, sendConfirmationEmail, ...publicSettings } =
+    schema.settings;
+  void responseNotification;
+  void sendConfirmationEmail;
+
   return {
     id: form.id,
     slug: form.slug,
@@ -1169,7 +1194,7 @@ export async function getPublicForm(
       // Strip answer-key fields (correctAnswer/points) from every question so
       // quiz respondents can't read the answers out of the public payload.
       sections: stripAnswerKeys(schema.sections),
-      settings: schema.settings,
+      settings: publicSettings,
       ...(schema.confirmationMessage !==
       undefined
         ? {
@@ -1346,6 +1371,68 @@ function stripAnswerKeys(sections: FormSection[]): FormSection[] {
 }
 
 /**
+ * HTML-escape a respondent-supplied string so it can't break or inject markup
+ * into the confirmation email body.
+ */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/**
+ * Build a defensive `label: value` list from a form's questions and a submitted
+ * answers record, for the respondent confirmation email. Tolerant by design —
+ * never throws; awkward or empty answers are simply omitted. Every value is
+ * HTML-escaped so it is safe to interpolate into the email HTML.
+ */
+function buildConfirmationAnswerList(
+  questions: FormQuestion[],
+  answers: Record<string, unknown>,
+): Array<{ label: string; value: string }> {
+  const list: Array<{ label: string; value: string }> = [];
+
+  for (const question of questions) {
+    const raw = answers[question.id];
+    if (raw === undefined || raw === null || raw === "") continue;
+
+    let rendered: string | null = null;
+
+    if (Array.isArray(raw)) {
+      const parts = raw
+        .map((item) => (item == null ? "" : String(item).trim()))
+        .filter((item) => item !== "");
+      rendered = parts.length > 0 ? parts.join(", ") : null;
+    } else if (question.type === "YES_NO") {
+      if (raw === true || raw === "yes") rendered = "Yes";
+      else if (raw === false || raw === "no") rendered = "No";
+      else rendered = String(raw);
+    } else if (typeof raw === "number") {
+      rendered = String(raw);
+    } else if (typeof raw === "string") {
+      rendered = raw;
+    } else if (typeof raw === "boolean") {
+      rendered = raw ? "Yes" : "No";
+    } else {
+      // Unknown shape — skip rather than risk awkward output.
+      continue;
+    }
+
+    if (rendered === null || rendered.trim() === "") continue;
+
+    list.push({
+      label: escapeHtml(question.label),
+      value: escapeHtml(rendered),
+    });
+  }
+
+  return list;
+}
+
+/**
  * Publish any forms whose scheduledPublishAt has passed. Intended to be called
  * from a scheduled task (e.g. a timer/cron), NOT from a request handler. This
  * replaces the previous lazy-publish-on-GET behaviour, which mutated state on an
@@ -1410,6 +1497,86 @@ export async function closeDueForms(now: Date = new Date()): Promise<number> {
     data: { status: "CLOSED" },
   });
   return result.count;
+}
+
+/**
+ * Send the daily response digest to owners of forms with
+ * responseNotification === "daily". Called from the same scheduled sweep as
+ * publishDueForms/closeDueForms. Idempotent via the persisted lastDigestSentAt
+ * stamp: a form is only due when it was never digested or its last digest is
+ * ~24h old, so the per-form send rate is independent of the 60s sweep cadence.
+ * Returns the number of digests actually sent.
+ */
+export async function sendResponseDigests(now: Date = new Date()): Promise<number> {
+  const DIGEST_INTERVAL_MS = 24 * 60 * 60 * 1000;
+  const DIGEST_TOLERANCE_MS = 60_000;
+
+  const candidates = await prisma.form.findMany({
+    where: {
+      deletedAt: null,
+      status: { in: ["PUBLISHED", "CLOSED"] },
+    },
+    select: {
+      id: true,
+      title: true,
+      ownerId: true,
+      schema: true,
+      lastDigestSentAt: true,
+    },
+  });
+
+  const due = candidates.filter((f) => {
+    if (getFormSchema(f.schema).settings.responseNotification !== "daily") {
+      return false;
+    }
+    if (f.lastDigestSentAt == null) return true;
+    return (
+      f.lastDigestSentAt.getTime() <=
+      now.getTime() - (DIGEST_INTERVAL_MS - DIGEST_TOLERANCE_MS)
+    );
+  });
+
+  let sent = 0;
+
+  for (const f of due) {
+    try {
+      const since =
+        f.lastDigestSentAt ?? new Date(now.getTime() - DIGEST_INTERVAL_MS);
+
+      const count = await prisma.formResponse.count({
+        where: { formId: f.id, submittedAt: { gt: since, lte: now } },
+      });
+
+      // Zero new responses: don't send and don't stamp, so the window doesn't
+      // slide past un-notified responses.
+      if (count === 0) continue;
+
+      const owner = await prisma.user.findUnique({
+        where: { id: f.ownerId },
+        select: { email: true, name: true },
+      });
+      if (!owner?.email) continue;
+
+      await sendResponseDigestEmail(owner.email, {
+        formTitle: f.title,
+        formId: f.id,
+        count,
+      });
+
+      // Stamp AFTER a successful send attempt (at-least-once: a rare duplicate
+      // on a stamp-update failure is safer than silently dropping a digest).
+      await prisma.form.update({
+        where: { id: f.id },
+        data: { lastDigestSentAt: now },
+      });
+
+      sent += 1;
+    } catch (err) {
+      console.error(`response digest failed for form ${f.id}:`, err);
+    }
+  }
+
+  return sent;
 }
 
 /**
@@ -1684,6 +1851,42 @@ void (async () => {
     });
   }
 })().catch((err) => console.error("submission analytics/milestone failed:", err));
+
+// Feature A (immediate): notify the form OWNER of the new response. Independent
+// fire-and-forget so an email failure can't break submission or the milestone
+// logic, and no-ops without Resend (sendEmail handles that).
+if (schema.settings.responseNotification === "immediate") {
+  void (async () => {
+    const owner = await prisma.user.findUnique({
+      where: { id: form.ownerId },
+      select: { email: true, name: true },
+    });
+    if (!owner?.email) return;
+    await sendNewResponseNotificationEmail(owner.email, {
+      formTitle: form.title,
+      formId: form.id,
+    });
+  })().catch((err) => console.error("response notification email failed:", err));
+}
+
+// Feature B: respondent confirmation email. Only when the owner enabled it AND
+// email collection is on AND we actually have the respondent's email (reuse the
+// normalized email already computed for duplicate detection).
+if (
+  schema.settings.sendConfirmationEmail === true &&
+  schema.settings.collectEmail === true &&
+  normalizedEmail
+) {
+  const confirmationAnswers = buildConfirmationAnswerList(questions, input.answers);
+  void (async () => {
+    await sendResponseConfirmationEmail(normalizedEmail, {
+      formTitle: form.title,
+      formId: form.id,
+      slug: form.slug,
+      answers: confirmationAnswers,
+    });
+  })().catch((err) => console.error("confirmation email failed:", err));
+}
 
 // Calculate quiz score if quiz mode is enabled
 let quizScore: { earned: number; total: number; percentage: number } | null = null;

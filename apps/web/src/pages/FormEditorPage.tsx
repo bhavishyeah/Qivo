@@ -113,6 +113,8 @@ export default function FormEditorPage() {
   const [scheduledCloseAt, setScheduledCloseAt] = useState("");
   const [quizMode, setQuizMode] = useState(false);
   const [showScore, setShowScore] = useState(false);
+  const [responseNotification, setResponseNotification] = useState<"off" | "immediate" | "daily">("off");
+  const [sendConfirmationEmail, setSendConfirmationEmail] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
 
   // Approval workflow
@@ -163,6 +165,8 @@ export default function FormEditorPage() {
         setScheduledCloseAt(toDatetimeLocal(schema.settings?.scheduledCloseAt));
         setQuizMode(schema.settings?.quizMode ?? false);
         setShowScore(schema.settings?.showScore ?? false);
+        setResponseNotification(schema.settings?.responseNotification ?? "off");
+        setSendConfirmationEmail(schema.settings?.sendConfirmationEmail ?? false);
       } catch (err) {
         setError(err instanceof ApiRequestError ? err.message : "Unable to load editor.");
       } finally {
@@ -605,6 +609,8 @@ export default function FormEditorPage() {
           scheduledCloseAt: toIsoInstant(scheduledCloseAt),
           quizMode,
           showScore,
+          responseNotification,
+          sendConfirmationEmail,
         },
       );
       setForm(data.form); setMessage("Settings saved.");
@@ -1056,6 +1062,8 @@ export default function FormEditorPage() {
               <label className="settings-toggle"><input type="checkbox" checked={allowMultipleResponses} onChange={(e) => setAllowMultipleResponses(e.target.checked)} /><span><strong>Allow multiple responses</strong><small>Let the same person submit more than once.</small></span></label>
               <label className="settings-toggle"><input type="checkbox" checked={quizMode} onChange={(e) => setQuizMode(e.target.checked)} /><span><strong>Quiz mode</strong><small>Enable scoring — set correct answers per question.</small></span></label>
               {quizMode ? (<label className="settings-toggle"><input type="checkbox" checked={showScore} onChange={(e) => setShowScore(e.target.checked)} /><span><strong>Show score after submission</strong><small>Respondent sees their score.</small></span></label>) : null}
+              <div className="question-field"><label htmlFor="s-response-notification">Email me about new responses</label><select id="s-response-notification" value={responseNotification} onChange={(e) => setResponseNotification(e.target.value as "off" | "immediate" | "daily")} style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }}><option value="off">Off</option><option value="immediate">Immediately</option><option value="daily">Daily digest</option></select><small className="muted">Get notified by email when this form receives responses.</small></div>
+              <label className="settings-toggle" style={collectEmail ? undefined : { opacity: 0.5 }}><input type="checkbox" checked={sendConfirmationEmail} disabled={!collectEmail} onChange={(e) => setSendConfirmationEmail(e.target.checked)} /><span><strong>Send respondents a confirmation email</strong><small>{collectEmail ? "Email respondents a copy of their submission." : "Turn on 'Collect email addresses' to enable."}</small></span></label>
             </SettingsGroup>
             <SettingsGroup title="Access & Schedule" description="When the form opens and closes" summary={`${scheduledPublishAt ? "Scheduled" : "Manual publish"} · ${scheduledCloseAt ? "Auto-close set" : "No close date"}`}>
               <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>

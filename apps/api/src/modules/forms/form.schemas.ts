@@ -10,6 +10,8 @@ export const updateFormSettingsSchema = z.object({
   scheduledCloseAt: z.string().datetime().nullable().optional(),
   quizMode: z.boolean().optional(),
   showScore: z.boolean().optional(),
+  responseNotification: z.enum(["off", "immediate", "daily"]).optional(),
+  sendConfirmationEmail: z.boolean().optional(),
 });
 
 export type UpdateFormSettingsInput = z.infer<

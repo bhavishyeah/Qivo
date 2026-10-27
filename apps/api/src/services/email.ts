@@ -241,3 +241,99 @@ export async function sendFormShareExistingUserEmail(
     text: `${opts.inviterName} gave you ${roleLabel[opts.role]} access to "${opts.formTitle}" on Qivo. Open it: ${link}`,
   });
 }
+
+/**
+ * Notify a form OWNER immediately that a new response arrived. Fire-and-forget
+ * from the submit path; links to the form's responses dashboard.
+ */
+export async function sendNewResponseNotificationEmail(
+  to: string,
+  opts: { formTitle: string; formId: string },
+): Promise<void> {
+  const webUrl = getWebUrl();
+  const link = `${webUrl}/forms/${opts.formId}/responses`;
+
+  await sendEmail({
+    to,
+    subject: `New response to "${opts.formTitle}"`,
+    html: layout(
+      "You have a new response",
+      `<p style="color:#475569;font-size:15px;line-height:1.6;">Someone just submitted a response to your form <strong>${opts.formTitle}</strong> on Qivo Forms.</p>
+       ${button(link, "View responses")}
+       <p style="color:#94a3b8;font-size:13px;margin-top:16px;">Or copy this link: ${link}</p>`,
+    ),
+    text: `You have a new response to "${opts.formTitle}" on Qivo. View responses: ${link}`,
+  });
+}
+
+/**
+ * Daily digest to a form OWNER summarizing how many responses arrived in the
+ * last 24 hours. Sent by the scheduled sweep (at most once per ~24h per form).
+ */
+export async function sendResponseDigestEmail(
+  to: string,
+  opts: { formTitle: string; formId: string; count: number },
+): Promise<void> {
+  const webUrl = getWebUrl();
+  const link = `${webUrl}/forms/${opts.formId}/responses`;
+  const plural = opts.count === 1 ? "response" : "responses";
+
+  await sendEmail({
+    to,
+    subject: `${opts.count} new ${plural} to "${opts.formTitle}"`,
+    html: layout(
+      "Your daily response digest",
+      `<p style="color:#475569;font-size:15px;line-height:1.6;">Your form <strong>${opts.formTitle}</strong> received <strong>${opts.count}</strong> new ${plural} in the last 24 hours.</p>
+       ${button(link, "View responses")}
+       <p style="color:#94a3b8;font-size:13px;margin-top:16px;">Or copy this link: ${link}</p>`,
+    ),
+    text: `Your form "${opts.formTitle}" received ${opts.count} new ${plural} in the last 24 hours. View responses: ${link}`,
+  });
+}
+
+/**
+ * Confirmation email to the RESPONDENT after they submit. The `answers` list
+ * arrives pre-sanitized/pre-escaped (plain strings) from the submit path — this
+ * function only lays them out.
+ */
+export async function sendResponseConfirmationEmail(
+  to: string,
+  opts: {
+    formTitle: string;
+    formId: string;
+    slug: string;
+    answers: Array<{ label: string; value: string }>;
+  },
+): Promise<void> {
+  const webUrl = getWebUrl();
+  const link = `${webUrl}/f/${opts.slug}`;
+
+  const answersHtml =
+    opts.answers.length > 0
+      ? `<div style="margin:16px 0;border:1px solid #eef2f7;border-radius:12px;padding:16px;">${opts.answers
+          .map(
+            (a) =>
+              `<p style="margin:0 0 10px;color:#475569;font-size:14px;line-height:1.5;"><strong style="color:#111827;">${a.label}:</strong> ${a.value}</p>`,
+          )
+          .join("")}</div>`
+      : "";
+
+  const answersText =
+    opts.answers.length > 0
+      ? `\n\nYour answers:\n${opts.answers
+          .map((a) => `${a.label}: ${a.value}`)
+          .join("\n")}`
+      : "";
+
+  await sendEmail({
+    to,
+    subject: `Thanks for your response to "${opts.formTitle}"`,
+    html: layout(
+      "Thanks for your response",
+      `<p style="color:#475569;font-size:15px;line-height:1.6;">We received your response to <strong>${opts.formTitle}</strong>. Thank you!</p>
+       ${answersHtml}
+       ${button(link, "Open form")}`,
+    ),
+    text: `Thanks for your response to "${opts.formTitle}".${answersText}\n\nOpen form: ${link}`,
+  });
+}
