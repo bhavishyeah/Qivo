@@ -1,0 +1,41 @@
+{
+  "verdict": "CHANGES_REQUESTED",
+  "findings": [
+    {
+      "id": 1,
+      "severity": "MEDIUM",
+      "title": "maybeCompressImage is not a guaranteed no-op for the signature PNG; it can re-encode to JPEG and rename .png -> .jpg on wide/high-DPI viewports",
+      "where": "design.md 'Capture / upload UX (chosen)' + upload.ts matrix row; vs apps/web/src/lib/upload.ts maybeCompressImage",
+      "fix": "Bypass maybeCompressImage for signatures or clamp canvas backing-store longest edge to <=1600 (canvas.width = Math.min(rect.width*dpr, 1600)) so the PNG stays on the unchanged path; otherwise correct the design text to accept a signature.jpg result."
+    },
+    {
+      "id": 2,
+      "severity": "MEDIUM",
+      "title": "New QuestionField state (sigRef, sigEmpty) must be declared as unconditional hooks; design does not specify placement or sigEmpty init, risking a Rules-of-Hooks violation",
+      "where": "design.md 'Capture / upload UX (chosen)' Public-form lifecycle steps 1-3 + 're-sign' edge case; vs apps/web/src/pages/PublicFormPage.tsx QuestionField (unconditional upload-state hooks)",
+      "fix": "State: declare const sigRef = useRef<SignaturePadHandle>(null) and const [sigEmpty, setSigEmpty] = useState(true) at the top of QuestionField alongside the existing unconditional upload hooks (NOT inside the SIGNATURE branch); derive uploadedUrl exactly as the FILE_UPLOAD branch (typeof value === 'string' && value.startsWith('http'))."
+    },
+    {
+      "id": 3,
+      "severity": "NIT",
+      "title": "Approximate line numbers for the editor FILE_UPLOAD settings panel have drifted",
+      "where": "design.md matrix/validation; vs FormEditorPage.tsx (settings panel ~1666, type-change handler ~1448)",
+      "fix": "Update the matrix references: FILE_UPLOAD settings panel ~line 1666, type-change handler ~line 1448."
+    },
+    {
+      "id": 4,
+      "severity": "NIT",
+      "title": "SignaturePad border styling leaves solid-vs-dashed as an unresolved 'optional'",
+      "where": "design.md 'SignaturePad component API' Styling paragraph",
+      "fix": "Pick one: keep 2px dashed #cbd5e1 always; do not switch to solid on draw."
+    },
+    {
+      "id": 5,
+      "severity": "NIT",
+      "title": "signature_pad v5 event API stated inconsistently (addEventListener for subscribe but off() for teardown)",
+      "where": "design.md 'signature_pad v5 integration' + 'Internal wiring' + verify-at-install list",
+      "fix": "Use a matched pair confirmed against the installed v5 types: addEventListener/removeEventListener OR on/off; do not mix addEventListener with off()."
+    }
+  ],
+  "reviewDoc": "c:\\Qivo\\.agents\\tasks\\signature-field\\design-review.md"
+}

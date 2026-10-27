@@ -52,6 +52,7 @@ const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
   PHONE: "Phone number",
   URL: "URL",
   FILE_UPLOAD: "File upload",
+  SIGNATURE: "Signature",
   LINEAR_SCALE: "Linear scale",
   MULTI_ENTRY: "Multi-Entry",
 };
@@ -1465,6 +1466,11 @@ function QuestionCard({
                   if (RATING_TYPES.has(newType) && !question.settings?.min) {
                     patch.settings = { ...question.settings, min: 1, max: newType === "LINEAR_SCALE" ? 10 : 5 };
                   }
+                  // SIGNATURE reads no settings; clear any leftover FILE_UPLOAD
+                  // settings for tidiness (they would be inert otherwise).
+                  if (newType === "SIGNATURE") {
+                    patch.settings = undefined;
+                  }
                   onChange(question.id, patch);
                 }}
                 onClick={(e) => e.stopPropagation()}
@@ -1748,6 +1754,24 @@ function QuestionCard({
                 >
                   + Add another
                 </span>
+              </div>
+            ) : null}
+
+            {/* Signature preview (static placeholder — no live canvas) */}
+            {question.type === "SIGNATURE" ? (
+              <div style={{ marginTop: 14 }}>
+                <div
+                  style={{
+                    border: "2px dashed #cbd5e1",
+                    borderRadius: 12,
+                    padding: "24px 16px",
+                    textAlign: "center",
+                    background: "#f8fafc",
+                  }}
+                >
+                  <p style={{ margin: "0 0 4px", color: "#475569", fontWeight: 600 }}>Signature</p>
+                  <p style={{ margin: 0, color: "#94a3b8", fontSize: "0.82rem" }}>Respondent signs here</p>
+                </div>
               </div>
             ) : null}
 

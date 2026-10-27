@@ -35,6 +35,7 @@ export type QuestionType =
   | "PHONE"
   | "URL"
   | "FILE_UPLOAD"
+  | "SIGNATURE"
   | "LINEAR_SCALE"
   | "MULTI_ENTRY";
 
@@ -1352,8 +1353,10 @@ function validateAnswerAgainstQuestion(
       return null;
     }
 
+    case "SIGNATURE":
     case "FILE_UPLOAD":
-      // Answer is the delivered file URL.
+      // Answer is the delivered file URL (SIGNATURE shares FILE_UPLOAD's rule:
+      // the signature PNG is uploaded to Cloudinary and the answer is its URL).
       if (!isString || !/^https?:\/\//.test(value)) return "expected a file URL";
       return null;
 
@@ -2659,7 +2662,9 @@ export async function getFormReport(formId: string, userId: string) {
       return { ...base, kind: "text", sample };
     }
 
-    // Text-based (SHORT_TEXT, LONG_TEXT, EMAIL, DATE, PHONE, URL, FILE_UPLOAD)
+    // Text-based (SHORT_TEXT, LONG_TEXT, EMAIL, DATE, PHONE, URL, FILE_UPLOAD,
+    // SIGNATURE). URL answers (FILE_UPLOAD / SIGNATURE) render as thumbnails
+    // downstream via isImageUrl.
     const sample = answers.slice(0, 20).map((a) => String(a));
     return { ...base, kind: "text", sample };
   });

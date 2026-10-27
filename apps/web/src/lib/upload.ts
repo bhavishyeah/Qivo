@@ -95,9 +95,13 @@ export async function uploadToCloudinary(
   slug: string,
   rawFile: File,
   onProgress?: (percent: number) => void,
+  opts?: { skipCompression?: boolean },
 ): Promise<string> {
   // 0) For images, downscale + recompress in the browser before sending.
-  const file = await maybeCompressImage(rawFile);
+  // Signatures opt out: maybeCompressImage would re-encode a wide/high-DPI
+  // canvas to JPEG and rename .png -> .jpg, so the signature PNG (small line
+  // art that must stay a crisp PNG) is uploaded untouched.
+  const file = opts?.skipCompression ? rawFile : await maybeCompressImage(rawFile);
 
   // 1) Get a short-lived signature from our API (form must be published).
   const sig = await publicPost<{

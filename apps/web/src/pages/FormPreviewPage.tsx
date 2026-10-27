@@ -4,6 +4,7 @@ import { api, ApiRequestError } from "../lib/api";
 import { evaluateConditions } from "../lib/conditions";
 import { resolvePipedLabel } from "../lib/piping";
 import { DEFAULT_ACCENT, ensureFontLoaded, resolveTheme } from "../lib/theme";
+import SignaturePad from "../components/SignaturePad";
 import type { AnswerValue, FormRecord, Question } from "../types";
 
 /**
@@ -349,6 +350,18 @@ function PreviewQuestion({
           <p style={{ margin: 0, color: "#475569", fontWeight: 600 }}>Click to upload (preview only)</p>
           <p style={{ margin: "4px 0 0", color: "#94a3b8", fontSize: "0.82rem" }}>Max {question.settings?.maxFileSizeMB ?? 5}MB</p>
         </div>
+      </div>
+    );
+  }
+
+  // Signature: live interactive canvas (draw + clear) but no Save / upload —
+  // preview submissions are never persisted.
+  if (question.type === "SIGNATURE") {
+    return (
+      <div className="question-field">
+        <label>{label}</label>
+        {desc}
+        <SignaturePad ariaLabel={resolvedLabel} />
       </div>
     );
   }

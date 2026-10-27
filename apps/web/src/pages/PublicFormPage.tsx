@@ -1,6 +1,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ChangeEvent,
   type FormEvent,
@@ -10,6 +11,7 @@ import { publicGet, publicPost, ApiRequestError } from "../lib/api";
 import { evaluateConditions } from "../lib/conditions";
 import { resolvePipedLabel } from "../lib/piping";
 import { isImageUrl, uploadToCloudinary } from "../lib/upload";
+import SignaturePad, { type SignaturePadHandle } from "../components/SignaturePad";
 import { ensureFontLoaded, resolveTheme } from "../lib/theme";
 import type { AnswerValue, PublicForm, Question, Section } from "../types";
 
@@ -623,14 +625,23 @@ function QuestionField({
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [uploadProgress, setUploadProgress] = useState(0); // 0-100
+  // Signature state (unconditional hooks; only used by the SIGNATURE branch)
+  const sigRef = useRef<SignaturePadHandle>(null);
+  const [sigEmpty, setSigEmpty] = useState(true);
 
-  async function uploadFileToCloudinary(rawFile: File) {
+  async function uploadFileToCloudinary(
+    rawFile: File,
+    opts?: { skipCompression?: boolean },
+  ) {
     setUploadError("");
     setUploading(true);
     setUploadProgress(0);
     try {
-      const secureUrl = await uploadToCloudinary(slug, rawFile, (percent) =>
-        setUploadProgress(percent),
+      const secureUrl = await uploadToCloudinary(
+        slug,
+        rawFile,
+        (percent) => setUploadProgress(percent),
+        opts,
       );
       // Store the delivered URL as the answer.
       onChange(question.id, secureUrl);
@@ -918,6 +929,136 @@ function QuestionField({
             </>
           )}
         </div>
+        {uploadError ? (
+          <p className="submit-error" style={{ marginTop: 8 }}>{uploadError}</p>
+        ) : null}
+      </div>
+    );
+  }
+
+  // Signature: draw on a canvas, Save -> upload the PNG to Cloudinary (reusing
+  // the FILE_UPLOAD upload path), store the delivered URL as the answer.
+  if (question.type === "SIGNATURE") {
+    const uploadedUrl = typeof value === "string" && value.startsWith("http") ? value : "";
+
+    return (
+      <div className="question-field">
+        <label htmlFor={inputId}>{label}</label>
+        {descriptionElement}
+        {uploadedUrl ? (
+          // Reuse the FILE_UPLOAD uploaded-state UI: thumbnail + view + re-sign.
+          <div
+            style={{
+              border: "2px dashed #cbd5e1",
+              borderRadius: 12,
+              padding: "24px 16px",
+              textAlign: "center",
+              background: "#f8fafc",
+            }}
+          >
+            <div style={{ color: "#16a34a", fontWeight: 600 }}>
+              {isImageUrl(uploadedUrl) ? (
+                <img
+                  src={uploadedUrl}
+                  alt="Signature preview"
+                  style={{
+                    maxWidth: "100%",
+                    maxHeight: 180,
+                    borderRadius: 8,
+                    marginBottom: 8,
+                    objectFit: "contain",
+                  }}
+                />
+              ) : null}
+              <p style={{ margin: 0 }}>
+                ✓ Signature saved ·{" "}
+                <a
+                  href={uploadedUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: "#2563eb", textDecoration: "underline" }}
+                >
+                  view
+                </a>
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  sigRef.current?.clear();
+                  setSigEmpty(true);
+                  onChange(question.id, null);
+                }}
+                style={{
+                  marginTop: 8,
+                  fontSize: "0.85rem",
+                  color: "#2563eb",
+                  background: "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                  textDecoration: "underline",
+                }}
+              >
+                Re-sign
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <SignaturePad
+              ref={sigRef}
+              disabled={uploading}
+              onChange={(empty) => setSigEmpty(empty)}
+              ariaLabel={resolvedLabel}
+            />
+            {uploading ? (
+              <div style={{ marginTop: 10 }}>
+                <p style={{ margin: "0 0 10px", color: "#475569", fontWeight: 600 }}>
+                  Uploading… {uploadProgress > 0 ? `${uploadProgress}%` : ""}
+                </p>
+                <div
+                  style={{
+                    height: 8,
+                    borderRadius: 999,
+                    background: "#e2e8f0",
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      height: "100%",
+                      width: `${uploadProgress}%`,
+                      background: "#2563eb",
+                      borderRadius: 999,
+                      transition: "width 0.2s ease",
+                    }}
+                  />
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                disabled={sigEmpty || uploading}
+                onClick={async () => {
+                  const file = await sigRef.current?.toPngFile();
+                  // Bypass maybeCompressImage — keep the PNG crisp (Finding #1).
+                  if (file) await uploadFileToCloudinary(file, { skipCompression: true });
+                }}
+                style={{
+                  marginTop: 10,
+                  padding: "8px 16px",
+                  borderRadius: 10,
+                  border: "1px solid #cbd5e1",
+                  background: sigEmpty ? "#f1f5f9" : "#2563eb",
+                  color: sigEmpty ? "#94a3b8" : "#fff",
+                  fontWeight: 600,
+                  cursor: sigEmpty || uploading ? "default" : "pointer",
+                }}
+              >
+                Save signature
+              </button>
+            )}
+          </>
+        )}
         {uploadError ? (
           <p className="submit-error" style={{ marginTop: 8 }}>{uploadError}</p>
         ) : null}

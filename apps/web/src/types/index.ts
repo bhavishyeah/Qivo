@@ -11,6 +11,7 @@ export type QuestionType =
   | "PHONE"
   | "URL"
   | "FILE_UPLOAD"
+  | "SIGNATURE"
   | "LINEAR_SCALE"
   | "MULTI_ENTRY";
 

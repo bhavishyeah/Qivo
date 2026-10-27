@@ -72,4 +72,48 @@ describe("validateSubmission", () => {
       expect((err as Error).name).toBe("INVALID_RESPONSE");
     }
   });
+
+  // SIGNATURE mirrors FILE_UPLOAD: the answer is an https URL to the uploaded
+  // signature PNG.
+  it("passes a SIGNATURE answer that is a valid https URL", () => {
+    const schema = schemaWith([
+      { id: "q1", label: "Sign", type: "SIGNATURE", required: true },
+    ]);
+    expect(() =>
+      validateSubmission(schema, {
+        q1: "https://res.cloudinary.com/demo/image/upload/signature.png",
+      }),
+    ).not.toThrow();
+  });
+
+  it("throws INVALID_RESPONSE for a SIGNATURE answer that is not a URL", () => {
+    const schema = schemaWith([
+      { id: "q1", label: "Sign", type: "SIGNATURE", required: false },
+    ]);
+    try {
+      validateSubmission(schema, { q1: "not-a-url" });
+      expect.unreachable("should have thrown");
+    } catch (err) {
+      expect((err as Error).name).toBe("INVALID_RESPONSE");
+    }
+  });
+
+  it("throws INVALID_RESPONSE for a required SIGNATURE with no answer", () => {
+    const schema = schemaWith([
+      { id: "q1", label: "Sign", type: "SIGNATURE", required: true },
+    ]);
+    try {
+      validateSubmission(schema, {});
+      expect.unreachable("should have thrown");
+    } catch (err) {
+      expect((err as Error).name).toBe("INVALID_RESPONSE");
+    }
+  });
+
+  it("passes an optional SIGNATURE left blank", () => {
+    const schema = schemaWith([
+      { id: "q1", label: "Sign", type: "SIGNATURE", required: false },
+    ]);
+    expect(() => validateSubmission(schema, {})).not.toThrow();
+  });
 });
