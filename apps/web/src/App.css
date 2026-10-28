@@ -2547,3 +2547,432 @@ form {
     font-size: 0.85rem;
   }
 }
+
+/* ===== Rich Analytics Dashboard (FEAT-003) ===== */
+
+/* Screen-reader-only utility (design-review Finding 1 — new). Visually hides
+   content while keeping it in the accessibility tree. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Generic buttons used by the reports page states. */
+.primary-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 16px;
+  padding: 10px 18px;
+  border: 0;
+  border-radius: 12px;
+  background: #2563eb;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 150ms ease, transform 150ms ease;
+}
+
+.primary-button:hover {
+  background: #1d4ed8;
+  transform: translateY(-1px);
+}
+
+.link-button {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: #2563eb;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* Keep-prior-data-while-refetching: dim content + a thin top progress bar. */
+.dashboard-content {
+  transition: opacity 150ms ease;
+}
+
+.dashboard-content.is-refetching {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.refetch-progress {
+  position: relative;
+  width: min(100%, 980px);
+  margin: 0 auto 12px;
+  height: 3px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #e2e8f0;
+}
+
+.refetch-progress::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: #2563eb;
+  border-radius: 999px;
+  animation: refetch-slide 1s ease-in-out infinite;
+}
+
+@keyframes refetch-slide {
+  0% { left: -40%; }
+  100% { left: 100%; }
+}
+
+.inline-banner {
+  padding: 12px 16px;
+  border: 1px solid #fcd34d;
+  background: #fffbeb;
+  color: #92400e;
+  border-radius: 12px;
+}
+
+/* ── Sticky toolbar ── */
+.reports-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  width: min(100%, 980px);
+  margin: 0 auto 20px;
+  padding: 16px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  box-shadow: 0 6px 24px rgb(30 64 175 / 6%);
+}
+
+.reports-toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.reports-toolbar-row + .reports-toolbar-row {
+  margin-top: 12px;
+}
+
+.segmented {
+  display: inline-flex;
+  padding: 4px;
+  gap: 2px;
+  background: #f1f5f9;
+  border-radius: 12px;
+}
+
+.segmented-btn {
+  border: 0;
+  background: transparent;
+  padding: 8px 14px;
+  border-radius: 9px;
+  color: #475569;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.segmented-btn:hover {
+  color: #1e293b;
+}
+
+.segmented-btn.is-active {
+  background: #2563eb;
+  color: #fff;
+}
+
+.custom-range {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.custom-range-field input {
+  padding: 8px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  font: inherit;
+  color: #1e293b;
+}
+
+.custom-range-sep {
+  color: #94a3b8;
+}
+
+.toolbar-error {
+  margin: 10px 0 0;
+  color: #b91c1c;
+  font-size: 0.88rem;
+}
+
+/* Filter builder */
+.filter-builder-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.filter-field select,
+.filter-field input {
+  padding: 8px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  font: inherit;
+  color: #1e293b;
+  max-width: 220px;
+}
+
+.filter-apply {
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.filter-apply:hover {
+  background: #dbeafe;
+}
+
+.filter-chip-row {
+  margin-top: 12px;
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 6px 12px;
+  background: #eef2ff;
+  color: #3730a3;
+  border-radius: 999px;
+  font-size: 0.85rem;
+}
+
+.filter-chip-clear {
+  border: 0;
+  background: #c7d2fe;
+  color: #3730a3;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  line-height: 1;
+  font-size: 0.75rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.filter-chip-clear:hover {
+  background: #a5b4fc;
+}
+
+.scope-line {
+  margin: 12px 0 0;
+  font-size: 0.9rem;
+}
+
+/* ── Hero stat cards ── */
+.stat-hero {
+  width: min(100%, 980px);
+  margin: 0 auto 18px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 16px;
+}
+
+.stat-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 20px;
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+}
+
+.stat-card strong {
+  color: #111827;
+  font-size: 1.8rem;
+  line-height: 1.1;
+}
+
+.stat-subline {
+  margin-top: 8px;
+  font-size: 0.78rem;
+}
+
+.stat-badge,
+.funnel-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+/* ── CSS stepped funnel ── */
+.funnel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.funnel-row-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 6px;
+}
+
+.funnel-label {
+  font-weight: 600;
+  color: #334155;
+}
+
+.funnel-count {
+  color: #111827;
+  font-weight: 700;
+}
+
+.funnel-track {
+  width: 100%;
+  height: 34px;
+  background: #f1f5f9;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.funnel-bar {
+  height: 100%;
+  border-radius: 10px;
+  min-width: 2px;
+  transition: width 200ms ease;
+}
+
+.funnel-transition {
+  display: flex;
+  gap: 12px;
+  padding: 6px 2px;
+  font-size: 0.82rem;
+}
+
+.funnel-continue {
+  color: #16a34a;
+  font-weight: 600;
+}
+
+.funnel-drop {
+  color: #94a3b8;
+}
+
+.funnel-note {
+  margin: 10px 0 0;
+  font-size: 0.86rem;
+}
+
+/* ── Section completeness ── */
+.section-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.section-bar-head {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.section-bar-title {
+  color: #334155;
+  font-weight: 600;
+}
+
+.section-bar-track {
+  width: 100%;
+  height: 20px;
+  background: #f1f5f9;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.section-bar-fill {
+  height: 100%;
+  border-radius: 8px;
+  min-width: 2px;
+  transition: width 200ms ease;
+}
+
+/* ── Filtered ribbon on the per-question heading ── */
+.filtered-ribbon {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 0.72rem;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
+.empty-reports {
+  text-align: center;
+  padding: 48px 24px;
+}
+
+.empty-reports h2 {
+  margin: 0 0 8px;
+  color: #111827;
+}
+
+/* ── Responsive ── */
+@media (max-width: 700px) {
+  .reports-toolbar {
+    position: static;
+  }
+
+  .stat-hero {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .custom-range,
+  .filter-builder-inner {
+    width: 100%;
+  }
+
+  .custom-range-field,
+  .custom-range-field input,
+  .filter-field,
+  .filter-field select,
+  .filter-field input {
+    flex: 1;
+    max-width: none;
+    width: 100%;
+  }
+}
+
+@media (max-width: 440px) {
+  .stat-hero {
+    grid-template-columns: 1fr;
+  }
+}
