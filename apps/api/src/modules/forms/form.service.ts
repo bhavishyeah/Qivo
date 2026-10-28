@@ -55,11 +55,121 @@ type FormQuestion = {
   conditions?: Array<{ questionId: string; operator: string; value?: string | undefined }>;
 };
 
+type SectionJumpRule = {
+  questionId: string;
+  operator: "equals" | "not_equals" | "contains" | "not_empty";
+  value?: string | undefined;
+  target: string;
+};
+
 type FormSection = {
   id: string;
   title: string;
   questions: FormQuestion[];
+  jumpRules?: SectionJumpRule[];
 };
+
+// Sentinel target meaning "end the form / go to submit". Mirrors the web copy
+// (JUMP_TARGET_SUBMIT in apps/web/src/types). Never collides with a real id
+// because createSectionId() always emits `section_<hex>`.
+const JUMP_TARGET_SUBMIT = "__submit__";
+
+/**
+ * A single navigation step: move to the section at `index`, or submit (end).
+ */
+export type JumpStep = { kind: "section"; index: number } | { kind: "submit" };
+
+/**
+ * Single step of the jump replay: given the index of the section just
+ * completed and the answers, return the next section to show or "submit". First
+ * matching rule wins; malformed targets (unknown id, self, backward) fall
+ * through to the linear next section. Byte-identical in behavior to the web
+ * copy in apps/web/src/lib/sectionJumps.ts; inlines the operator evaluation the
+ * way isQuestionVisibleFor already does.
+ */
+export function nextSectionAfter(
+  sections: FormSection[],
+  currentIndex: number,
+  answers: Record<string, unknown>,
+): JumpStep {
+  const section = sections[currentIndex];
+  const rules = section?.jumpRules ?? [];
+
+  for (const rule of rules) {
+    if (!matchesJumpRule(rule, answers)) continue;
+    if (rule.target === JUMP_TARGET_SUBMIT) return { kind: "submit" };
+    const targetIndex = sections.findIndex((s) => s.id === rule.target);
+    if (targetIndex > currentIndex) return { kind: "section", index: targetIndex };
+    // else: malformed/backward/self — fall through to the next rule.
+  }
+
+  const next = currentIndex + 1;
+  if (next >= sections.length) return { kind: "submit" };
+  return { kind: "section", index: next };
+}
+
+/**
+ * Evaluate a single jump rule against answers. Mirrors evaluateConditions with a
+ * one-element array — the exact operator semantics used by isQuestionVisibleFor.
+ */
+function matchesJumpRule(
+  rule: SectionJumpRule,
+  answers: Record<string, unknown>,
+): boolean {
+  const answer = answers[rule.questionId];
+  const answerIsArray = Array.isArray(answer);
+  switch (rule.operator) {
+    case "equals":
+      return answerIsArray
+        ? (answer as unknown[]).includes(rule.value ?? "")
+        : String(answer ?? "") === (rule.value ?? "");
+    case "not_equals":
+      return answerIsArray
+        ? !(answer as unknown[]).includes(rule.value ?? "")
+        : String(answer ?? "") !== (rule.value ?? "");
+    case "contains":
+      return answerIsArray
+        ? (answer as string[]).some((a) => a.includes(rule.value ?? ""))
+        : String(answer ?? "")
+            .toLowerCase()
+            .includes((rule.value ?? "").toLowerCase());
+    case "not_empty":
+      return answerIsArray
+        ? (answer as unknown[]).length > 0
+        : answer !== undefined && answer !== null && answer !== "";
+    default:
+      return true;
+  }
+}
+
+/**
+ * Full replay: walk from section 0 following nextSectionAfter until submit,
+ * collecting every reached section id. Pure, terminating, loop-free (forward
+ * targets strictly increase the index). This is the authoritative source of
+ * truth for which sections' required questions to enforce — never trust a
+ * client-supplied reached list.
+ */
+export function computeReachedSections(
+  sections: FormSection[],
+  answers: Record<string, unknown>,
+): Set<string> {
+  const reached = new Set<string>();
+  if (sections.length === 0) return reached;
+
+  let index = 0;
+  const seenIndexes = new Set<number>();
+  while (index >= 0 && index < sections.length) {
+    if (seenIndexes.has(index)) break; // impossible with forward-only, but safe.
+    seenIndexes.add(index);
+    const section = sections[index];
+    if (section) reached.add(section.id);
+
+    const step = nextSectionAfter(sections, index, answers);
+    if (step.kind === "submit") break;
+    index = step.index;
+  }
+  return reached;
+}
 
 type FormTheme = {
   coverImageUrl?: string;
@@ -794,7 +904,7 @@ export async function updateSection(
   formId: string,
   sectionId: string,
   userId: string,
-  input: { title: string },
+  input: { title: string; jumpRules?: SectionJumpRule[] },
 ) {
   const form = await getEditableForm(formId, userId);
   const schema = getFormSchema(form.schema);
@@ -806,6 +916,16 @@ export async function updateSection(
     throw error;
   }
   section.title = input.title.trim();
+
+  if (input.jumpRules !== undefined) {
+    // Mirror how updateQuestion handles conditions: store a non-empty array,
+    // delete the key when empty so a cleared ruleset round-trips as absent.
+    if (input.jumpRules.length > 0) {
+      section.jumpRules = input.jumpRules;
+    } else {
+      delete section.jumpRules;
+    }
+  }
 
   return prisma.form.update({
     where: { id: formId },
@@ -1474,20 +1594,32 @@ export function validateSubmission(
     throw error;
   }
 
-  const missingRequiredQuestion = questions.find((question) => {
-    if (!question.required) return false;
-    if (!isQuestionVisibleFor(question, answers)) return false;
-    const answer = answers[question.id];
-    if (question.type === "MULTI_ENTRY") {
-      return (
-        !Array.isArray(answer) ||
-        (answer as unknown[]).every(
-          (v) => v === "" || v === null || v === undefined,
-        )
-      );
+  // Recompute reached sections server-side. Never trust the client. A required
+  // question is only enforced when its section was reached by the jump replay
+  // AND the question is visible by its own per-question conditions.
+  const reached = computeReachedSections(schema.sections, answers);
+
+  let missingRequiredQuestion: FormQuestion | undefined;
+  for (const section of schema.sections) {
+    if (!reached.has(section.id)) continue; // skipped section: don't enforce.
+    for (const question of section.questions) {
+      if (!question.required) continue;
+      if (!isQuestionVisibleFor(question, answers)) continue;
+      const answer = answers[question.id];
+      const isMissing =
+        question.type === "MULTI_ENTRY"
+          ? !Array.isArray(answer) ||
+            (answer as unknown[]).every(
+              (v) => v === "" || v === null || v === undefined,
+            )
+          : answer === undefined || answer === null || answer === "";
+      if (isMissing) {
+        missingRequiredQuestion = question;
+        break;
+      }
     }
-    return answer === undefined || answer === null || answer === "";
-  });
+    if (missingRequiredQuestion) break;
+  }
 
   if (missingRequiredQuestion) {
     const error = new Error(

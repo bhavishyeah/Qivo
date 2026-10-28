@@ -404,7 +404,10 @@ formRouter.patch(
         return;
       }
       const input = updateSectionSchema.parse(req.body);
-      const form = await updateSection(formId, sectionId, req.user.id, { title: input.title });
+      const form = await updateSection(formId, sectionId, req.user.id, {
+        title: input.title,
+        ...(input.jumpRules !== undefined ? { jumpRules: input.jumpRules } : {}),
+      });
       res.json({ success: true, data: { form } });
     } catch (error) {
       next(error);

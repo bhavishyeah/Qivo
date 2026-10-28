@@ -101,8 +101,19 @@ export const createSectionSchema = z.object({
   title: z.string().trim().min(1).max(200).optional(),
 });
 
+const jumpRuleSchema = z.object({
+  questionId: z.string().min(1),
+  operator: z.enum(["equals", "not_equals", "contains", "not_empty"]),
+  value: z.string().max(10_000).optional(),
+  // A section id or the submit sentinel. Forward-only is NOT enforced here
+  // (Zod can't see sibling sections); the service's replay guard and the editor
+  // enforce it. Length-bounded to reject blobs.
+  target: z.string().min(1).max(200),
+});
+
 export const updateSectionSchema = z.object({
   title: z.string().trim().min(1).max(200),
+  jumpRules: z.array(jumpRuleSchema).max(20).optional(),
 });
 
 export const updateQuestionSchema = z.object({

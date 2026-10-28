@@ -16,7 +16,15 @@ import {
   FONT_ALLOW_LIST,
   resolveTheme,
 } from "../lib/theme";
-import type { FormRecord, Question, QuestionOption, QuestionType, ConditionRule } from "../types";
+import {
+  JUMP_TARGET_SUBMIT,
+  type FormRecord,
+  type Question,
+  type QuestionOption,
+  type QuestionType,
+  type ConditionRule,
+  type SectionJumpRule,
+} from "../types";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -86,8 +94,11 @@ export default function FormEditorPage() {
 
   const [form, setForm] = useState<FormRecord | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
-  // Sections (id + title), ordered. Derived from the form schema on load.
-  const [sections, setSections] = useState<Array<{ id: string; title: string }>>([]);
+  // Sections (id + title + jumpRules), ordered. Derived from the form schema on
+  // load. jumpRules round-trip so a save never silently wipes them.
+  const [sections, setSections] = useState<
+    Array<{ id: string; title: string; jumpRules?: SectionJumpRule[] }>
+  >([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -175,7 +186,11 @@ export default function FormEditorPage() {
         setQuestions(questionsData.questions);
         const schema = formData.form.schema;
         setSections(
-          (schema.sections ?? []).map((s) => ({ id: s.id, title: s.title })),
+          (schema.sections ?? []).map((s) => ({
+            id: s.id,
+            title: s.title,
+            ...(s.jumpRules ? { jumpRules: s.jumpRules } : {}),
+          })),
         );
         setCollectEmail(schema.settings?.collectEmail ?? false);
         setAllowMultipleResponses(schema.settings?.allowMultipleResponses ?? true);
@@ -487,16 +502,32 @@ export default function FormEditorPage() {
     }
   }
 
-  async function renameSection(sectionId: string, title: string) {
-    if (!formId || !title.trim()) return;
+  // Shared optimistic section PATCH used by both the title-blur rename and the
+  // jump-rule editor, so both edits go through one request shape.
+  async function patchSection(
+    sectionId: string,
+    patch: { title?: string; jumpRules?: SectionJumpRule[] },
+  ) {
+    if (!formId) return;
     setSections((current) =>
-      current.map((s) => (s.id === sectionId ? { ...s, title: title.trim() } : s)),
+      current.map((s) => {
+        if (s.id !== sectionId) return s;
+        const next = { ...s };
+        if (patch.title !== undefined) next.title = patch.title;
+        if (patch.jumpRules !== undefined) next.jumpRules = patch.jumpRules;
+        return next;
+      }),
     );
     try {
-      await api.patch(`/api/forms/${formId}/sections/${sectionId}`, { title: title.trim() });
+      await api.patch(`/api/forms/${formId}/sections/${sectionId}`, patch);
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : "Unable to rename section.");
+      setError(err instanceof ApiRequestError ? err.message : "Unable to update section.");
     }
+  }
+
+  async function renameSection(sectionId: string, title: string) {
+    if (!formId || !title.trim()) return;
+    await patchSection(sectionId, { title: title.trim() });
   }
 
   async function deleteSectionById(sectionId: string) {
@@ -981,7 +1012,7 @@ export default function FormEditorPage() {
                     : [{ id: "__default__", title: "" }];
                 // Only show section chrome when there's more than one section.
                 const showSectionChrome = sections.length > 1;
-                return groups.map((section) => {
+                return groups.map((section, sectionIndex) => {
                   const sectionQuestions = questions
                     .map((q, index) => ({ q, index }))
                     .filter(({ q }) =>
@@ -989,6 +1020,14 @@ export default function FormEditorPage() {
                         ? true
                         : (q.sectionId ?? sections[0]?.id) === section.id,
                     );
+                  // In-section questions (the real Question objects) — the
+                  // trigger-question source for the jump editor.
+                  const inSectionQuestions = questions.filter(
+                    (q) => (q.sectionId ?? sections[0]?.id) === section.id,
+                  );
+                  // Sections strictly AFTER this one in document order are the
+                  // only valid forward jump targets.
+                  const laterSections = sections.slice(sectionIndex + 1);
                   return (
                     <div key={section.id} className="editor-section-group">
                       {showSectionChrome ? (
@@ -1020,6 +1059,20 @@ export default function FormEditorPage() {
                             Delete
                           </button>
                         </div>
+                      ) : null}
+
+                      {showSectionChrome ? (
+                        <SectionJumpEditor
+                          rules={section.jumpRules ?? []}
+                          inSectionQuestions={inSectionQuestions}
+                          laterSections={laterSections}
+                          onChange={(nextRules) =>
+                            void patchSection(section.id, {
+                              title: section.title,
+                              jumpRules: nextRules,
+                            })
+                          }
+                        />
                       ) : null}
 
                       {sectionQuestions.map(({ q: question, index }) => (
@@ -2013,6 +2066,177 @@ function SaveStatusBadge({ status }: { status: string }) {
 }
 
 // ─── Condition Editor ─────────────────────────────────────────────────────────
+
+// ─── Section Jump (skip logic) Editor ──────────────────────────────────────────
+
+function SectionJumpEditor({
+  rules,
+  inSectionQuestions,
+  laterSections,
+  onChange,
+}: {
+  rules: SectionJumpRule[];
+  inSectionQuestions: Question[];
+  laterSections: Array<{ id: string; title: string }>;
+  onChange: (nextRules: SectionJumpRule[]) => void;
+}) {
+  const [showEditor, setShowEditor] = useState(false);
+
+  // Valid forward targets: every later section, plus the submit sentinel.
+  const validTargets = new Set<string>([
+    JUMP_TARGET_SUBMIT,
+    ...laterSections.map((s) => s.id),
+  ]);
+
+  // Default target: the first later section if any, else end-of-form.
+  const defaultTarget = laterSections[0]?.id ?? JUMP_TARGET_SUBMIT;
+
+  function emit(nextRules: SectionJumpRule[]) {
+    // Defensive: drop any rule whose target is neither a later section nor the
+    // submit sentinel (mirrors ConditionEditor dropping empties).
+    onChange(nextRules.filter((r) => validTargets.has(r.target)));
+  }
+
+  function addRule() {
+    if (inSectionQuestions.length === 0) return;
+    const newRule: SectionJumpRule = {
+      questionId: inSectionQuestions[0].id,
+      operator: "equals",
+      value: "",
+      target: defaultTarget,
+    };
+    emit([...rules, newRule]);
+  }
+
+  function updateRule(idx: number, patch: Partial<SectionJumpRule>) {
+    emit(rules.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+  }
+
+  function removeRule(idx: number) {
+    emit(rules.filter((_, i) => i !== idx));
+  }
+
+  if (!showEditor && rules.length === 0) {
+    return (
+      <div style={{ marginBottom: 12 }}>
+        <button
+          type="button"
+          className="back-button inline-button"
+          style={{ fontSize: "0.78rem", color: "#94a3b8" }}
+          onClick={() => setShowEditor(true)}
+          disabled={inSectionQuestions.length === 0}
+          title={inSectionQuestions.length === 0 ? "Add a question to this section first" : ""}
+        >
+          + Add skip logic
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginBottom: 12, padding: "12px 14px", background: "#fefce8", border: "1px solid #fde68a", borderRadius: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <span style={{ fontSize: "0.78rem", fontWeight: 750, color: "#92400e" }}>
+          Skip logic — after this section, jump when:
+        </span>
+        {rules.length === 0 ? (
+          <button
+            type="button"
+            className="back-button inline-button"
+            style={{ fontSize: "0.75rem" }}
+            onClick={() => setShowEditor(false)}
+          >
+            Cancel
+          </button>
+        ) : null}
+      </div>
+
+      {rules.map((rule, idx) => {
+        const refQuestion = inSectionQuestions.find((q) => q.id === rule.questionId);
+        return (
+          <div key={idx} style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <select
+              value={rule.questionId}
+              onChange={(e) => updateRule(idx, { questionId: e.target.value })}
+              style={{ border: "1px solid #fde68a", borderRadius: 6, padding: "6px 8px", fontSize: "0.8rem", maxWidth: 180 }}
+            >
+              {inSectionQuestions.map((q) => (
+                <option key={q.id} value={q.id}>{q.label.slice(0, 30)}</option>
+              ))}
+            </select>
+
+            <select
+              value={rule.operator}
+              onChange={(e) => updateRule(idx, { operator: e.target.value as SectionJumpRule["operator"] })}
+              style={{ border: "1px solid #fde68a", borderRadius: 6, padding: "6px 8px", fontSize: "0.8rem" }}
+            >
+              <option value="equals">equals</option>
+              <option value="not_equals">not equals</option>
+              <option value="contains">contains</option>
+              <option value="not_empty">is answered</option>
+            </select>
+
+            {rule.operator !== "not_empty" ? (
+              refQuestion?.options ? (
+                <select
+                  value={rule.value ?? ""}
+                  onChange={(e) => updateRule(idx, { value: e.target.value })}
+                  style={{ border: "1px solid #fde68a", borderRadius: 6, padding: "6px 8px", fontSize: "0.8rem" }}
+                >
+                  <option value="">Select...</option>
+                  {refQuestion.options.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={rule.value ?? ""}
+                  onChange={(e) => updateRule(idx, { value: e.target.value })}
+                  placeholder="value"
+                  style={{ border: "1px solid #fde68a", borderRadius: 6, padding: "6px 8px", fontSize: "0.8rem", width: 120 }}
+                />
+              )
+            ) : null}
+
+            <span style={{ fontSize: "0.78rem", color: "#92400e" }}>→ go to</span>
+
+            <select
+              value={rule.target}
+              onChange={(e) => updateRule(idx, { target: e.target.value })}
+              style={{ border: "1px solid #fde68a", borderRadius: 6, padding: "6px 8px", fontSize: "0.8rem", maxWidth: 180 }}
+            >
+              {laterSections.map((s) => (
+                <option key={s.id} value={s.id}>{(s.title || "Untitled section").slice(0, 30)}</option>
+              ))}
+              <option value={JUMP_TARGET_SUBMIT}>End of form (submit)</option>
+            </select>
+
+            <button
+              type="button"
+              onClick={() => removeRule(idx)}
+              style={{ border: "none", background: "none", color: "#dc2626", cursor: "pointer", fontSize: "1rem", padding: "2px 6px" }}
+              title="Remove rule"
+            >
+              ×
+            </button>
+          </div>
+        );
+      })}
+
+      {inSectionQuestions.length > 0 ? (
+        <button
+          type="button"
+          className="back-button inline-button"
+          style={{ fontSize: "0.75rem", marginTop: 4 }}
+          onClick={addRule}
+        >
+          + Add another rule
+        </button>
+      ) : null}
+    </div>
+  );
+}
 
 function ConditionEditor({
   question,

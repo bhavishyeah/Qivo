@@ -50,10 +50,25 @@ export type Question = {
   sectionId?: string;
 };
 
+// Sentinel target meaning "end the form / go to submit". Distinguishable from
+// any real section id because generated ids are always `section_<hex>`.
+export const JUMP_TARGET_SUBMIT = "__submit__";
+
+export type SectionJumpRule = {
+  // The question WITHIN this section whose answer is tested.
+  questionId: string;
+  // Reuses the exact ConditionRule operator union.
+  operator: ConditionRule["operator"];
+  value?: string;
+  // A later section's id, or the JUMP_TARGET_SUBMIT sentinel.
+  target: string;
+};
+
 export type Section = {
   id: string;
   title: string;
   questions: Question[];
+  jumpRules?: SectionJumpRule[]; // optional; absent/empty = linear fall-through
 };
 
 export type FormTheme = {

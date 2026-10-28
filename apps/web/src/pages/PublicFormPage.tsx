@@ -9,6 +9,7 @@ import {
 import { useParams } from "react-router-dom";
 import { publicGet, publicPost, ApiRequestError } from "../lib/api";
 import { evaluateConditions } from "../lib/conditions";
+import { computeReachedSections, nextSectionAfter } from "../lib/sectionJumps";
 import { resolvePipedLabel } from "../lib/piping";
 import { isImageUrl, uploadToCloudinary } from "../lib/upload";
 import SignaturePad, { type SignaturePadHandle } from "../components/SignaturePad";
@@ -67,7 +68,11 @@ export default function PublicFormPage() {
   const [submitError, setSubmitError] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [quizScore, setQuizScore] = useState<{ earned: number; total: number; percentage: number } | null>(null);
-  const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
+  // Stack of section INDICES the respondent has actually visited, in order.
+  // The last element is the current section. Starts at [0]. Jump logic pushes
+  // forward targets; Back pops, so skipped sections are never re-shown.
+  const [history, setHistory] = useState<number[]>([0]);
+  const currentSectionIndex = history[history.length - 1] ?? 0;
 
   // Same-session response editing (never persisted — lost on reload by design).
   const [responseId, setResponseId] = useState<string | null>(null);
@@ -127,9 +132,11 @@ export default function PublicFormPage() {
   // Questions in current section
   const currentQuestions = currentSection?.questions ?? [];
 
-  // Progress: email counts as part of first section
+  // Progress: base the numerator on how many sections have actually been
+  // visited (stack depth) so it advances monotonically and never divides by a
+  // skipped count. Clamped to [0, 100].
   const progressPercent = totalSections > 0
-    ? Math.round(((currentSectionIndex) / totalSections) * 100)
+    ? Math.min(100, Math.max(0, Math.round(((history.length - 1) / totalSections) * 100)))
     : 0;
 
   function updateAnswer(questionId: string, value: AnswerValue) {
@@ -178,40 +185,55 @@ export default function PublicFormPage() {
     if (form?.schema.settings.collectEmail && !email.trim()) {
       return "Please enter your email address.";
     }
-    // Check all visible questions only
-    for (const q of allQuestions) {
-      if (!q.required) continue;
-      // Skip questions hidden by conditional logic
-      if (!evaluateConditions(q.conditions, answers)) continue;
-      const answer = answers[q.id];
-      if (
-        Array.isArray(answer) &&
-        (answer.length === 0 || (answer as string[]).every((e) => !e.trim()))
-      ) return `Please answer: ${q.label}`;
-      if (answer === undefined || answer === null || answer === "") return `Please answer: ${q.label}`;
+    // Reach-aware: a required question in a section skipped by jump logic must
+    // not block submission. The server recomputes this regardless; this only
+    // prevents a spurious client-side block.
+    const reached = computeReachedSections(sections, answers);
+    for (const section of sections) {
+      if (!reached.has(section.id)) continue;
+      for (const q of section.questions) {
+        if (!q.required) continue;
+        // Skip questions hidden by conditional logic
+        if (!evaluateConditions(q.conditions, answers)) continue;
+        const answer = answers[q.id];
+        if (
+          Array.isArray(answer) &&
+          (answer.length === 0 || (answer as string[]).every((e) => !e.trim()))
+        ) return `Please answer: ${q.label}`;
+        if (answer === undefined || answer === null || answer === "") return `Please answer: ${q.label}`;
+      }
     }
     return "";
   }
 
-  function handleNext() {
+  async function handleNext() {
     setSubmitError("");
     const validationError = validateSection(currentQuestions);
     if (validationError) {
       setSubmitError(validationError);
       return;
     }
-    setCurrentSectionIndex((i) => Math.min(i + 1, totalSections - 1));
+    const step = nextSectionAfter(sections, currentSectionIndex, answers);
+    if (step.kind === "submit") {
+      await doSubmit();
+      return;
+    }
+    setHistory((h) => [...h, step.index]);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function handleBack() {
     setSubmitError("");
-    setCurrentSectionIndex((i) => Math.max(i - 1, 0));
+    setHistory((h) => (h.length > 1 ? h.slice(0, -1) : h));
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    await doSubmit();
+  }
+
+  async function doSubmit() {
     setSubmitError("");
 
     const validationError = validateAll();
@@ -316,7 +338,7 @@ export default function PublicFormPage() {
     setIsEditing(true);
     setSubmitted(false);
     setSubmitError("");
-    setCurrentSectionIndex(0);
+    setHistory([0]);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -429,6 +451,8 @@ export default function PublicFormPage() {
 
   const isLastSection = currentSectionIndex === totalSections - 1;
   const isFirstSection = currentSectionIndex === 0;
+  // Back is only shown once the respondent has navigated past the start.
+  const canGoBack = history.length > 1;
 
   const resolved = resolveTheme(
     form.schema.settings.theme,
@@ -551,7 +575,7 @@ export default function PublicFormPage() {
 
           {/* Navigation */}
           <div className="public-form-nav">
-            {isMultiSection && !isFirstSection ? (
+            {isMultiSection && canGoBack ? (
               <button
                 type="button"
                 className="secondary-button"
@@ -566,7 +590,7 @@ export default function PublicFormPage() {
                 type="button"
                 className="submit-button"
                 style={{ flex: 1, maxWidth: 240, ...(resolved.accent ? { background: resolved.accent } : {}) }}
-                onClick={handleNext}
+                onClick={() => void handleNext()}
               >
                 Next →
               </button>

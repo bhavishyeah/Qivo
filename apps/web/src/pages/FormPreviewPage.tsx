@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, ApiRequestError } from "../lib/api";
 import { evaluateConditions } from "../lib/conditions";
+import { nextSectionAfter } from "../lib/sectionJumps";
 import { resolvePipedLabel } from "../lib/piping";
 import { DEFAULT_ACCENT, ensureFontLoaded, resolveTheme } from "../lib/theme";
 import SignaturePad from "../components/SignaturePad";
@@ -18,7 +19,12 @@ export default function FormPreviewPage() {
   const [answers, setAnswers] = useState<Record<string, AnswerValue>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [currentSection, setCurrentSection] = useState(0);
+  // Visited-section stack (indices); last element is the current section.
+  const [history, setHistory] = useState<number[]>([0]);
+  const currentSection = history[history.length - 1] ?? 0;
+  // Set when jump logic lands on the submit sentinel from a non-last section —
+  // preview never submits, so it shows the disabled submit control instead.
+  const [reachedEnd, setReachedEnd] = useState(false);
 
   useEffect(() => {
     async function loadForm() {
@@ -154,7 +160,7 @@ export default function FormPreviewPage() {
         {/* Progress */}
         {totalSections > 1 ? (
           <div className="public-progress-bar">
-            <div className="public-progress-fill" style={{ width: `${Math.round((currentSection / totalSections) * 100)}%` }} />
+            <div className="public-progress-fill" style={{ width: `${Math.min(100, Math.max(0, Math.round(((history.length - 1) / totalSections) * 100)))}%` }} />
           </div>
         ) : null}
 
@@ -198,11 +204,34 @@ export default function FormPreviewPage() {
 
           {/* Nav */}
           <div className="public-form-nav" style={{ marginTop: 16 }}>
-            {currentSection > 0 ? (
-              <button type="button" className="secondary-button" onClick={() => setCurrentSection((i) => i - 1)}>← Back</button>
+            {history.length > 1 ? (
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => {
+                  setReachedEnd(false);
+                  setHistory((h) => (h.length > 1 ? h.slice(0, -1) : h));
+                }}
+              >
+                ← Back
+              </button>
             ) : <span />}
-            {currentSection < totalSections - 1 ? (
-              <button type="button" className="submit-button" style={{ maxWidth: 240, background: previewAccent }} onClick={() => setCurrentSection((i) => i + 1)}>Next →</button>
+            {!reachedEnd && currentSection < totalSections - 1 ? (
+              <button
+                type="button"
+                className="submit-button"
+                style={{ maxWidth: 240, background: previewAccent }}
+                onClick={() => {
+                  const step = nextSectionAfter(sections, currentSection, answers);
+                  if (step.kind === "submit") {
+                    setReachedEnd(true);
+                    return;
+                  }
+                  setHistory((h) => [...h, step.index]);
+                }}
+              >
+                Next →
+              </button>
             ) : (
               <button type="button" className="submit-button" style={{ maxWidth: 240, opacity: 0.7, background: previewAccent }} disabled>Submit (preview only)</button>
             )}
