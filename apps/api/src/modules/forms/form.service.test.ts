@@ -7,6 +7,12 @@ import {
   addCustomTemplatePrefix,
   stripCustomTemplatePrefix,
   isCustomTemplateId,
+  matchesAnswerFilter,
+  isWithinRange,
+  computeFunnel,
+  computeAvgTime,
+  computeSectionCompleteness,
+  computePeakDay,
 } from "./form.service.js";
 
 // Minimal FormSchema builder for the shared answer-validation gate. We only
@@ -454,5 +460,196 @@ describe("rebuildSchemaWithFreshIds", () => {
     rebuildSchemaWithFreshIds(input);
     expect(input.sections[0].id).toBe("s0");
     expect(input.sections[0].questions[0].id).toBe("q_gate");
+  });
+});
+
+// ─── Rich-analytics pure helpers (FEAT-001) ───────────────────────────────────
+
+describe("matchesAnswerFilter — array-aware operator semantics", () => {
+  it("equals: scalar is string-equality", () => {
+    expect(matchesAnswerFilter("blue", "equals", "blue")).toBe(true);
+    expect(matchesAnswerFilter("blue", "equals", "red")).toBe(false);
+    // numeric answers compare as their string form
+    expect(matchesAnswerFilter(5, "equals", "5")).toBe(true);
+  });
+
+  it("equals: array is array-contains (NOT exact-set)", () => {
+    expect(matchesAnswerFilter(["red", "blue"], "equals", "blue")).toBe(true);
+    expect(matchesAnswerFilter(["red", "blue"], "equals", "green")).toBe(false);
+  });
+
+  it("not_equals: scalar and array are the negation of equals", () => {
+    expect(matchesAnswerFilter("blue", "not_equals", "red")).toBe(true);
+    expect(matchesAnswerFilter("blue", "not_equals", "blue")).toBe(false);
+    expect(matchesAnswerFilter(["red", "blue"], "not_equals", "green")).toBe(true);
+    expect(matchesAnswerFilter(["red", "blue"], "not_equals", "blue")).toBe(false);
+  });
+
+  it("contains: scalar is case-insensitive substring", () => {
+    expect(matchesAnswerFilter("Hello World", "contains", "world")).toBe(true);
+    expect(matchesAnswerFilter("Hello World", "contains", "xyz")).toBe(false);
+  });
+
+  it("contains: array is some-element substring (case-sensitive per source)", () => {
+    expect(matchesAnswerFilter(["apple", "banana"], "contains", "ana")).toBe(true);
+    expect(matchesAnswerFilter(["apple", "banana"], "contains", "cherry")).toBe(false);
+  });
+
+  it("not_empty: scalar non-empty / array length>0", () => {
+    expect(matchesAnswerFilter("x", "not_empty", undefined)).toBe(true);
+    expect(matchesAnswerFilter("", "not_empty", undefined)).toBe(false);
+    expect(matchesAnswerFilter(null, "not_empty", undefined)).toBe(false);
+    expect(matchesAnswerFilter(undefined, "not_empty", undefined)).toBe(false);
+    expect(matchesAnswerFilter(["a"], "not_empty", undefined)).toBe(true);
+    expect(matchesAnswerFilter([], "not_empty", undefined)).toBe(false);
+  });
+});
+
+describe("isWithinRange — inclusive date predicate", () => {
+  const from = new Date("2024-01-10T00:00:00.000Z");
+  const to = new Date("2024-01-20T23:59:59.999Z");
+
+  it("includes instants on or inside the bounds", () => {
+    expect(isWithinRange(new Date("2024-01-10T00:00:00.000Z"), from, to)).toBe(true);
+    expect(isWithinRange(new Date("2024-01-15T12:00:00.000Z"), from, to)).toBe(true);
+    expect(isWithinRange(new Date("2024-01-20T23:59:59.999Z"), from, to)).toBe(true);
+  });
+
+  it("excludes instants outside the bounds", () => {
+    expect(isWithinRange(new Date("2024-01-09T23:59:59.999Z"), from, to)).toBe(false);
+    expect(isWithinRange(new Date("2024-01-21T00:00:00.000Z"), from, to)).toBe(false);
+  });
+
+  it("treats missing bounds as open-ended", () => {
+    expect(isWithinRange(new Date("2000-01-01T00:00:00.000Z"))).toBe(true);
+    expect(isWithinRange(new Date("2024-01-15T00:00:00.000Z"), from)).toBe(true);
+    expect(isWithinRange(new Date("2024-01-05T00:00:00.000Z"), from)).toBe(false);
+    expect(isWithinRange(new Date("2024-01-25T00:00:00.000Z"), undefined, to)).toBe(false);
+  });
+});
+
+describe("computeFunnel — conversion math + filter suppression + clamp", () => {
+  it("computes rounded percentages when no filter is active", () => {
+    const f = computeFunnel(500, 310, 190, false);
+    expect(f.views).toBe(500);
+    expect(f.starts).toBe(310);
+    expect(f.completions).toBe(190);
+    expect(f.viewToStart).toBe(62); // 310/500
+    expect(f.startToCompletion).toBe(61); // 190/310
+    expect(f.viewToCompletion).toBe(38); // 190/500
+    expect(f.filterAffectsCompletionsOnly).toBe(false);
+  });
+
+  it("suppresses ALL percentages when a cross-question filter is active", () => {
+    const f = computeFunnel(500, 310, 42, true);
+    expect(f.views).toBe(500);
+    expect(f.starts).toBe(310);
+    expect(f.completions).toBe(42);
+    expect(f.viewToStart).toBeNull();
+    expect(f.startToCompletion).toBeNull();
+    expect(f.viewToCompletion).toBeNull();
+    expect(f.filterAffectsCompletionsOnly).toBe(true);
+  });
+
+  it("returns null rates when a denominator is 0 (views=0)", () => {
+    const f = computeFunnel(0, 0, 0, false);
+    expect(f.viewToStart).toBeNull();
+    expect(f.startToCompletion).toBeNull();
+    expect(f.viewToCompletion).toBeNull();
+  });
+
+  it("reports true counts when starts>views (reload clamp is a UI concern)", () => {
+    const f = computeFunnel(100, 140, 90, false);
+    expect(f.starts).toBe(140);
+    expect(f.viewToStart).toBe(140); // 140/100 == 140%, UI clamps the drawn width
+  });
+});
+
+describe("computeAvgTime — median/mean/sampleSize with outlier rejection", () => {
+  it("returns nulls and sampleSize 0 for an empty set", () => {
+    expect(computeAvgTime([])).toEqual({
+      medianSeconds: null,
+      meanSeconds: null,
+      sampleSize: 0,
+    });
+  });
+
+  it("computes median (odd count) and mean", () => {
+    const r = computeAvgTime([10, 30, 20]);
+    expect(r.sampleSize).toBe(3);
+    expect(r.medianSeconds).toBe(20);
+    expect(r.meanSeconds).toBe(20);
+  });
+
+  it("averages the two middle values for an even count", () => {
+    const r = computeAvgTime([10, 20, 30, 40]);
+    expect(r.sampleSize).toBe(4);
+    expect(r.medianSeconds).toBe(25); // (20+30)/2
+    expect(r.meanSeconds).toBe(25);
+  });
+
+  it("rejects non-positive, non-finite, and >=24h outliers", () => {
+    const r = computeAvgTime([0, -5, 100, 86_400, 90_000, "x", null, 200]);
+    // only 100 and 200 survive
+    expect(r.sampleSize).toBe(2);
+    expect(r.medianSeconds).toBe(150);
+    expect(r.meanSeconds).toBe(150);
+  });
+});
+
+describe("computeSectionCompleteness — proxy math", () => {
+  const sections = [
+    { id: "s1", title: "One", questions: [{ id: "a" }, { id: "b" }] },
+    { id: "s2", title: "Two", questions: [{ id: "c" }] },
+  ];
+
+  it("returns null for single-section forms", () => {
+    expect(
+      computeSectionCompleteness(
+        [{ id: "s1", title: "One", questions: [{ id: "a" }] }],
+        [{ a: "x" }],
+      ),
+    ).toBeNull();
+  });
+
+  it("counts a response as completing a section if >=1 question is answered", () => {
+    const rows = [
+      { a: "x", c: "y" }, // both sections
+      { a: "", b: "z", c: "" }, // s1 only (b answered, c blank)
+      { a: "", b: "" }, // neither
+      { c: "k" }, // s2 only
+    ];
+    const result = computeSectionCompleteness(sections, rows);
+    expect(result).not.toBeNull();
+    // s1: rows 0,1 answered -> 2/4 = 50%; s2: rows 0,3 -> 2/4 = 50%
+    expect(result![0]).toEqual({ sectionId: "s1", title: "One", percentage: 50 });
+    expect(result![1]).toEqual({ sectionId: "s2", title: "Two", percentage: 50 });
+  });
+
+  it("yields 0% for every section when there are no responses", () => {
+    const result = computeSectionCompleteness(sections, []);
+    expect(result![0]!.percentage).toBe(0);
+    expect(result![1]!.percentage).toBe(0);
+  });
+});
+
+describe("computePeakDay", () => {
+  it("picks the day with the most submissions", () => {
+    const series = [
+      { date: "2024-01-01", submissions: 3 },
+      { date: "2024-01-02", submissions: 9 },
+      { date: "2024-01-03", submissions: 1 },
+    ];
+    expect(computePeakDay(series)).toEqual({ date: "2024-01-02", count: 9 });
+  });
+
+  it("returns null when every day is zero or the series is empty", () => {
+    expect(computePeakDay([])).toBeNull();
+    expect(
+      computePeakDay([
+        { date: "2024-01-01", submissions: 0 },
+        { date: "2024-01-02", submissions: 0 },
+      ]),
+    ).toBeNull();
   });
 });

@@ -156,3 +156,50 @@ export const responseListQuerySchema = z.object({
   cursor: z.string().min(1).optional(),
 });
 
+// Public "track" endpoint (POST /public/:slug/track) accepts ONLY a start
+// event. The handler hardcodes the written value after this literal passes, so
+// a crafted body like { event: "submission" } is rejected with a 400 and the
+// endpoint can never inject an arbitrary analytics event. See design §1.
+export const trackEventSchema = z.object({
+  event: z.literal("start"),
+});
+
+export type TrackEventInput = z.infer<typeof trackEventSchema>;
+
+// Query contract for GET /:formId/report. All params optional (bare endpoint ==
+// today's behavior). `value` is bounded to match jumpRuleSchema's max(10_000).
+// Two refinements (design §2): (a) from <= to when both present; (b) the
+// cross-question filter is all-or-nothing on (questionId, operator), and value
+// is required for every operator except not_empty.
+export const reportQuerySchema = z
+  .object({
+    from: z.string().datetime().optional(),
+    to: z.string().datetime().optional(),
+    filterQuestionId: z.string().min(1).optional(),
+    filterOperator: z
+      .enum(["equals", "not_equals", "contains", "not_empty"])
+      .optional(),
+    filterValue: z.string().max(10_000).optional(),
+  })
+  .refine(
+    (q) => !(q.from && q.to) || new Date(q.from) <= new Date(q.to),
+    { message: "`from` must be on or before `to`.", path: ["from"] },
+  )
+  .refine(
+    (q) => {
+      const hasFilter = Boolean(q.filterQuestionId || q.filterOperator);
+      if (!hasFilter) return true;
+      if (!q.filterQuestionId || !q.filterOperator) return false;
+      if (q.filterOperator !== "not_empty" && (q.filterValue ?? "") === "")
+        return false;
+      return true;
+    },
+    {
+      message:
+        "A cross-question filter needs a question, an operator, and (except for not_empty) a value.",
+      path: ["filterQuestionId"],
+    },
+  );
+
+export type ReportQueryInput = z.infer<typeof reportQuerySchema>;
+

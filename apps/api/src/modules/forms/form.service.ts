@@ -117,23 +117,45 @@ function matchesJumpRule(
   rule: SectionJumpRule,
   answers: Record<string, unknown>,
 ): boolean {
-  const answer = answers[rule.questionId];
+  return matchesAnswerFilter(answers[rule.questionId], rule.operator, rule.value);
+}
+
+export type AnswerFilterOperator =
+  | "equals"
+  | "not_equals"
+  | "contains"
+  | "not_empty";
+
+/**
+ * Evaluate a single answer against an operator/value. This is the array-aware
+ * operator engine shared verbatim by section jumps, visibility conditions, and
+ * the report cross-question filter: for an array answer `equals` means
+ * array-contains (not exact-set), `not_equals` array-excludes, `contains`
+ * some-element substring, `not_empty` length>0; for a scalar they are
+ * string-equality / substring (case-insensitive) / non-empty. Keeping one copy
+ * guarantees the three callers never drift.
+ */
+export function matchesAnswerFilter(
+  answer: unknown,
+  operator: AnswerFilterOperator,
+  value: string | undefined,
+): boolean {
   const answerIsArray = Array.isArray(answer);
-  switch (rule.operator) {
+  switch (operator) {
     case "equals":
       return answerIsArray
-        ? (answer as unknown[]).includes(rule.value ?? "")
-        : String(answer ?? "") === (rule.value ?? "");
+        ? (answer as unknown[]).includes(value ?? "")
+        : String(answer ?? "") === (value ?? "");
     case "not_equals":
       return answerIsArray
-        ? !(answer as unknown[]).includes(rule.value ?? "")
-        : String(answer ?? "") !== (rule.value ?? "");
+        ? !(answer as unknown[]).includes(value ?? "")
+        : String(answer ?? "") !== (value ?? "");
     case "contains":
       return answerIsArray
-        ? (answer as string[]).some((a) => a.includes(rule.value ?? ""))
+        ? (answer as string[]).some((a) => a.includes(value ?? ""))
         : String(answer ?? "")
             .toLowerCase()
-            .includes((rule.value ?? "").toLowerCase());
+            .includes((value ?? "").toLowerCase());
     case "not_empty":
       return answerIsArray
         ? (answer as unknown[]).length > 0
@@ -2977,34 +2999,227 @@ function isAnswered(value: unknown): boolean {
   return true;
 }
 
-export async function getFormReport(formId: string, userId: string) {
+// ─── Pure report-aggregation helpers (unit-tested in form.service.test.ts) ────
+
+/**
+ * Inclusive date-range predicate. Returns true when `at` falls within
+ * [from, to] (either bound optional). Shared by the in-memory response scoping
+ * so the same semantics apply as the DB `where`.
+ */
+export function isWithinRange(
+  at: Date,
+  from?: Date,
+  to?: Date,
+): boolean {
+  const t = at.getTime();
+  if (from && t < from.getTime()) return false;
+  if (to && t > to.getTime()) return false;
+  return true;
+}
+
+export type FunnelMetrics = {
+  views: number;
+  starts: number;
+  completions: number;
+  viewToStart: number | null;
+  startToCompletion: number | null;
+  viewToCompletion: number | null;
+  filterAffectsCompletionsOnly: boolean;
+};
+
+/**
+ * Funnel math. When a cross-question filter is active we must NOT emit any
+ * conversion percentage (they would divide a filtered completion numerator by
+ * an unfiltered view/start denominator — mixed-population nonsense), so every
+ * rate is null and `filterAffectsCompletionsOnly` is true. Percentages are
+ * null whenever their denominator is 0. `starts > views` is possible (reloads);
+ * we report the true counts and let the UI clamp the drawn width.
+ */
+export function computeFunnel(
+  views: number,
+  starts: number,
+  completions: number,
+  filterActive: boolean,
+): FunnelMetrics {
+  const pct = (num: number, den: number): number | null =>
+    den > 0 ? Math.round((num / den) * 100) : null;
+  return {
+    views,
+    starts,
+    completions,
+    viewToStart: filterActive ? null : pct(starts, views),
+    startToCompletion: filterActive ? null : pct(completions, starts),
+    viewToCompletion: filterActive ? null : pct(completions, views),
+    filterAffectsCompletionsOnly: filterActive,
+  };
+}
+
+export type AvgTimeMetrics = {
+  medianSeconds: number | null;
+  meanSeconds: number | null;
+  sampleSize: number;
+};
+
+/**
+ * Average time-to-complete from client-measured `elapsedSeconds` values. Keeps
+ * only finite, strictly positive, sane values (< 24h) to discard
+ * tab-left-open outliers, then reports median (headline, robust) + mean +
+ * sampleSize. Empty set → nulls with sampleSize 0.
+ */
+export function computeAvgTime(elapsedValues: unknown[]): AvgTimeMetrics {
+  const usable = elapsedValues
+    .map((v) => Number(v))
+    .filter((n) => Number.isFinite(n) && n > 0 && n < 86_400)
+    .sort((a, b) => a - b);
+  const sampleSize = usable.length;
+  if (sampleSize === 0) {
+    return { medianSeconds: null, meanSeconds: null, sampleSize: 0 };
+  }
+  const mid = Math.floor(sampleSize / 2);
+  const median =
+    sampleSize % 2 === 0
+      ? ((usable[mid - 1] as number) + (usable[mid] as number)) / 2
+      : (usable[mid] as number);
+  const mean = usable.reduce((a, b) => a + b, 0) / sampleSize;
+  return {
+    medianSeconds: Math.round(median),
+    meanSeconds: Math.round(mean),
+    sampleSize,
+  };
+}
+
+export type SectionCompleteness = {
+  sectionId: string;
+  title: string;
+  percentage: number;
+};
+
+/**
+ * Section-completeness proxy (multi-section forms only): for each section, the
+ * share of in-scope submitted responses that answered at least one question in
+ * that section. Not true drop-off (partials aren't stored) — labeled as such in
+ * the UI. Single-section forms get null (the caller hides the card).
+ */
+export function computeSectionCompleteness(
+  sections: Array<{ id: string; title: string; questions: Array<{ id: string }> }>,
+  answerRows: Array<Record<string, unknown>>,
+): SectionCompleteness[] | null {
+  if (sections.length <= 1) return null;
+  const total = answerRows.length;
+  return sections.map((section) => {
+    const questionIds = section.questions.map((q) => q.id);
+    const withAnswer = answerRows.filter((row) =>
+      questionIds.some((qid) => isAnswered(row[qid])),
+    ).length;
+    return {
+      sectionId: section.id,
+      title: section.title,
+      percentage: total > 0 ? Math.round((withAnswer / total) * 100) : 0,
+    };
+  });
+}
+
+/**
+ * Peak submission day from a daily series: the single day with the most
+ * submissions. Null when the series is empty or every day is 0.
+ */
+export function computePeakDay(
+  series: Array<{ date: string; submissions: number }>,
+): { date: string; count: number } | null {
+  let best: { date: string; count: number } | null = null;
+  for (const point of series) {
+    if (point.submissions > 0 && (!best || point.submissions > best.count)) {
+      best = { date: point.date, count: point.submissions };
+    }
+  }
+  return best;
+}
+
+export type GetFormReportOptions = {
+  from?: Date;
+  to?: Date;
+  filter?: { questionId: string; operator: AnswerFilterOperator; value?: string };
+};
+
+export async function getFormReport(
+  formId: string,
+  userId: string,
+  options?: GetFormReportOptions,
+) {
   const form = await getFormForResponseAccess(formId, userId);
   const schema = getFormSchema(form.schema);
   const questions = schema.sections.flatMap((s) => s.questions);
 
-  // Single read of all responses for this form (answers only — no pagination
-  // round trips). Ordered newest-first so text samples show recent answers.
+  const from = options?.from;
+  const to = options?.to;
+
+  // Validate the cross-question filter against the real schema. An unknown
+  // questionId (stale bookmarked URL after a question was deleted) is ignored
+  // rather than throwing, surfaced via warnings so the UI can tell the user.
+  const warnings: string[] = [];
+  let filter = options?.filter;
+  if (filter && !questions.some((q) => q.id === filter!.questionId)) {
+    warnings.push("UNKNOWN_FILTER_QUESTION");
+    filter = undefined;
+  }
+  const filterApplied = Boolean(filter);
+
+  // Date-range where fragments (index-backed). Spread conditionally so
+  // exactOptionalPropertyTypes doesn't choke on undefined bounds.
+  const rangeBounds = {
+    ...(from ? { gte: from } : {}),
+    ...(to ? { lte: to } : {}),
+  };
+  const hasRange = Boolean(from || to);
+  const responseWhere = {
+    formId: form.id,
+    ...(hasRange ? { submittedAt: rangeBounds } : {}),
+  };
+  const analyticsWhere = (event: string) => ({
+    formId: form.id,
+    event,
+    ...(hasRange ? { createdAt: rangeBounds } : {}),
+  });
+
+  // Single read of all responses for this form. Ordered newest-first so text
+  // samples show recent answers.
   //
   // Cap how many rows we pull into memory: aggregating hundreds of thousands of
   // responses at once could OOM the process. We still report the true total via
   // a separate count; the per-question aggregates are computed over the most
   // recent REPORT_SAMPLE_CAP responses when a form exceeds that size.
   const REPORT_SAMPLE_CAP = 5000;
-  const [responses, totalResponses, views, submissions] = await Promise.all([
-    prisma.formResponse.findMany({
-      where: { formId: form.id },
-      orderBy: { submittedAt: "desc" },
-      select: { answers: true },
-      take: REPORT_SAMPLE_CAP,
-    }),
-    prisma.formResponse.count({ where: { formId: form.id } }),
-    prisma.formAnalytics.count({ where: { formId: form.id, event: "view" } }),
-    prisma.formAnalytics.count({ where: { formId: form.id, event: "submission" } }),
-  ]);
+  const [responses, totalResponses, views, starts, submissions] =
+    await Promise.all([
+      prisma.formResponse.findMany({
+        where: responseWhere,
+        orderBy: { submittedAt: "desc" },
+        select: { answers: true, submittedAt: true, metadata: true },
+        take: REPORT_SAMPLE_CAP,
+      }),
+      prisma.formResponse.count({ where: { formId: form.id } }),
+      prisma.formAnalytics.count({ where: analyticsWhere("view") }),
+      prisma.formAnalytics.count({ where: analyticsWhere("start") }),
+      prisma.formAnalytics.count({ where: analyticsWhere("submission") }),
+    ]);
 
-  const sampledResponses = responses.length;
+  // Apply the cross-question filter in memory BEFORE aggregation so
+  // completions, per-question charts, completion rate, avg time, and section
+  // completeness all reflect only matching responses. Views/starts stay
+  // unfiltered (they have no answers to match).
+  const scopedResponses = filter
+    ? responses.filter((r) =>
+        matchesAnswerFilter(
+          ((r.answers ?? {}) as Record<string, unknown>)[filter!.questionId],
+          filter!.operator,
+          filter!.value,
+        ),
+      )
+    : responses;
 
-  const answerRows = responses.map(
+  const sampledResponses = scopedResponses.length;
+
+  const answerRows = scopedResponses.map(
     (r) => (r.answers ?? {}) as Record<string, unknown>,
   );
 
@@ -3122,29 +3337,125 @@ export async function getFormReport(formId: string, userId: string) {
 
   const conversionRate = views > 0 ? Math.round((submissions / views) * 100) : 0;
 
-  // Daily views/submissions for the last 30 days (server-side group-by-day).
-  const timeSeries = await getFormDailyTimeSeries(form.id, 30);
+  // Daily views/submissions. Range-aware: the active window when from/to are
+  // set, else the last-30-days default (unchanged behavior).
+  const { series: timeSeries, warnings: seriesWarnings } =
+    await getFormDailyTimeSeries(
+      form.id,
+      hasRange ? { ...(from ? { from } : {}), ...(to ? { to } : {}) } : undefined,
+    );
+  for (const w of seriesWarnings) warnings.push(w);
+
+  // Completions == the scoped FormResponse count (filtered when a filter is
+  // active; range-scoped by the where clause). The funnel clamps display.
+  const completions = sampledResponses;
+
+  const funnel = computeFunnel(views, starts, completions, filterApplied);
+
+  const avgTime = computeAvgTime(
+    scopedResponses.map((r) => {
+      const meta = (r.metadata ?? {}) as Record<string, unknown>;
+      return meta["elapsedSeconds"];
+    }),
+  );
+
+  const sectionCompleteness = computeSectionCompleteness(
+    schema.sections,
+    answerRows,
+  );
+
+  const peakDay = computePeakDay(timeSeries);
 
   return {
     totalResponses,
     analytics: { views, submissions, conversionRate },
+    funnel,
+    metrics: {
+      completionRateViews: funnel.viewToCompletion,
+      completionRateStarts: funnel.startToCompletion,
+      avgTime,
+      peakDay,
+      sectionCompleteness,
+    },
+    range: {
+      from: from ? from.toISOString() : null,
+      to: to ? to.toISOString() : null,
+    },
+    filterApplied,
+    filter: filter
+      ? {
+          questionId: filter.questionId,
+          operator: filter.operator,
+          ...(filter.value !== undefined ? { value: filter.value } : {}),
+        }
+      : null,
+    warnings,
     timeSeries,
     questions: questionReports,
   };
 }
 
+export type DailyTimeSeriesPoint = {
+  date: string;
+  views: number;
+  submissions: number;
+};
+
+// Zero-filled span is capped so a hostile/huge custom range can't allocate an
+// unbounded array; beyond this the range is clamped and a warning is returned.
+const DAILY_SERIES_MAX_DAYS = 366;
+
 /**
- * Views and submissions grouped by calendar day for the last `days` days.
- * Returns a contiguous series (zero-filled days) so charts don't have gaps.
+ * Views and submissions grouped by calendar day (server-side group-by-day).
+ * Range-aware: with no opts it reproduces the last-30-days behavior; with
+ * { from, to } it scopes the SQL to `createdAt BETWEEN` and zero-fills across
+ * the requested window. Returns a contiguous (zero-filled) series so charts
+ * don't have gaps, plus any warnings (e.g. RANGE_TRUNCATED_SERIES).
  */
-export async function getFormDailyTimeSeries(formId: string, days: number) {
+export async function getFormDailyTimeSeries(
+  formId: string,
+  opts?: { from?: Date; to?: Date },
+): Promise<{ series: DailyTimeSeriesPoint[]; warnings: string[] }> {
+  const warnings: string[] = [];
+
+  // Resolve the inclusive [startDay, endDay] window (both truncated to a UTC
+  // calendar day) that the zero-fill walks over.
+  const dayFloorUTC = (d: Date): Date => {
+    const copy = new Date(d);
+    copy.setUTCHours(0, 0, 0, 0);
+    return copy;
+  };
+
+  let endDay: Date;
+  let startDay: Date;
+  if (opts?.from || opts?.to) {
+    endDay = dayFloorUTC(opts.to ?? new Date());
+    startDay = dayFloorUTC(
+      opts.from ??
+        new Date(endDay.getTime() - 29 * 24 * 60 * 60 * 1000),
+    );
+    // Clamp a window wider than the cap to the most recent DAILY_SERIES_MAX_DAYS.
+    const maxSpanMs = (DAILY_SERIES_MAX_DAYS - 1) * 24 * 60 * 60 * 1000;
+    if (endDay.getTime() - startDay.getTime() > maxSpanMs) {
+      startDay = new Date(endDay.getTime() - maxSpanMs);
+      warnings.push("RANGE_TRUNCATED_SERIES");
+    }
+  } else {
+    endDay = dayFloorUTC(new Date());
+    startDay = new Date(endDay.getTime() - 29 * 24 * 60 * 60 * 1000);
+  }
+
+  // Inclusive upper bound for the SQL scan (end of the end day).
+  const endExclusive = new Date(endDay.getTime() + 24 * 60 * 60 * 1000);
+
   const rows = await prisma.$queryRaw<
     Array<{ day: Date; event: string; count: bigint }>
   >`
     SELECT date_trunc('day', "createdAt") AS day, "event", COUNT(*) AS count
     FROM "FormAnalytics"
     WHERE "formId" = ${formId}
-      AND "createdAt" >= now() - (${days}::text || ' days')::interval
+      AND "createdAt" >= ${startDay}
+      AND "createdAt" < ${endExclusive}
     GROUP BY 1, 2
     ORDER BY 1 ASC
   `;
@@ -3157,11 +3468,12 @@ export async function getFormDailyTimeSeries(formId: string, days: number) {
   }
 
   // Zero-fill each day in the window.
-  const series: Array<{ date: string; views: number; submissions: number }> = [];
-  const today = new Date();
-  for (let i = days - 1; i >= 0; i--) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
+  const series: DailyTimeSeriesPoint[] = [];
+  for (
+    let d = new Date(startDay);
+    d.getTime() <= endDay.getTime();
+    d = new Date(d.getTime() + 24 * 60 * 60 * 1000)
+  ) {
     const date = d.toISOString().slice(0, 10);
     series.push({
       date,
@@ -3170,5 +3482,29 @@ export async function getFormDailyTimeSeries(formId: string, days: number) {
     });
   }
 
-  return series;
+  return { series, warnings };
+}
+
+/**
+ * Record a respondent "start" event for a published form. Resolves the slug to
+ * a PUBLISHED, not-deleted form (same gate as getPublicForm) and throws
+ * PUBLIC_FORM_NOT_FOUND if absent, so we never write a start row for a formId
+ * that does not exist. The analytics insert is fire-and-forget: a DB hiccup
+ * must never surface to the respondent (the form still works).
+ */
+export async function recordFormStart(slug: string): Promise<void> {
+  const form = await prisma.form.findFirst({
+    where: { slug, deletedAt: null, status: "PUBLISHED" },
+    select: { id: true },
+  });
+
+  if (!form) {
+    const error = new Error("Published form not found.");
+    error.name = "PUBLIC_FORM_NOT_FOUND";
+    throw error;
+  }
+
+  void prisma.formAnalytics
+    .create({ data: { formId: form.id, event: "start" } })
+    .catch((err) => console.error("formAnalytics start tracking failed:", err));
 }

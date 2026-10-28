@@ -21,6 +21,8 @@ import {
   updateQuestionSchema,
   updateFormSettingsSchema,
   saveAsTemplateSchema,
+  reportQuerySchema,
+  trackEventSchema,
 } from "./form.schemas.js";
 
 import { TEMPLATES } from "./templates.js";
@@ -41,6 +43,7 @@ import {
   getFormResponse,
   getFormResponseCount,
   getFormReport,
+  recordFormStart,
   getPublicForm,
   getUploadSignatureForForm,
   getWorkspaceStats,
@@ -1108,7 +1111,34 @@ formRouter.get(
         res.status(400).json({ success: false, error: { code: "INVALID_FORM_ID", message: "A valid form ID is required." } });
         return;
       }
-      const report = await getFormReport(formId, req.user.id);
+
+      const q = reportQuerySchema.parse(req.query);
+
+      // Normalize `to` to end-of-UTC-day so inclusivity is a server guarantee:
+      // a bookmarked/midnight/date-only `to` still includes that whole day
+      // (design §2.1). `from` is used as-is.
+      let toDate: Date | undefined;
+      if (q.to) {
+        toDate = new Date(q.to);
+        toDate.setUTCHours(23, 59, 59, 999);
+      }
+
+      // Assemble the filter only when all required parts are present (Zod's
+      // all-or-nothing refine already guarantees this when any part is set).
+      const filter =
+        q.filterQuestionId && q.filterOperator
+          ? {
+              questionId: q.filterQuestionId,
+              operator: q.filterOperator,
+              ...(q.filterValue !== undefined ? { value: q.filterValue } : {}),
+            }
+          : undefined;
+
+      const report = await getFormReport(formId, req.user.id, {
+        ...(q.from ? { from: new Date(q.from) } : {}),
+        ...(toDate ? { to: toDate } : {}),
+        ...(filter ? { filter } : {}),
+      });
       res.json({ success: true, data: report });
     } catch (error) {
       next(error);
@@ -1358,6 +1388,36 @@ formRouter.post(
       // any proxy/edge from caching this path's responses.
       res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
       res.json({ success: true, data: signature });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+// Public start-event tracker. CSRF-exempt via the /public/ path convention and
+// covered by publicFormLimiter. trackEventSchema accepts only event:"start",
+// and recordFormStart hardcodes the written value, so this endpoint can never
+// inject an arbitrary analytics event.
+formRouter.post(
+  "/public/:slug/track",
+  async (req, res, next) => {
+    try {
+      const slug = req.params.slug;
+
+      if (typeof slug !== "string") {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "INVALID_FORM_SLUG",
+            message: "A valid form slug is required.",
+          },
+        });
+        return;
+      }
+
+      trackEventSchema.parse(req.body);
+      await recordFormStart(slug);
+      res.status(204).end();
     } catch (error) {
       next(error);
     }
