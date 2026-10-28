@@ -64,6 +64,12 @@ export const updateFormSchema = z.object({
   description: z.string().trim().max(2000).nullable().optional(),
 });
 
+export const saveAsTemplateSchema = z.object({
+  name: z.string().trim().min(2).max(200),
+  description: z.string().trim().max(2000).optional(),
+  category: z.string().trim().max(100).optional(),
+});
+
 const questionTypeSchema = z.enum([
   "SHORT_TEXT",
   "LONG_TEXT",

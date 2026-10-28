@@ -30,6 +30,7 @@ export default function DashboardPage() {
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [templateNotice, setTemplateNotice] = useState("");
 
   // Filters (read folder from URL params)
   const [search, setSearch] = useState("");
@@ -110,6 +111,23 @@ export default function DashboardPage() {
       const data = await api.post<{ form: FormRecord }>(`/api/forms/${formId}/duplicate`);
       setForms((current) => [data.form, ...current]);
     } catch { /* silent */ }
+  }
+
+  // Save a form as a reusable custom template. Unlike duplicate (which inserts a
+  // visible card), this produces no visible change on the dashboard, so success
+  // needs an explicit, transient confirmation via the shared banner area.
+  async function saveAsTemplate(formId: string, formTitle: string) {
+    const name = window.prompt("Template name", formTitle);
+    if (name === null) return; // cancelled — no request, no message.
+
+    try {
+      await api.post(`/api/forms/${formId}/save-as-template`, { name: name.trim() });
+      setError("");
+      setTemplateNotice(`Saved "${name.trim()}" as a template.`);
+      window.setTimeout(() => setTemplateNotice(""), 4000);
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : "Unable to save template.");
+    }
   }
 
   async function moveToFolder(formId: string, folderId: string | null) {
@@ -222,6 +240,12 @@ export default function DashboardPage() {
         <section className="status-card error-card" style={{ maxWidth: 1180, margin: "0 auto 20px" }}>
           <h2>Unable to load dashboard</h2>
           <p>{error}</p>
+        </section>
+      ) : null}
+
+      {templateNotice ? (
+        <section className="status-card" style={{ maxWidth: 1180, margin: "0 auto 20px" }} role="status">
+          <p>{templateNotice}</p>
         </section>
       ) : null}
 
@@ -413,6 +437,14 @@ export default function DashboardPage() {
                   onClick={() => void duplicateForm(form.id)}
                 >
                   Duplicate
+                </button>
+
+                <button
+                  className="secondary-button compact"
+                  type="button"
+                  onClick={() => void saveAsTemplate(form.id, form.title)}
+                >
+                  Save as template
                 </button>
 
                 {form.status === "PUBLISHED" ? (

@@ -3,6 +3,10 @@ import {
   validateSubmission,
   nextSectionAfter,
   computeReachedSections,
+  rebuildSchemaWithFreshIds,
+  addCustomTemplatePrefix,
+  stripCustomTemplatePrefix,
+  isCustomTemplateId,
 } from "./form.service.js";
 
 // Minimal FormSchema builder for the shared answer-validation gate. We only
@@ -300,5 +304,155 @@ describe("server jump helpers", () => {
     expect(reached.has("s0")).toBe(true);
     expect(reached.has("s1")).toBe(false);
     expect(reached.has("s2")).toBe(true);
+  });
+});
+
+// ─── Custom template id prefix helpers ────────────────────────────────────────
+
+describe("custom template id prefix helpers", () => {
+  it("adds and strips the custom: prefix (round-trip)", () => {
+    const id = "clx123abc";
+    const prefixed = addCustomTemplatePrefix(id);
+    expect(prefixed).toBe("custom:clx123abc");
+    expect(stripCustomTemplatePrefix(prefixed)).toBe(id);
+  });
+
+  it("stripCustomTemplatePrefix leaves an unprefixed id unchanged", () => {
+    expect(stripCustomTemplatePrefix("student-feedback")).toBe("student-feedback");
+  });
+
+  it("isCustomTemplateId distinguishes custom from built-in ids", () => {
+    expect(isCustomTemplateId("custom:clx123")).toBe(true);
+    expect(isCustomTemplateId("student-feedback")).toBe(false);
+  });
+});
+
+// ─── rebuildSchemaWithFreshIds (snapshot copy with id remapping) ──────────────
+
+describe("rebuildSchemaWithFreshIds", () => {
+  function snapshot() {
+    return {
+      version: 1,
+      settings: { collectEmail: false, allowMultipleResponses: true },
+      sections: [
+        {
+          id: "s0",
+          title: "A",
+          questions: [
+            { id: "q_gate", label: "Gate", type: "SHORT_TEXT", required: true },
+          ],
+          jumpRules: [
+            { questionId: "q_gate", operator: "equals", value: "yes", target: "s2" },
+            { questionId: "q_gate", operator: "equals", value: "end", target: "__submit__" },
+          ],
+        },
+        {
+          id: "s1",
+          title: "B",
+          questions: [
+            {
+              id: "q_mid",
+              label: "Middle",
+              type: "SHORT_TEXT",
+              required: false,
+              conditions: [{ questionId: "q_gate", operator: "equals", value: "no" }],
+            },
+          ],
+        },
+        {
+          id: "s2",
+          title: "C",
+          questions: [{ id: "q_end", label: "End", type: "SHORT_TEXT", required: false }],
+        },
+      ],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any;
+  }
+
+  it("assigns fresh, unique, prefixed ids to every section and question", () => {
+    const rebuilt = rebuildSchemaWithFreshIds(snapshot());
+    const sectionIds = rebuilt.sections.map((s) => s.id);
+    const questionIds = rebuilt.sections.flatMap((s) =>
+      s.questions.map((q) => q.id),
+    );
+
+    for (const id of sectionIds) expect(id.startsWith("section_")).toBe(true);
+    for (const id of questionIds) expect(id.startsWith("question_")).toBe(true);
+
+    const all = [...sectionIds, ...questionIds];
+    expect(new Set(all).size).toBe(all.length); // all unique
+    // None of the original ids survive.
+    expect(all).not.toContain("s0");
+    expect(all).not.toContain("q_gate");
+  });
+
+  it("remaps condition questionId references to the new ids", () => {
+    const rebuilt = rebuildSchemaWithFreshIds(snapshot());
+    const newGateId = rebuilt.sections[0]!.questions[0]!.id;
+    const midCondition = rebuilt.sections[1]!.questions[0]!.conditions?.[0];
+    expect(midCondition?.questionId).toBe(newGateId);
+  });
+
+  it("remaps jumpRules questionId and target, preserving the __submit__ sentinel", () => {
+    const rebuilt = rebuildSchemaWithFreshIds(snapshot());
+    const newGateId = rebuilt.sections[0]!.questions[0]!.id;
+    const newS2Id = rebuilt.sections[2]!.id;
+    const rules = rebuilt.sections[0]!.jumpRules ?? [];
+
+    expect(rules).toHaveLength(2);
+    expect(rules[0]!.questionId).toBe(newGateId);
+    expect(rules[0]!.target).toBe(newS2Id);
+    // __submit__ preserved verbatim.
+    expect(rules[1]!.target).toBe("__submit__");
+  });
+
+  it("drops a jump rule whose target does not resolve", () => {
+    const bad = {
+      version: 1,
+      settings: { collectEmail: false, allowMultipleResponses: true },
+      sections: [
+        {
+          id: "s0",
+          title: "A",
+          questions: [{ id: "q", label: "Q", type: "SHORT_TEXT", required: false }],
+          jumpRules: [{ questionId: "q", operator: "equals", value: "x", target: "ghost" }],
+        },
+      ],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any;
+    const rebuilt = rebuildSchemaWithFreshIds(bad);
+    expect(rebuilt.sections[0]!.jumpRules).toBeUndefined();
+  });
+
+  it("drops a condition whose referenced question does not resolve", () => {
+    const bad = {
+      version: 1,
+      settings: { collectEmail: false, allowMultipleResponses: true },
+      sections: [
+        {
+          id: "s0",
+          title: "A",
+          questions: [
+            {
+              id: "q",
+              label: "Q",
+              type: "SHORT_TEXT",
+              required: false,
+              conditions: [{ questionId: "ghost", operator: "equals", value: "x" }],
+            },
+          ],
+        },
+      ],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any;
+    const rebuilt = rebuildSchemaWithFreshIds(bad);
+    expect(rebuilt.sections[0]!.questions[0]!.conditions).toBeUndefined();
+  });
+
+  it("does not mutate the input snapshot", () => {
+    const input = snapshot();
+    rebuildSchemaWithFreshIds(input);
+    expect(input.sections[0].id).toBe("s0");
+    expect(input.sections[0].questions[0].id).toBe("q_gate");
   });
 });

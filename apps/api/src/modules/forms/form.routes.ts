@@ -20,6 +20,7 @@ import {
   updateFormSchema,
   updateQuestionSchema,
   updateFormSettingsSchema,
+  saveAsTemplateSchema,
 } from "./form.schemas.js";
 
 import { TEMPLATES } from "./templates.js";
@@ -56,25 +57,82 @@ import {
   updateForm,
   updateQuestion,
   updateFormSettings,
+  saveFormAsTemplate,
+  listTemplatesForWorkspace,
+  createFormFromCustomTemplate,
+  deleteTemplate,
+  isCustomTemplateId,
+  stripCustomTemplatePrefix,
 } from "./form.service.js";
 
 const formRouter: ExpressRouter = Router();
 
-// List available templates (no auth required for browsing)
-formRouter.get("/templates", (_req, res) => {
-  res.json({
-    success: true,
-    data: {
-      templates: TEMPLATES.map((t) => ({
-        id: t.id,
-        name: t.name,
-        description: t.description,
-        category: t.category,
-        questionCount: t.questions.length,
-      })),
-    },
-  });
-});
+// List available templates for a workspace: built-ins + the workspace's custom
+// templates. Requires auth + a workspaceId. Kept FIRST (before GET /:formId) so
+// the literal `templates` segment is never captured by the :formId param.
+formRouter.get(
+  "/templates",
+  requireAuth,
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: { code: "UNAUTHENTICATED", message: "Authentication is required." },
+        });
+        return;
+      }
+
+      const workspaceId = req.query.workspaceId;
+      if (typeof workspaceId !== "string" || workspaceId.length === 0) {
+        res.status(400).json({
+          success: false,
+          error: { code: "INVALID_WORKSPACE_ID", message: "A valid workspace ID is required." },
+        });
+        return;
+      }
+
+      const templates = await listTemplatesForWorkspace(workspaceId, req.user.id);
+
+      res.json({ success: true, data: { templates } });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+// Delete a custom template. Registered BEFORE DELETE /:formId / GET /:formId so
+// the literal `templates` segment isn't captured by the :formId param.
+formRouter.delete(
+  "/templates/:id",
+  requireAuth,
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: { code: "UNAUTHENTICATED", message: "Authentication is required." },
+        });
+        return;
+      }
+
+      const id = req.params.id;
+      if (typeof id !== "string" || id.length === 0) {
+        res.status(400).json({
+          success: false,
+          error: { code: "INVALID_TEMPLATE", message: "A valid template ID is required." },
+        });
+        return;
+      }
+
+      await deleteTemplate(id, req.user.id);
+
+      res.json({ success: true, data: { message: "Template deleted." } });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
 // Aggregate stats for a workspace's admin dashboard (single request, no N+1).
 formRouter.get(
@@ -128,6 +186,24 @@ formRouter.post(
         res.status(400).json({
           success: false,
           error: { code: "INVALID_TEMPLATE", message: "templateId is required." },
+        });
+        return;
+      }
+
+      // Custom (workspace) template: create from the stored snapshot with fresh
+      // ids. Authorization + workspace-scoped lookup live in the service.
+      if (isCustomTemplateId(templateId)) {
+        const form = await createFormFromCustomTemplate({
+          templateId: stripCustomTemplatePrefix(templateId),
+          workspaceId: input.workspaceId,
+          ownerId: req.user.id,
+          title: input.title,
+          ...(input.description !== undefined ? { description: input.description } : {}),
+        });
+
+        res.status(201).json({
+          success: true,
+          data: { form },
         });
         return;
       }
@@ -728,6 +804,56 @@ formRouter.post(
       res.status(201).json({
         success: true,
         data: { form },
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+// Save a SNAPSHOT of the form's current schema as a workspace-scoped custom
+// template. The `save-as-template` suffix doesn't collide with other :formId
+// routes, so position is unconstrained; kept next to duplicate for cohesion.
+formRouter.post(
+  "/:formId/save-as-template",
+  requireAuth,
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: {
+            code: "UNAUTHENTICATED",
+            message: "Authentication is required.",
+          },
+        });
+        return;
+      }
+
+      const formId = req.params.formId;
+
+      if (typeof formId !== "string") {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "INVALID_FORM_ID",
+            message: "A valid form ID is required.",
+          },
+        });
+        return;
+      }
+
+      const input = saveAsTemplateSchema.parse(req.body);
+
+      const template = await saveFormAsTemplate(formId, req.user.id, {
+        name: input.name,
+        ...(input.description !== undefined ? { description: input.description } : {}),
+        ...(input.category !== undefined ? { category: input.category } : {}),
+      });
+
+      res.status(201).json({
+        success: true,
+        data: { template },
       });
     } catch (error) {
       next(error);

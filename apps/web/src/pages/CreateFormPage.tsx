@@ -6,9 +6,10 @@ import type { FormRecord, WorkspaceRecord } from "../types";
 type TemplateInfo = {
   id: string;
   name: string;
-  description: string;
-  category: string;
+  description: string | null;
+  category: string | null;
   questionCount: number;
+  custom: boolean;
 };
 
 export default function CreateFormPage() {
@@ -27,13 +28,11 @@ export default function CreateFormPage() {
   useEffect(() => {
     async function loadWorkspaces() {
       try {
-        const [wsData, templateData] = await Promise.all([
-          api.get<{ workspaces: WorkspaceRecord[] }>("/api/workspaces"),
-          api.get<{ templates: TemplateInfo[] }>("/api/forms/templates"),
-        ]);
+        const wsData = await api.get<{ workspaces: WorkspaceRecord[] }>(
+          "/api/workspaces",
+        );
 
         setWorkspaces(wsData.workspaces);
-        setTemplates(templateData.templates);
 
         const personal = wsData.workspaces.find((w) => w.type === "PERSONAL");
         if (personal) {
@@ -54,6 +53,44 @@ export default function CreateFormPage() {
 
     void loadWorkspaces();
   }, []);
+
+  // Templates are workspace-aware (built-ins + the workspace's custom
+  // templates), so the fetch is keyed on workspaceId. Guard against the empty
+  // first-render id, which would 400 with INVALID_WORKSPACE_ID.
+  useEffect(() => {
+    if (!workspaceId) return;
+
+    async function loadTemplates(wsId: string) {
+      try {
+        const data = await api.get<{ templates: TemplateInfo[] }>(
+          `/api/forms/templates?workspaceId=${encodeURIComponent(wsId)}`,
+        );
+        setTemplates(data.templates);
+      } catch (err) {
+        setError(
+          err instanceof ApiRequestError
+            ? err.message
+            : "Unable to load templates.",
+        );
+      }
+    }
+
+    void loadTemplates(workspaceId);
+  }, [workspaceId]);
+
+  async function handleDeleteTemplate(templateId: string) {
+    try {
+      await api.delete(`/api/forms/templates/${encodeURIComponent(templateId)}`);
+      setTemplates((current) => current.filter((t) => t.id !== templateId));
+      setSelectedTemplate((current) => (current === templateId ? "" : current));
+    } catch (err) {
+      setError(
+        err instanceof ApiRequestError
+          ? err.message
+          : "Unable to delete template.",
+      );
+    }
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -97,6 +134,9 @@ export default function CreateFormPage() {
       </main>
     );
   }
+
+  const builtInTemplates = templates.filter((t) => !t.custom);
+  const customTemplates = templates.filter((t) => t.custom);
 
   return (
     <main className="page-shell">
@@ -183,12 +223,61 @@ export default function CreateFormPage() {
                 }}
               >
                 <option value="">Blank form</option>
-                {templates.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name} — {t.description} ({t.questionCount} questions)
-                  </option>
-                ))}
+                {builtInTemplates.length > 0 ? (
+                  <optgroup label="Templates">
+                    {builtInTemplates.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name} — {t.description} ({t.questionCount} questions)
+                      </option>
+                    ))}
+                  </optgroup>
+                ) : null}
+                {customTemplates.length > 0 ? (
+                  <optgroup label="Your workspace templates">
+                    {customTemplates.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                        {t.description ? ` — ${t.description}` : ""} ({t.questionCount} questions)
+                      </option>
+                    ))}
+                  </optgroup>
+                ) : null}
               </select>
+            </div>
+          ) : null}
+
+          {/* Manage custom templates: lightweight delete list */}
+          {customTemplates.length > 0 ? (
+            <div className="question-field">
+              <label>Your workspace templates</label>
+              <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 8 }}>
+                {customTemplates.map((t) => (
+                  <li
+                    key={t.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      border: "1px solid #e2e8f0",
+                      borderRadius: 10,
+                      padding: "8px 12px",
+                    }}
+                  >
+                    <span style={{ fontSize: "0.9rem" }}>
+                      {t.name}{" "}
+                      <span className="muted">({t.questionCount} questions)</span>
+                    </span>
+                    <button
+                      className="secondary-button compact"
+                      type="button"
+                      onClick={() => void handleDeleteTemplate(t.id)}
+                    >
+                      Delete
+                    </button>
+                  </li>
+                ))}
+              </ul>
             </div>
           ) : null}
 

@@ -63,6 +63,7 @@ model User {
   notifications     Notification[]
   formShares        FormShare[]       @relation("FormShareUser")
   formSharesInvited FormShare[]       @relation("FormShareInviter")
+  formTemplates     FormTemplate[]    @relation("FormTemplateCreator")
 }
 
 model Session {
@@ -94,6 +95,7 @@ model Workspace {
   folders Folder[]
   forms   Form[]
   events  Event[]
+  templates FormTemplate[]
 
   @@index([ownerId])
 }
@@ -160,6 +162,23 @@ model Form {
   @@index([ownerId])
   @@index([status])
   @@index([deletedAt])
+}
+
+model FormTemplate {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  description String?
+  category    String?
+  schema      Json
+  createdById String
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy User      @relation("FormTemplateCreator", fields: [createdById], references: [id])
+
+  @@index([workspaceId])
+  @@index([createdById])
 }
 
 model Event {

@@ -283,6 +283,16 @@ const errorHandler: ErrorRequestHandler = (
       });
       return;
 
+    case "TEMPLATE_NOT_FOUND":
+      res.status(404).json({
+        success: false,
+        error: {
+          code: "TEMPLATE_NOT_FOUND",
+          message: error.message,
+        },
+      });
+      return;
+
     case "INVALID_QUESTION_ORDER":
       res.status(400).json({
         success: false,

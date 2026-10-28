@@ -18,6 +18,7 @@ import {
   hasEditorShare,
   hasResponseViewShare,
 } from "../formShares/formShare.access.js";
+import { TEMPLATES } from "./templates.js";
 import type {
   UpdateFormSettingsInput,
 } from "./form.schemas.js";
@@ -306,6 +307,12 @@ function formNotFoundError(
 function forbiddenError(message: string) {
   const error = new Error(message);
   error.name = "FORBIDDEN";
+  return error;
+}
+
+function templateNotFoundError(message = "Template not found.") {
+  const error = new Error(message);
+  error.name = "TEMPLATE_NOT_FOUND";
   return error;
 }
 
@@ -2414,6 +2421,318 @@ export async function duplicateForm(
       schema: toPrismaJson(schema),
     },
   });
+}
+
+// ─── Custom form templates ───────────────────────────────────────────────────
+
+// Custom templates are surfaced with a `custom:` prefix on their id so they can
+// never collide with built-in string ids (cuids and built-in ids never contain
+// a colon). The API serialization layer adds the prefix; the resolution/delete
+// paths strip it.
+const CUSTOM_TEMPLATE_PREFIX = "custom:";
+
+/** Prefix a raw FormTemplate cuid for wire/UI exposure. */
+export function addCustomTemplatePrefix(id: string): string {
+  return `${CUSTOM_TEMPLATE_PREFIX}${id}`;
+}
+
+/** Strip a leading `custom:` prefix if present; otherwise return the input. */
+export function stripCustomTemplatePrefix(id: string): string {
+  return id.startsWith(CUSTOM_TEMPLATE_PREFIX)
+    ? id.slice(CUSTOM_TEMPLATE_PREFIX.length)
+    : id;
+}
+
+/** True when a templateId references a custom (workspace) template. */
+export function isCustomTemplateId(id: string): boolean {
+  return id.startsWith(CUSTOM_TEMPLATE_PREFIX);
+}
+
+/** Count every question across all sections of a snapshot schema. */
+function countSnapshotQuestions(schema: FormSchema): number {
+  return schema.sections.reduce(
+    (sum, section) => sum + section.questions.length,
+    0,
+  );
+}
+
+/**
+ * Clone a snapshot schema assigning fresh ids to every section and question,
+ * then rewrite all id references (per-question `conditions[].questionId`,
+ * section `jumpRules[].questionId` and `jumpRules[].target`) through the remap.
+ * The `__submit__` jump target sentinel is preserved verbatim. References that
+ * don't resolve in the remap are dropped defensively (matching the jump
+ * engine's tolerance for malformed targets). Pure — no DB, no mutation of the
+ * input. Exported for unit testing like the other pure helpers.
+ */
+export function rebuildSchemaWithFreshIds(snapshot: FormSchema): FormSchema {
+  const sectionIdMap = new Map<string, string>();
+  const questionIdMap = new Map<string, string>();
+
+  for (const section of snapshot.sections) {
+    sectionIdMap.set(section.id, createSectionId());
+    for (const question of section.questions) {
+      questionIdMap.set(question.id, createQuestionId());
+    }
+  }
+
+  const sections: FormSection[] = snapshot.sections.map((section) => {
+    const questions: FormQuestion[] = section.questions.map((question) => {
+      const newQuestion: FormQuestion = {
+        ...question,
+        id: questionIdMap.get(question.id) as string,
+      };
+
+      if (question.conditions) {
+        const remappedConditions = question.conditions
+          .map((condition) => {
+            const mapped = questionIdMap.get(condition.questionId);
+            if (mapped === undefined) return null;
+            return { ...condition, questionId: mapped };
+          })
+          .filter(
+            (c): c is NonNullable<typeof c> => c !== null,
+          );
+        if (remappedConditions.length > 0) {
+          newQuestion.conditions = remappedConditions;
+        } else {
+          delete newQuestion.conditions;
+        }
+      }
+
+      return newQuestion;
+    });
+
+    const newSection: FormSection = {
+      ...section,
+      id: sectionIdMap.get(section.id) as string,
+      questions,
+    };
+
+    if (section.jumpRules) {
+      const remappedRules = section.jumpRules
+        .map((rule) => {
+          const mappedQuestionId = questionIdMap.get(rule.questionId);
+          if (mappedQuestionId === undefined) return null;
+
+          let target: string;
+          if (rule.target === JUMP_TARGET_SUBMIT) {
+            target = JUMP_TARGET_SUBMIT;
+          } else {
+            const mappedTarget = sectionIdMap.get(rule.target);
+            if (mappedTarget === undefined) return null;
+            target = mappedTarget;
+          }
+
+          return { ...rule, questionId: mappedQuestionId, target };
+        })
+        .filter((r): r is NonNullable<typeof r> => r !== null);
+      if (remappedRules.length > 0) {
+        newSection.jumpRules = remappedRules;
+      } else {
+        delete newSection.jumpRules;
+      }
+    }
+
+    return newSection;
+  });
+
+  return {
+    ...snapshot,
+    sections,
+  };
+}
+
+/**
+ * Save a SNAPSHOT of a form's current schema as a workspace-scoped custom
+ * template. Requires edit rights on the source form (reuses getEditableForm, so
+ * a VIEWER cannot and a per-form EDITOR share can). The snapshot is independent
+ * — later edits to the source form do not change the template.
+ */
+export async function saveFormAsTemplate(
+  formId: string,
+  userId: string,
+  input: {
+    name: string;
+    description?: string | undefined;
+    category?: string | undefined;
+  },
+) {
+  const form = await getEditableForm(formId, userId);
+
+  const snapshot = getFormSchema(form.schema);
+
+  const template = await prisma.formTemplate.create({
+    data: {
+      workspaceId: form.workspaceId,
+      name: input.name.trim(),
+      description: input.description?.trim() || null,
+      category: input.category?.trim() || null,
+      schema: toPrismaJson(snapshot),
+      createdById: userId,
+    },
+  });
+
+  void logAction({
+    workspaceId: form.workspaceId,
+    userId,
+    action: "TEMPLATE_CREATED",
+    entityType: "form_template",
+    entityId: template.id,
+    metadata: { name: template.name },
+  }).catch((err) => console.error("logAction TEMPLATE_CREATED failed:", err));
+
+  return {
+    id: addCustomTemplatePrefix(template.id),
+    name: template.name,
+    description: template.description,
+    category: template.category,
+    questionCount: countSnapshotQuestions(snapshot),
+    custom: true as const,
+  };
+}
+
+/**
+ * List templates visible to a workspace for the picker: built-ins first (with
+ * `custom: false`), then the workspace's custom templates ordered newest-first
+ * (`custom: true`). Any workspace role may list; a non-member gets
+ * WORKSPACE_NOT_FOUND.
+ */
+export async function listTemplatesForWorkspace(
+  workspaceId: string,
+  userId: string,
+) {
+  const membership = await getMembership(workspaceId, userId);
+  if (!membership) {
+    const error = new Error("Workspace not found.");
+    error.name = "WORKSPACE_NOT_FOUND";
+    throw error;
+  }
+
+  const builtIns = TEMPLATES.map((t) => ({
+    id: t.id,
+    name: t.name,
+    description: t.description,
+    category: t.category,
+    questionCount: t.questions.length,
+    custom: false as const,
+  }));
+
+  const customRows = await prisma.formTemplate.findMany({
+    where: { workspaceId },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const custom = customRows.map((row) => ({
+    id: addCustomTemplatePrefix(row.id),
+    name: row.name,
+    description: row.description,
+    category: row.category,
+    // A corrupt snapshot degrades to 0 via getFormSchema tolerance (defaults
+    // sections to []), so the row still lists rather than throwing.
+    questionCount: countSnapshotQuestions(getFormSchema(row.schema)),
+    custom: true as const,
+  }));
+
+  return [...builtIns, ...custom];
+}
+
+/**
+ * Create a new DRAFT form from a custom template's stored snapshot, with fresh
+ * section/question ids and a fresh slug, owned by the caller. The custom path
+ * uses prisma.form.create directly (to carry the snapshot schema) and therefore
+ * does NOT inherit createForm's VIEWER gate — so it enforces its own membership
+ * + VIEWER check here. The template lookup is scoped to the target workspace,
+ * which also prevents instantiating another workspace's template. Responses are
+ * not copied (a template has none).
+ */
+export async function createFormFromCustomTemplate(input: {
+  templateId: string;
+  workspaceId: string;
+  ownerId: string;
+  title: string;
+  description?: string | undefined;
+}) {
+  const membership = await getMembership(input.workspaceId, input.ownerId);
+  if (!membership) {
+    const error = new Error("Workspace not found.");
+    error.name = "WORKSPACE_NOT_FOUND";
+    throw error;
+  }
+  if (membership.role === "VIEWER") {
+    throw forbiddenError("You do not have permission to create forms.");
+  }
+
+  const template = await prisma.formTemplate.findFirst({
+    where: { id: input.templateId, workspaceId: input.workspaceId },
+  });
+  if (!template) {
+    throw templateNotFoundError();
+  }
+
+  const snapshot = getFormSchema(template.schema);
+  const rebuilt = rebuildSchemaWithFreshIds(snapshot);
+
+  // Clear time-bound scheduling: it is meaningless on a fresh draft. Omit the
+  // keys rather than copy them forward.
+  const { scheduledPublishAt, scheduledCloseAt, ...carriedSettings } =
+    rebuilt.settings;
+  void scheduledPublishAt;
+  void scheduledCloseAt;
+
+  const rebuiltSchema: FormSchema = {
+    ...rebuilt,
+    settings: carriedSettings,
+  };
+
+  const form = await prisma.form.create({
+    data: {
+      workspaceId: input.workspaceId,
+      ownerId: input.ownerId,
+      title: input.title.trim(),
+      description: input.description?.trim() || null,
+      slug: createFormSlug(input.title),
+      status: "DRAFT",
+      schema: toPrismaJson(rebuiltSchema),
+    },
+  });
+
+  void logAction({
+    workspaceId: input.workspaceId,
+    userId: input.ownerId,
+    action: "FORM_CREATED",
+    entityType: "form",
+    entityId: form.id,
+    metadata: { title: form.title },
+  }).catch((err) => console.error("logAction FORM_CREATED failed:", err));
+
+  return form;
+}
+
+/**
+ * Delete a custom template. Only non-VIEWER members of the template's own
+ * workspace may delete. A non-member gets TEMPLATE_NOT_FOUND (no cross-workspace
+ * existence leak). Built-in ids never match a row, so attempting to delete a
+ * built-in yields TEMPLATE_NOT_FOUND (built-ins are undeletable by construction).
+ */
+export async function deleteTemplate(templateId: string, userId: string) {
+  const id = stripCustomTemplatePrefix(templateId);
+
+  const template = await prisma.formTemplate.findUnique({ where: { id } });
+  if (!template) {
+    throw templateNotFoundError();
+  }
+
+  const membership = await getMembership(template.workspaceId, userId);
+  if (!membership) {
+    // Don't reveal that a template exists in another workspace.
+    throw templateNotFoundError();
+  }
+  if (membership.role === "VIEWER") {
+    throw forbiddenError("You do not have permission to delete templates.");
+  }
+
+  await prisma.formTemplate.delete({ where: { id } });
 }
 
 export async function closeForm(

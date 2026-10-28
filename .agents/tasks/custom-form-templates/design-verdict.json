@@ -1,0 +1,27 @@
+{
+  "verdict": "APPROVED",
+  "findings": [
+    {
+      "severity": "NIT",
+      "title": "\"getMembership (404 if not a member)\" wording could mislead on who throws",
+      "location": "Authorization summary table (List templates row); listTemplatesForWorkspace under GET /templates",
+      "problem": "getMembership returns null and never throws (verified in form.service.ts). The table shorthand reads as if the primitive itself produces the 404; the caller must translate null -> WORKSPACE_NOT_FOUND.",
+      "fix": "In listTemplatesForWorkspace, state explicitly: call getMembership; if it returns null, throw a WORKSPACE_NOT_FOUND error (mirroring createForm). Footnote the table that the 404 is raised by the caller, not by getMembership."
+    },
+    {
+      "severity": "NIT",
+      "title": "Custom-template create path drops folderId unlike duplicateForm, without calling it out",
+      "location": "Instantiating a custom template with fresh ids, step 4 (prisma.form.create field list)",
+      "problem": "duplicateForm copies folderId: form.folderId; the custom-create path omits folderId silently. Leaving it null is correct (no source folder) but is left implicit.",
+      "fix": "Add a line to step 4: folderId is intentionally left null (a template has no source folder); this differs from duplicateForm which copies the source folderId."
+    },
+    {
+      "severity": "NIT",
+      "title": "questionCount degrade-to-0 on corrupt custom schema not surfaced in the picker UI note",
+      "location": "Error handling (List templates bullet); GET /templates response note; Web changes (picker option label)",
+      "problem": "A corrupt custom schema yields questionCount: 0 (getFormSchema tolerates malformed input) and still lists; the picker renders '(0 questions)' with no hint it is broken.",
+      "fix": "Note in Web changes that a custom template surfacing questionCount: 0 renders normally (acceptable for this lightweight surface); no special corrupt affordance required."
+    }
+  ],
+  "reviewDoc": "c:\\Qivo\\.agents\\tasks\\custom-form-templates\\design-review.md"
+}
