@@ -74,6 +74,12 @@ export default function PublicFormPage() {
   const [history, setHistory] = useState<number[]>([0]);
   const currentSectionIndex = history[history.length - 1] ?? 0;
 
+  // Fire the 'start' analytics event once per load on first interaction, and
+  // stamp the client-measured elapsed time into the submit metadata. Refs so
+  // neither re-renders nor re-fires on every keystroke.
+  const startFiredRef = useRef(false);
+  const startedAtRef = useRef<number | null>(null);
+
   // Same-session response editing (never persisted — lost on reload by design).
   const [responseId, setResponseId] = useState<string | null>(null);
   const [editToken, setEditToken] = useState<string | null>(null);
@@ -140,6 +146,15 @@ export default function PublicFormPage() {
     : 0;
 
   function updateAnswer(questionId: string, value: AnswerValue) {
+    // First real interaction: start the clock and fire 'start' once, never
+    // blocking typing or surfacing an error.
+    if (!startFiredRef.current && slug) {
+      startFiredRef.current = true;
+      startedAtRef.current = Date.now();
+      void publicPost(`/api/forms/public/${slug}/track`, { event: "start" }).catch(
+        () => {},
+      );
+    }
     setAnswers((current) => ({ ...current, [questionId]: value }));
   }
 
@@ -253,7 +268,16 @@ export default function PublicFormPage() {
       const body = {
         answers,
         ...(collectEmail ? { email: email.trim().toLowerCase() } : {}),
-        metadata: { source: "qivo-web" },
+        metadata: {
+          source: "qivo-web",
+          ...(startedAtRef.current
+            ? {
+                elapsedSeconds: Math.round(
+                  (Date.now() - startedAtRef.current) / 1000,
+                ),
+              }
+            : {}),
+        },
       };
 
       if (isEditing && responseId && editToken) {

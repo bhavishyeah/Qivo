@@ -1,0 +1,23 @@
+{
+  "id": "FEAT-002",
+  "type": "feat",
+  "description": "Client wiring for the analytics signals: extend the shared web API client to support request cancellation (AbortSignal), and in PublicFormPage fire the per-session 'start' event once on first interaction and stamp client-measured elapsedSeconds into submission metadata. Depends on FEAT-001's POST /public/:slug/track existing. Independent of FEAT-003.",
+  "status": "completed",
+  "steps": [
+    "In apps/web/src/lib/api.ts extend `api.get<T>(path)` to `api.get<T>(path, opts?: { signal?: AbortSignal })` and thread `opts?.signal` through `request` into the fetch RequestInit.signal. Keep it backward-compatible (second arg optional) so every existing api.get(path) call is unchanged.",
+    "In apps/web/src/pages/PublicFormPage.tsx add a `useRef` dedupe flag and a `startedAtRef`. On the first real interaction (inside updateAnswer, ~L142), if not already fired: set startedAtRef.current = Date.now(), set the flag, and call `void publicPost(`/api/forms/public/${slug}/track`, { event: 'start' }).catch(() => {})` so it never blocks typing or surfaces an error.",
+    "In the submit metadata object (currently `{ source: 'qivo-web' }`, ~L256) add `...(startedAtRef.current ? { elapsedSeconds: Math.round((Date.now() - startedAtRef.current) / 1000) } : {})`. No API schema change needed (submitResponseSchema.metadata is already z.record(z.string(), z.unknown()).optional())."
+  ],
+  "acceptance_criteria": [
+    "`cd apps/web && pnpm exec tsc -b --noEmit` exits 0.",
+    "The web build succeeds.",
+    "The 'start' event fires at most once per page load and never per keystroke (useRef dedupe).",
+    "Existing api.get(path) call sites compile unchanged (no second argument required)."
+  ],
+  "verification": [
+    "cd c:\\Qivo\\apps\\web && pnpm exec tsc -b --noEmit",
+    "cd c:\\Qivo && pnpm build:web"
+  ],
+  "blocked_reason": null,
+  "findings": "DONE. Verification: `pnpm exec tsc -b --noEmit` in apps/web exit 0; `pnpm build:web` from c:\\Qivo succeeded (vite build, 639 modules).\n\napi.get SIGNATURE: now `api.get<T>(path: string, opts?: { signal?: AbortSignal }): Promise<T>`. signal is threaded into fetch via the existing `request` which spreads `options` into fetch RequestInit. Backward-compatible: second arg optional, spread conditionally ({...(opts?.signal ? {signal: opts.signal} : {})}) to satisfy exactOptionalPropertyTypes. All existing api.get(path) call sites compile unchanged.\n\nPublicFormPage: added two refs next to currentSectionIndex — `startFiredRef = useRef(false)` and `startedAtRef = useRef<number|null>(null)`. In updateAnswer (fires on every answer change for all question types, the single mutation point), on first interaction when a slug exists: set startFiredRef=true, startedAtRef.current=Date.now(), then `void publicPost(`/api/forms/public/${slug}/track`, { event: 'start' }).catch(()=>{})`. Dedupe guarantees at-most-once per load, never per keystroke. Submit metadata changed from `{ source: 'qivo-web' }` to spread in `elapsedSeconds: Math.round((Date.now()-startedAtRef.current)/1000)` only when startedAtRef.current is set (so direct-submit-without-interaction forms omit it). No API schema change (submitResponseSchema.metadata already z.record optional). The /public/ POST reuses the existing publicPost helper (CSRF-exempt by path convention).\n\nFILES CHANGED: apps/web/src/lib/api.ts, apps/web/src/pages/PublicFormPage.tsx."
+}

@@ -115,8 +115,11 @@ async function request<T>(
 }
 
 export const api = {
-  get<T>(path: string): Promise<T> {
-    return request<T>(path, { method: "GET" });
+  get<T>(path: string, opts?: { signal?: AbortSignal }): Promise<T> {
+    return request<T>(path, {
+      method: "GET",
+      ...(opts?.signal ? { signal: opts.signal } : {}),
+    });
   },
 
   post<T>(path: string, data?: unknown): Promise<T> {
