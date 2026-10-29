@@ -2447,7 +2447,47 @@ export async function submitFormResponse(
     const { razorpayOrderId, razorpayPaymentId, razorpaySignature } =
       input.payment;
 
-    // Idempotency short-circuit: if this payment id already linked a response,
+    // Bind the order to this form FIRST: the Payment row must exist (created at
+    // order time) and belong to this formId. The order snapshot is the
+    // authoritative amount; no submit-time amount comparison is done.
+    // This check precedes the idempotency short-circuit so a caller who never
+    // paid (and holds no valid signature) can never reach a known
+    // razorpayPaymentId's linked response — the payment id is an identifier,
+    // not a secret, so it must not alone unlock a response + edit token.
+    const orderPayment = await prisma.payment.findUnique({
+      where: { razorpayOrderId },
+    });
+    if (!orderPayment || orderPayment.formId !== form.id) {
+      console.warn(
+        `[razorpay] PAYMENT_ORDER_MISMATCH slug=${slug} order=${razorpayOrderId}`,
+      );
+      const error = new Error("This payment could not be matched to the form.");
+      error.name = "PAYMENT_ORDER_MISMATCH";
+      throw error;
+    }
+
+    // Verify the signature BEFORE the idempotency short-circuit. A legitimate
+    // retry resends the same valid signature and still matches, so idempotent
+    // success is preserved; an unauthenticated/wrong-form caller is rejected
+    // with PAYMENT_VERIFICATION_FAILED and receives nothing (no response id,
+    // no edit token) — closing the IDOR / payment-and-signature bypass.
+    if (
+      !verifyPaymentSignature({
+        orderId: razorpayOrderId,
+        paymentId: razorpayPaymentId,
+        signature: razorpaySignature,
+      })
+    ) {
+      console.warn(
+        `[razorpay] PAYMENT_VERIFICATION_FAILED slug=${slug} order=${razorpayOrderId}`,
+      );
+      const error = new Error("Payment verification failed.");
+      error.name = "PAYMENT_VERIFICATION_FAILED";
+      throw error;
+    }
+
+    // Idempotency short-circuit: now that the order is bound to this form AND
+    // the signature is verified, if this payment id already linked a response,
     // return the IDENTICAL shape the first submit returned (not a bare row).
     const claimed = await prisma.payment.findUnique({
       where: { razorpayPaymentId },
@@ -2469,20 +2509,6 @@ export async function submitFormResponse(
       }
     }
 
-    // Bind the order to this form: the Payment row must exist (created at
-    // order time) and belong to this formId. The order snapshot is the
-    // authoritative amount; no submit-time amount comparison is done.
-    const orderPayment = await prisma.payment.findUnique({
-      where: { razorpayOrderId },
-    });
-    if (!orderPayment || orderPayment.formId !== form.id) {
-      console.warn(
-        `[razorpay] PAYMENT_ORDER_MISMATCH slug=${slug} order=${razorpayOrderId}`,
-      );
-      const error = new Error("This payment could not be matched to the form.");
-      error.name = "PAYMENT_ORDER_MISMATCH";
-      throw error;
-    }
     // Claim committed but create crashed before link (made unreachable by the
     // transaction below); treat as a conflict.
     if (
@@ -2491,21 +2517,6 @@ export async function submitFormResponse(
     ) {
       const error = new Error("This payment could not be matched to the form.");
       error.name = "PAYMENT_ORDER_MISMATCH";
-      throw error;
-    }
-
-    if (
-      !verifyPaymentSignature({
-        orderId: razorpayOrderId,
-        paymentId: razorpayPaymentId,
-        signature: razorpaySignature,
-      })
-    ) {
-      console.warn(
-        `[razorpay] PAYMENT_VERIFICATION_FAILED slug=${slug} order=${razorpayOrderId}`,
-      );
-      const error = new Error("Payment verification failed.");
-      error.name = "PAYMENT_VERIFICATION_FAILED";
       throw error;
     }
 
