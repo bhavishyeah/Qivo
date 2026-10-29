@@ -51,6 +51,51 @@ git push origin main
 
 Never edit an already-applied migration; add a new one.
 
+> **Pending migrations as of this writing** (apply automatically on the next
+> Railway boot via the entrypoint — no manual step):
+> `20260926000000_add_form_shared_notification_type`,
+> `20260926000100_add_form_share`, `20260927000000_add_form_last_digest_sent_at`,
+> `20260928000000_add_form_template`, `20260929000000_add_webhooks`,
+> `20260930000000_add_payments`. If a migration fails on boot, the entrypoint
+> logs a warning and still starts the server — check Deploy Logs for
+> `prisma migrate deploy` output after the first deploy.
+
+---
+
+## Razorpay payments — first-time setup & live test
+
+Payments are **code-complete but were never validated against live Razorpay**
+(built while the deploy was down). After deploying, validate end-to-end with
+**TEST keys first**, then switch to live.
+
+### Setup
+1. On Railway (API), set `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, and
+   `RAZORPAY_WEBHOOK_SECRET`. Use **test-mode** keys first (`rzp_test_...`).
+2. In the Razorpay dashboard, add a **webhook** pointing at
+   `https://<api-domain>/api/forms/public/razorpay/webhook`, subscribe to
+   `payment.captured` and `order.paid`, and set its secret to the same value as
+   `RAZORPAY_WEBHOOK_SECRET`.
+3. Redeploy / confirm `GET /api/health` shows `payments.configured: true` and
+   `payments.webhookConfigured: true`.
+
+### Live-test checklist (do with TEST keys)
+- [ ] Create a form, open **Settings → Payment**, enable it, set a fixed INR
+      amount, save. Publish the form.
+- [ ] Open the public form; the submit button shows **Pay ₹X & Submit**.
+- [ ] Pay using a Razorpay **test** card/UPI. Checkout should open (confirm the
+      CSP didn't block it — Razorpay domains are allow-listed in `vercel.json`
+      and `nginx.conf`).
+- [ ] On success, confirm the response **is saved** and a `Payment` row is
+      recorded (status verified); a bad/cancelled payment saves **no** response.
+- [ ] Confirm the Razorpay webhook was received (reconciliation) and is
+      idempotent — a replayed webhook creates no duplicate.
+- [ ] Confirm a free (non-payment) form still submits unchanged.
+- [ ] Only then swap in **live** keys and repeat a single real low-value payment.
+
+Amounts are stored and sent to Razorpay in **paise** (₹1 = 100). The server is
+the sole authority on the amount (from form settings) — a client-sent amount is
+never trusted.
+
 ---
 
 ## Environment variables
@@ -65,12 +110,21 @@ Never edit an already-applied migration; add a new one.
 | `WEB_URL` | Vercel URL, no trailing slash. Comma-separate for multiple origins. |
 | `SESSION_COOKIE_NAME` | `qivo_session` |
 | `SESSION_DAYS` | `30` |
-| `RESEND_API_KEY` | Resend key (optional; email skipped if unset) |
+| `RESPONSE_EDIT_SECRET` | **Set a strong random value** (e.g. `openssl rand -hex 32`). Signs same-session response-edit tokens. If unset, a public dev default is used and a warning is logged — edit tokens become forgeable on forms with editing enabled. |
+| `RESEND_API_KEY` | Resend key (optional; email + form-share invites skipped if unset) |
+| `EMAIL_FROM` | Sender address (optional; defaults to `Qivo Forms <onboarding@resend.dev>`) |
 | `GOOGLE_CLIENT_ID` | Google OAuth client ID (optional) |
-| `CLOUDINARY_CLOUD_NAME` | Cloudinary cloud name (for file uploads; not secret) |
+| `CLOUDINARY_CLOUD_NAME` | Cloudinary cloud name (for file uploads + signatures; not secret) |
 | `CLOUDINARY_API_KEY` | Cloudinary API key (not secret) |
 | `CLOUDINARY_API_SECRET` | Cloudinary API secret — **server-side only, never exposed to the frontend** |
+| `RAZORPAY_KEY_ID` | Razorpay key id (publishable; sent to the client for Checkout). Payments disabled if unset. |
+| `RAZORPAY_KEY_SECRET` | Razorpay key secret — **server-side only.** Creates orders + verifies payment signatures. |
+| `RAZORPAY_WEBHOOK_SECRET` | Razorpay webhook signing secret — **server-side only.** Verifies the reconciliation webhook; if unset the webhook is dropped (logged). |
 | `PORT` | **leave unset** — Railway injects it (currently 8080) |
+
+> **Optional-feature degradation:** `RESEND_*`, `CLOUDINARY_*`, `GOOGLE_CLIENT_ID`, and `RAZORPAY_*` are all optional — each feature no-ops gracefully when its keys are unset (email, uploads, Google sign-in, payments respectively). The app boots fine without any of them. `DATABASE_URL` is the only hard-required var.
+>
+> **Config check:** `GET /api/health` returns booleans for which integrations are configured (`payments.configured`, `payments.webhookConfigured`, etc.) — handy to confirm env vars landed after a deploy.
 
 **Vercel (web project)** — build-time, keep the `VITE_` prefix (these are public):
 
@@ -223,8 +277,14 @@ You can host the frontend on Railway (Docker) or on Vercel/Cloudflare Pages.
 | `WEB_URL` | Yes | Your frontend URL |
 | `SESSION_COOKIE_NAME` | Yes | `qivo_session` |
 | `SESSION_DAYS` | No | Default: `30` |
-| `RESEND_API_KEY` | No | For sending emails (optional for testing) |
+| `RESPONSE_EDIT_SECRET` | No* | *Not required to boot, but **set a strong random value in production** — unset falls back to a public dev default (forgeable edit tokens). |
+| `RESEND_API_KEY` | No | Email + form-share invites (optional) |
 | `EMAIL_FROM` | No | Sender address |
+| `CLOUDINARY_CLOUD_NAME` / `_API_KEY` / `_API_SECRET` | No | File uploads + signatures (optional; `_API_SECRET` server-only) |
+| `RAZORPAY_KEY_ID` / `_KEY_SECRET` / `_WEBHOOK_SECRET` | No | Payments (optional; `_KEY_SECRET` + `_WEBHOOK_SECRET` server-only). See the Razorpay section above. |
+
+> The full, authoritative env-var list is the **Environment variables** table
+> higher up in this document. This section is a quick reference.
 
 ### Frontend (Vercel)
 
