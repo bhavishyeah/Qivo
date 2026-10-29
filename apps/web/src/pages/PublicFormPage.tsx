@@ -1116,9 +1116,13 @@ function QuestionField({
 
   // Multi-entry: dynamic list of text inputs
   if (question.type === "MULTI_ENTRY") {
+    // Mirrors MAX_MULTI_ENTRY_COUNT in apps/api/src/modules/forms/form.service.ts —
+    // keep both in sync.
+    const MAX_MULTI_ENTRY_COUNT = 50;
     const entries: string[] = Array.isArray(value)
       ? (value as string[])
       : [""];
+    const atCap = entries.length >= MAX_MULTI_ENTRY_COUNT;
 
     function updateEntry(idx: number, text: string) {
       const next = [...entries];
@@ -1127,6 +1131,7 @@ function QuestionField({
     }
 
     function addEntry() {
+      if (entries.length >= MAX_MULTI_ENTRY_COUNT) return;
       onChange(question.id, [...entries, ""]);
     }
 
@@ -1183,22 +1188,34 @@ function QuestionField({
             </div>
           ))}
         </div>
-        <button
-          type="button"
-          onClick={addEntry}
-          style={{
-            marginTop: 8,
-            background: "none",
-            border: "none",
-            color: "#2563eb",
-            fontSize: "0.85rem",
-            fontWeight: 600,
-            cursor: "pointer",
-            padding: "4px 0",
-          }}
-        >
-          + Add another
-        </button>
+        {atCap ? (
+          <p
+            style={{
+              marginTop: 8,
+              color: "#94a3b8",
+              fontSize: "0.8rem",
+            }}
+          >
+            Maximum {MAX_MULTI_ENTRY_COUNT} entries
+          </p>
+        ) : (
+          <button
+            type="button"
+            onClick={addEntry}
+            style={{
+              marginTop: 8,
+              background: "none",
+              border: "none",
+              color: "#2563eb",
+              fontSize: "0.85rem",
+              fontWeight: 600,
+              cursor: "pointer",
+              padding: "4px 0",
+            }}
+          >
+            + Add another
+          </button>
+        )}
       </div>
     );
   }

@@ -1420,6 +1420,10 @@ export async function getPublicForm(
  */
 const MAX_TEXT_LEN = 10_000;
 
+// Max number of entries allowed in a MULTI_ENTRY answer. Mirrored client-side in
+// apps/web/src/pages/PublicFormPage.tsx (MAX_MULTI_ENTRY_COUNT) — keep both in sync.
+const MAX_MULTI_ENTRY_COUNT = 50;
+
 // ─── FILE_UPLOAD / SIGNATURE url enforcement (M1 hardening) ───────────────────
 // Every FILE_UPLOAD/SIGNATURE answer is a Cloudinary `secure_url` delivery URL,
 // served from the default secure delivery host below. We host-match with the
@@ -1603,6 +1607,7 @@ function validateAnswerAgainstQuestion(
 
     case "MULTI_ENTRY":
       if (!isArray) return "expected an array of text entries";
+      if (value.length > MAX_MULTI_ENTRY_COUNT) return "too many entries";
       for (const item of value) {
         if (typeof item !== "string") return "expected an array of text entries";
         if (item.trim() === "") return "entries must not be blank";

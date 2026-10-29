@@ -78,6 +78,27 @@ describe("validateSubmission", () => {
     }
   });
 
+  it("throws INVALID_RESPONSE for a MULTI_ENTRY answer over the 50-entry cap", () => {
+    const schema = schemaWith([
+      { id: "q1", label: "Tags", type: "MULTI_ENTRY", required: false },
+    ]);
+    const tooMany = Array.from({ length: 51 }, (_, i) => `e${i}`);
+    try {
+      validateSubmission(schema, { q1: tooMany });
+      expect.unreachable("should have thrown");
+    } catch (err) {
+      expect((err as Error).name).toBe("INVALID_RESPONSE");
+    }
+  });
+
+  it("accepts a MULTI_ENTRY answer with exactly 50 entries", () => {
+    const schema = schemaWith([
+      { id: "q1", label: "Tags", type: "MULTI_ENTRY", required: false },
+    ]);
+    const exactly = Array.from({ length: 50 }, (_, i) => `e${i}`);
+    expect(() => validateSubmission(schema, { q1: exactly })).not.toThrow();
+  });
+
   it("throws INVALID_RESPONSE for a type-mismatched answer", () => {
     const schema = schemaWith([
       { id: "q1", label: "Email", type: "EMAIL", required: false },
