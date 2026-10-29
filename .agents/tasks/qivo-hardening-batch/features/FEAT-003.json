@@ -1,0 +1,27 @@
+{
+  "id": "FEAT-003",
+  "type": "feat",
+  "description": "Multi-Entry count cap (server + client): reject MULTI_ENTRY answers with more than 50 entries server-side, and disable/hide '+ Add another' in the public form once the cap is reached. Keeps the existing per-entry length cap. No shared cross-package module exists, so mirror the constant 50 in both layers with a comment. Independent of FEAT-001/002/004.",
+  "status": "completed",
+  "steps": [
+    "Server: in apps/api/src/modules/forms/form.service.ts add a named module const MAX_MULTI_ENTRY_COUNT = 50 with a comment that apps/web/src/pages/PublicFormPage.tsx mirrors it.",
+    "Server: in validateAnswerAgainstQuestion's `case \"MULTI_ENTRY\":` branch (~L1505-1513), after the isArray guard, reject when value.length > MAX_MULTI_ENTRY_COUNT with a clear message (e.g. 'too many entries'). Keep the existing per-item non-string / blank / MAX_TEXT_LEN length checks unchanged.",
+    "Server test: add a test to apps/api/src/modules/forms/form.service.test.ts (via validateSubmission, matching the existing MULTI_ENTRY style with schemaWith) asserting an answer with 51 entries throws INVALID_RESPONSE and an answer with exactly 50 entries is accepted.",
+    "Client: in apps/web/src/pages/PublicFormPage.tsx MULTI_ENTRY branch (~L1118-1205) add a mirrored const MAX_MULTI_ENTRY_COUNT = 50 (comment: mirrors API form.service.ts). Make addEntry (~L1129) a no-op at the cap, and hide/disable the '+ Add another' button (~L1187) once entries.length >= MAX_MULTI_ENTRY_COUNT, showing a small muted note (e.g. 'Maximum 50 entries').",
+    "Client: keep the per-entry inputs, updateEntry, and removeEntry behavior unchanged."
+  ],
+  "acceptance_criteria": [
+    "Server rejects a MULTI_ENTRY answer with 51 entries (INVALID_RESPONSE) and accepts 50; per-entry blank/length checks still enforced.",
+    "The public form stops offering '+ Add another' at 50 entries and shows a cap note; adding below the cap still works.",
+    "The 50 value is defined as a named const in both layers with a cross-reference comment.",
+    "cd apps/api typecheck + pnpm test green (incl new over-cap test); cd apps/web typecheck + pnpm build:web succeed."
+  ],
+  "verification": [
+    "cd apps/api && pnpm exec tsc --project tsconfig.json --noEmit  (expect exit 0)",
+    "cd apps/api && pnpm test  (expect green incl new MULTI_ENTRY over-cap test)",
+    "cd apps/web && pnpm exec tsc -b --noEmit  (expect exit 0)",
+    "(repo root) pnpm build:web  (expect success)"
+  ],
+  "blocked_reason": null,
+  "findings": "Done. MAX_MULTI_ENTRY_COUNT = 50 defined in two mirrored spots (no shared module): (1) apps/api/src/modules/forms/form.service.ts module const near MAX_TEXT_LEN (~L1422), used in validateAnswerAgainstQuestion MULTI_ENTRY branch, rejects value.length > 50 with 'too many entries' before the per-item blank/MAX_TEXT_LEN loop (unchanged); (2) apps/web/src/pages/PublicFormPage.tsx MULTI_ENTRY branch local const — addEntry is a no-op at cap and the '+ Add another' button is replaced by a muted 'Maximum 50 entries' note when entries.length >= 50. updateEntry/removeEntry/per-entry inputs untouched. Both consts carry a cross-reference comment. Added 2 tests to form.service.test.ts (51 entries throws INVALID_RESPONSE, 50 accepted); form.service.test.ts now 61 tests. Verification all green: API tsc --noEmit exit 0; API pnpm test 77 passed (3 files); web tsc -b --noEmit exit 0; pnpm build:web succeeded. Committed locally on current branch; not pushed."
+}

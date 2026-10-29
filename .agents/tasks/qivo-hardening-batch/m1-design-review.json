@@ -1,0 +1,27 @@
+{
+  "verdict": "APPROVED",
+  "findings": [
+    {
+      "id": "NIT-1",
+      "severity": "NIT",
+      "location": "FILE_UPLOAD type enforcement (pinned) — allowed defensive-read snippet",
+      "problem": "Redundant non-null assertion `question.settings!.allowedFileTypes` after an optional-chain guard; unnecessary and may trip the repo's no-non-null-assertion lint rule.",
+      "fix": "Bind once and narrow: `const raw = question.settings?.allowedFileTypes; const allowed = Array.isArray(raw) ? raw.filter((t): t is string => typeof t === 'string') : [];`"
+    },
+    {
+      "id": "NIT-2",
+      "severity": "NIT",
+      "location": "FILE_UPLOAD type enforcement + Exact unit test cases",
+      "problem": "No listed test exercises a non-empty allowedFileTypes that expands to an empty extension set (only-unknown MIMEs). Behavior is correct and unreachable from the builder (all 8 builder MIMEs map), so informational only.",
+      "fix": "Optional: add an assertion `allowedTypes=['x/unknown']` with a `.pdf` URL -> expect 'file type not allowed', or a comment noting the branch is unreachable from the builder."
+    },
+    {
+      "id": "NIT-3",
+      "severity": "NIT",
+      "location": "Pinned MIME -> allowed-extension map, image/* includes svg",
+      "problem": "SVG is included to mirror client isImageUrl exactly. Not a new risk in M1 (delivery URLs rendered by existing client, no new sink), but worth being a conscious choice.",
+      "fix": "None required for M1. If SVG is later restricted, change upload.ts imageExts and MIME_EXTENSIONS together so server/client stay in lock-step."
+    }
+  ],
+  "reviewDoc": "c:\\Qivo\\.agents\\tasks\\qivo-hardening-batch\\m1-design-review.md"
+}

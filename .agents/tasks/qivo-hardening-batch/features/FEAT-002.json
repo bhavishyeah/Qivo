@@ -1,0 +1,32 @@
+{
+  "id": "FEAT-002",
+  "type": "feat",
+  "description": "M2 + M3 (shared root cause): fix the funnel completions count to use the true range-scoped total when no cross-question filter is active, and disclose the 5000-row sampling in the reports UI. Spans apps/api getFormReport + apps/web FormReportsPage. Independent of FEAT-001/003/004.",
+  "status": "completed",
+  "steps": [
+    "M3 server: in getFormReport (apps/api/src/modules/forms/form.service.ts), add a range-scoped count to the existing Promise.all using the existing responseWhere object: prisma.formResponse.count({ where: responseWhere }) (name it e.g. rangeScopedTotal). responseWhere already folds in the submittedAt date range when hasRange, so this is range-correct.",
+    "M3 server: replace `const completions = sampledResponses;` (~L3351) so that when NO filter is active (!filterApplied) completions = rangeScopedTotal, and when a filter IS active completions = sampledResponses (preserving current behavior; computeFunnel already nulls the conversion %s when filterActive). Do not change computeFunnel.",
+    "M3 server: keep sampledResponses used for per-question aggregates, skipped, avgTime, sectionCompleteness exactly as-is.",
+    "M2 server: add sampled: boolean, sampleCap: number (= REPORT_SAMPLE_CAP), sampledCount: number (= sampledResponses) to the getFormReport return object. sampled = (no filter) ? rangeScopedTotal > REPORT_SAMPLE_CAP : responses.length === REPORT_SAMPLE_CAP (filter runs over the already-capped in-memory sample).",
+    "M2/M3 tests: extend apps/api/src/modules/forms/form.service.test.ts. Assert completions-branch and sampled derivation as PURE unit tests with no DB — if needed, extract and export a tiny pure helper (e.g. selectCompletions(rangeScopedTotal, sampledResponses, filterActive) and/or deriveSampled(rangeScopedTotal, sampledLen, cap, filterActive)) and test it directly, matching how computeFunnel is exported+tested. Keep computeFunnel's own behavior covered.",
+    "M2 web type: in apps/web/src/pages/FormReportsPage.tsx add `sampled: boolean; sampleCap: number; sampledCount: number;` to the FormReport type (~L99-124) to stay in sync with the server payload.",
+    "M2 web banner: when report.sampled is true, render a note using the existing `inline-banner` CSS class (same pattern as the refetchError banner ~L343), placed near the top of the loaded report (e.g. just before <StatCards>), reading like 'Showing analytics based on the most recent 5,000 responses of N total' via report.sampleCap.toLocaleString() and report.totalResponses.toLocaleString(). Match existing dashboard styling; no new CSS.",
+    "Do NOT touch the existing '+ N more responses' text on the 20-item text sample (~L730)."
+  ],
+  "acceptance_criteria": [
+    "With no filter and > 5000 in-range responses, funnel.completions equals the true range-scoped count (not capped at 5000); with a filter active, completions and null conversion %s are unchanged.",
+    "The report payload includes sampled/sampleCap/sampledCount and the web FormReport type matches it (typecheck passes across the boundary).",
+    "FormReportsPage shows a tasteful inline-banner note only when sampled is true; the '+N more responses' text is unchanged.",
+    "New server unit tests for the completions branch and the sampled flag pass with no DB.",
+    "cd apps/api typecheck + pnpm test green; cd apps/web typecheck + pnpm build:web + pnpm test green."
+  ],
+  "verification": [
+    "cd apps/api && pnpm exec tsc --project tsconfig.json --noEmit  (expect exit 0)",
+    "cd apps/api && pnpm test  (expect green incl new completions/sampled tests)",
+    "cd apps/web && pnpm exec tsc -b --noEmit  (expect exit 0)",
+    "(repo root) pnpm build:web  (expect success)",
+    "cd apps/web && pnpm test  (expect green)"
+  ],
+  "blocked_reason": null,
+  "findings": "Implemented in apps/api/src/modules/forms/form.service.ts and apps/web/src/pages/FormReportsPage.tsx.\n\nServer (form.service.ts):\n- Added two exported pure helpers next to computeFunnel: selectCompletions(rangeScopedTotal, sampledResponses, filterActive) and deriveSampled(rangeScopedTotal, sampledLen, cap, filterActive). Same export+unit-test pattern as computeFunnel.\n- getFormReport Promise.all now also fetches rangeScopedTotal = prisma.formResponse.count({ where: responseWhere }) (range-correct; responseWhere folds in submittedAt range). Destructure order is [responses, totalResponses, rangeScopedTotal, views, starts, submissions].\n- completions now = selectCompletions(rangeScopedTotal, sampledResponses, filterApplied): true range-scoped total when no filter, sampled count when a filter is active (computeFunnel still nulls conversion %s then). computeFunnel unchanged. sampledResponses still drives per-question aggregates/skipped/avgTime/sectionCompleteness unchanged.\n- Return object gained sampled (deriveSampled over responses.length — the pre-filter capped page length), sampleCap (=REPORT_SAMPLE_CAP=5000), sampledCount (=sampledResponses).\n\nWeb (FormReportsPage.tsx):\n- FormReport type extended with sampled: boolean; sampleCap: number; sampledCount: number; (typecheck confirms payload parity across the boundary).\n- Added an inline-banner notice rendered only when report.sampled, placed just before <StatCards>, text: 'Showing analytics based on the most recent {sampleCap.toLocaleString()} responses of {totalResponses.toLocaleString()} total.' No new CSS. The '+N more responses' text at ~L730 was NOT touched.\n\nTests (form.service.test.ts): added selectCompletions and deriveSampled describe blocks (pure, no DB), imported both new helpers. API tests now 75 pass (was 64 baseline). Web tests 57 pass unchanged.\n\nVerification all green: apps/api tsc --noEmit exit 0; apps/api pnpm test 75 pass; apps/web tsc -b --noEmit exit 0; root pnpm build:web success; apps/web pnpm test 57 pass.\n\nPayload contract for later steps: getFormReport now always returns sampled/sampleCap/sampledCount alongside totalResponses; any other FormReport-type consumers must stay a strict superset match."
+}

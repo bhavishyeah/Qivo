@@ -1,0 +1,28 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "M1 (security, DO FIRST): server-side Cloudinary host + file-type enforcement for FILE_UPLOAD and SIGNATURE in validateAnswerAgainstQuestion. Implement EXACTLY per the approved design at .agents/tasks/qivo-hardening-batch/m1-design.md. Independent of FEAT-002/003/004.",
+  "status": "completed",
+  "steps": [
+    "Read .agents/tasks/qivo-hardening-batch/m1-design.md in full and follow it verbatim; do not re-decide the design.",
+    "In apps/api/src/modules/forms/form.service.ts add module-level consts near validateAnswerAgainstQuestion: CLOUDINARY_DELIVERY_HOSTS = new Set([\"res.cloudinary.com\"]) and MIME_EXTENSIONS (the pinned MIME->extension map from the design, with image/* -> [png,jpg,jpeg,gif,webp,svg,avif,bmp]).",
+    "Add an EXPORTED pure helper isAllowedUploadUrl(value: unknown, opts: { kind: \"file\" | \"signature\"; allowedTypes: string[] }): string | null implementing the design rules in order: (1) must be string else \"expected a file URL\"; (2) new URL(value) must parse else \"expected a file URL\"; (3) url.protocol === \"https:\" else \"expected a file URL\"; (4) url.hostname in CLOUDINARY_DELIVERY_HOSTS else \"file must be uploaded to this form\"; (5) extract ext from url.pathname last segment only (lastIndexOf('.'), lowercased, '' if none); (6) for kind 'file' with non-empty allowedTypes: expand allowed MIMEs via MIME_EXTENSIONS into an allowed-ext set, known-ext-not-in-set -> \"file type not allowed\", unknown ext -> accept; for kind 'signature': ext must be in {png,jpg,jpeg} else \"signature must be an image\", unknown ext -> accept, NEVER consult allowedTypes.",
+    "Read question.settings.allowedFileTypes defensively (Array.isArray then filter typeof === 'string', else []).",
+    "Split the combined `case \"SIGNATURE\": case \"FILE_UPLOAD\":` (~L1498-1503) into two separate cases: FILE_UPLOAD delegates to isAllowedUploadUrl with kind 'file' and the parsed allowedTypes; SIGNATURE delegates with kind 'signature' and allowedTypes []. Return the helper's string|null directly.",
+    "Leave the top-of-function MAX_TEXT_LEN guard and all other branches untouched.",
+    "Add a describe(\"FILE_UPLOAD / SIGNATURE url enforcement\", ...) block to apps/api/src/modules/forms/form.service.test.ts importing isAllowedUploadUrl from ./form.service.js, with the six required cases from the design (valid pass; non-Cloudinary host incl res.cloudinary.com.evil.com, evil.com, http:// rejected; disallowed ext rejected when allowedFileTypes set; extensionless accepted but host still enforced; SIGNATURE png+jpg accepted with ignored allowedFileTypes; SIGNATURE pdf rejected)."
+  ],
+  "acceptance_criteria": [
+    "isAllowedUploadUrl is exported from form.service.ts and returns the exact messages from the design's error table.",
+    "A non-res.cloudinary.com host, http:// scheme, or userinfo trick is rejected; a valid https res.cloudinary.com delivery URL passes.",
+    "FILE_UPLOAD with allowedFileTypes set rejects a known disallowed extension and accepts an unknown (extensionless) one; SIGNATURE accepts png/jpg, rejects pdf, and ignores allowedFileTypes.",
+    "cd apps/api && pnpm exec tsc --project tsconfig.json --noEmit exits 0.",
+    "cd apps/api && pnpm test passes, including the new describe block and the pre-existing 64 tests."
+  ],
+  "verification": [
+    "cd apps/api && pnpm exec tsc --project tsconfig.json --noEmit  (expect exit 0)",
+    "cd apps/api && pnpm test  (expect all green incl new FILE_UPLOAD/SIGNATURE block)"
+  ],
+  "blocked_reason": null,
+  "findings": "Implemented verbatim per m1-design.md. In apps/api/src/modules/forms/form.service.ts added module-level consts CLOUDINARY_DELIVERY_HOSTS (Set['res.cloudinary.com']), MIME_EXTENSIONS (pinned map incl image/* -> png,jpg,jpeg,gif,webp,svg,avif,bmp), SIGNATURE_EXTENSIONS (Set['png','jpg','jpeg']), and the EXPORTED pure helper isAllowedUploadUrl(value, {kind, allowedTypes}): string|null placed just above validateAnswerAgainstQuestion. Split the combined `case \"SIGNATURE\": case \"FILE_UPLOAD\"` branch into two cases: FILE_UPLOAD parses allowedFileTypes defensively (Array.isArray + typeof string filter) and delegates with kind 'file'; SIGNATURE delegates with kind 'signature' and allowedTypes []. The old /^https?:\\/\\// regex check is gone. MAX_TEXT_LEN guard and all other branches untouched. Error messages match the design table exactly: 'expected a file URL', 'file must be uploaded to this form', 'file type not allowed', 'signature must be an image'. Added describe('FILE_UPLOAD / SIGNATURE url enforcement') to form.service.test.ts (imports isAllowedUploadUrl) with all six required cases. Verification: `pnpm exec tsc --project tsconfig.json --noEmit` exit 0; `pnpm test` green at 70 tests (baseline 64 + 6 new). Did NOT push/PR. NOTE for later steps / anyone touching upload: server now ONLY accepts https res.cloudinary.com delivery URLs for FILE_UPLOAD/SIGNATURE answers; if the Cloudinary secure delivery host ever changes (CDN/custom domain) add it to CLOUDINARY_DELIVERY_HOSTS. Server-side file SIZE is intentionally NOT enforced (out of scope; no bytes reach the API)."
+}

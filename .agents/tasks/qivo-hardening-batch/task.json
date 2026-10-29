@@ -1,0 +1,7 @@
+{
+  "task_id": "task-qivo-hardening-batch",
+  "task_description": "Hardening batch for the Qivo form-builder monorepo: M1 server-side Cloudinary host + file-type enforcement for FILE_UPLOAD/SIGNATURE (per approved m1-design.md); M2+M3 analytics 5000-row sampling disclosure + true range-scoped funnel completions; Multi-Entry max-count cap (server + client); L1 remove dead Media button; L2 replace window.location.reload after section delete with in-place refresh; verify .env.example. No Prisma migration. Local commits only — no push, no PR.",
+  "status": "completed",
+  "feature_order": ["FEAT-001", "FEAT-002", "FEAT-003", "FEAT-004"],
+  "blocked_reason": null
+}

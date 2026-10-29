@@ -1,0 +1,26 @@
+{
+  "project_type": "pnpm monorepo: React+Vite web client (apps/web) + Express+Prisma API (apps/api)",
+  "language": "TypeScript",
+  "build_system": "pnpm. Root scripts in c:/Qivo/package.json; per-app scripts in apps/web/package.json and apps/api/package.json. No shared cross-package lib module exists, so a constant cannot be imported across the web/api boundary.",
+  "test_framework": "vitest (vitest run) in both apps. API tests: apps/api/src/modules/forms/form.service.test.ts. Web tests under apps/web/src.",
+  "build_command": "API typecheck: (cd apps/api) pnpm exec tsc --project tsconfig.json --noEmit ; Web typecheck: (cd apps/web) pnpm exec tsc -b --noEmit ; Web build: (repo root) pnpm build:web  (runs vite build in apps/web)",
+  "test_command": "API: (cd apps/api) pnpm test ; Web: (cd apps/web) pnpm test",
+  "verification_instructions": "After each feature run its listed verification. Full gate at the end: (1) cd apps/api && pnpm exec tsc --project tsconfig.json --noEmit exits 0; (2) cd apps/api && pnpm test green (incl new M1/M3/Multi-Entry tests); (3) cd apps/web && pnpm exec tsc -b --noEmit exits 0; (4) pnpm build:web succeeds; (5) cd apps/web && pnpm test green. Baseline before changes: API 3 files/64 tests pass, Web 6 files/57 tests pass.",
+  "snapshot_or_generated_files": "none. NO Prisma migration is expected for any item in this batch.",
+  "environment_constraints": "Local worktree off a green base. Local commits only — do NOT push and do NOT open a PR. No README/AGENTS.md/CONTRIBUTING/.kiro/steering files exist; package.json scripts are the authoritative command source. Windows host, PowerShell shell.",
+  "contribution_requirements": "No repo contribution doc found. Match existing code style. Export pure helpers from form.service.ts when they need unit tests (existing pattern: computeFunnel, matchesAnswerFilter, computeAvgTime, etc. are exported and imported by form.service.test.ts).",
+  "key_patterns": "validateAnswerAgainstQuestion(question, value): string|null is the single server-side submit gate (called by validateSubmission, which throws INVALID_RESPONSE / surfaces a 400 VALIDATION_ERROR). Pure analytics helpers (computeFunnel, computeAvgTime, computeSectionCompleteness, computePeakDay, matchesAnswerFilter, isWithinRange) are exported from form.service.ts and unit-tested directly. getFormReport builds its payload consumed by the web FormReport type in FormReportsPage.tsx (strict superset; typecheck across the boundary catches drift). The web FormReportsPage uses an existing CSS class 'inline-banner' for notices.",
+  "relevant_files": [
+    "apps/api/src/modules/forms/form.service.ts  (validateAnswerAgainstQuestion ~L1442-1523 incl FILE_UPLOAD/SIGNATURE ~L1498-1503 and MULTI_ENTRY ~L1505-1513; getFormReport ~L3141-3400 incl REPORT_SAMPLE_CAP=5000 ~L3191, sampledResponses ~L3220, completions=sampledResponses ~L3351; computeFunnel ~L3038)",
+    "apps/api/src/modules/forms/form.service.test.ts  (vitest; imports named exports from ./form.service.js; schemaWith() helper; validateSubmission describe block)",
+    "apps/web/src/pages/FormReportsPage.tsx  (FormReport type ~L99-124; loaded-report render ~L310-400; inline-banner usage for refetchError ~L343; '+N more responses' text ~L730 — DO NOT TOUCH)",
+    "apps/web/src/pages/PublicFormPage.tsx  (MULTI_ENTRY branch ~L1118-1205 incl addEntry ~L1129 and '+ Add another' button ~L1187; FILE_UPLOAD branch ~L873 reads settings.allowedFileTypes/maxFileSizeMB; MIME_TO_EXT ~L22, MIME_FRIENDLY ~L41)",
+    "apps/web/src/pages/FormEditorPage.tsx  (loadEditor effect ~L177-218; deleteSectionById window.location.reload ~L543; dead Media button ~L1138-1146)",
+    "apps/web/src/lib/upload.ts  (isImageUrl imageExts — source of truth for 'what is an image'; secure_url delivery host res.cloudinary.com)",
+    "apps/api/src/services/cloudinary.ts  (signUpload signs folder qivo/forms/<formId>)",
+    ".env.example  (documents RESPONSE_EDIT_SECRET + WEB_URL/EMAIL_FROM/RESEND_API_KEY already — verify-only)",
+    ".agents/tasks/qivo-hardening-batch/m1-design.md  (approved M1 design — implement verbatim)",
+    ".agents/tasks/qivo-hardening-batch/plan.md  (fallback ordered plan)"
+  ],
+  "directory_structure": "c:/Qivo/apps/api = Express+Prisma backend (src/modules/forms/form.service.ts is the big service; src/services/ has cloudinary.ts, responseEditToken.ts). c:/Qivo/apps/web = React+Vite frontend (src/pages/ has the editor/public/reports pages; src/lib/upload.ts; src/components/ has FunnelChart, StatCards, etc.). c:/Qivo/.agents/tasks/qivo-hardening-batch holds this task's artifacts and must stay OUTSIDE the committed app code."
+}
