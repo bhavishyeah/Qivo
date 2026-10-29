@@ -10,6 +10,8 @@ import {
   matchesAnswerFilter,
   isWithinRange,
   computeFunnel,
+  selectCompletions,
+  deriveSampled,
   computeAvgTime,
   computeSectionCompleteness,
   computePeakDay,
@@ -563,6 +565,37 @@ describe("computeFunnel — conversion math + filter suppression + clamp", () =>
     const f = computeFunnel(100, 140, 90, false);
     expect(f.starts).toBe(140);
     expect(f.viewToStart).toBe(140); // 140/100 == 140%, UI clamps the drawn width
+  });
+});
+
+describe("selectCompletions — true range-scoped total vs sampled branch", () => {
+  it("uses the true range-scoped total when NO filter is active (not capped)", () => {
+    // 12,000 in-range responses, sample capped at 5000 — completions is the true total.
+    expect(selectCompletions(12_000, 5000, false)).toBe(12_000);
+  });
+
+  it("uses the sampled count when a filter IS active", () => {
+    expect(selectCompletions(12_000, 73, true)).toBe(73);
+  });
+
+  it("agrees with sampled count under the cap with no filter", () => {
+    expect(selectCompletions(42, 42, false)).toBe(42);
+  });
+});
+
+describe("deriveSampled — sampling disclosure flag", () => {
+  const CAP = 5000;
+
+  it("no filter: true only when the true range-scoped total exceeds the cap", () => {
+    expect(deriveSampled(12_000, 5000, CAP, false)).toBe(true);
+    expect(deriveSampled(5000, 5000, CAP, false)).toBe(false); // exactly at cap, not exceeded
+    expect(deriveSampled(42, 42, CAP, false)).toBe(false);
+  });
+
+  it("filter active: true only when the in-memory sample saturated the cap", () => {
+    expect(deriveSampled(12_000, CAP, CAP, true)).toBe(true); // pulled a full capped page
+    expect(deriveSampled(12_000, 4999, CAP, true)).toBe(false);
+    expect(deriveSampled(42, 42, CAP, true)).toBe(false);
   });
 });
 

@@ -3146,6 +3146,37 @@ export function computeFunnel(
   };
 }
 
+/**
+ * Funnel completions selector. With no active cross-question filter we report
+ * the TRUE range-scoped FormResponse count (not the capped in-memory sample),
+ * so completions aren't silently clamped at REPORT_SAMPLE_CAP on large forms.
+ * When a filter IS active we keep the sampled count (the filter runs in memory
+ * over the already-capped sample) — computeFunnel nulls the conversion %s then.
+ */
+export function selectCompletions(
+  rangeScopedTotal: number,
+  sampledResponses: number,
+  filterActive: boolean,
+): number {
+  return filterActive ? sampledResponses : rangeScopedTotal;
+}
+
+/**
+ * Whether the report's per-question aggregates were computed over a sample
+ * rather than the full population. With no filter this is a straight compare of
+ * the true range-scoped total against the cap; with a filter active the sample
+ * ran over the already-capped in-memory rows, so we detect saturation by the
+ * sampled length hitting the cap.
+ */
+export function deriveSampled(
+  rangeScopedTotal: number,
+  sampledLen: number,
+  cap: number,
+  filterActive: boolean,
+): boolean {
+  return filterActive ? sampledLen === cap : rangeScopedTotal > cap;
+}
+
 export type AvgTimeMetrics = {
   medianSeconds: number | null;
   meanSeconds: number | null;
@@ -3281,7 +3312,7 @@ export async function getFormReport(
   // a separate count; the per-question aggregates are computed over the most
   // recent REPORT_SAMPLE_CAP responses when a form exceeds that size.
   const REPORT_SAMPLE_CAP = 5000;
-  const [responses, totalResponses, views, starts, submissions] =
+  const [responses, totalResponses, rangeScopedTotal, views, starts, submissions] =
     await Promise.all([
       prisma.formResponse.findMany({
         where: responseWhere,
@@ -3290,6 +3321,10 @@ export async function getFormReport(
         take: REPORT_SAMPLE_CAP,
       }),
       prisma.formResponse.count({ where: { formId: form.id } }),
+      // True range-scoped completions count: responseWhere already folds in the
+      // submittedAt date range when hasRange, so this is range-correct and not
+      // clamped by REPORT_SAMPLE_CAP.
+      prisma.formResponse.count({ where: responseWhere }),
       prisma.formAnalytics.count({ where: analyticsWhere("view") }),
       prisma.formAnalytics.count({ where: analyticsWhere("start") }),
       prisma.formAnalytics.count({ where: analyticsWhere("submission") }),
@@ -3438,9 +3473,22 @@ export async function getFormReport(
     );
   for (const w of seriesWarnings) warnings.push(w);
 
-  // Completions == the scoped FormResponse count (filtered when a filter is
-  // active; range-scoped by the where clause). The funnel clamps display.
-  const completions = sampledResponses;
+  // Completions: with no filter use the TRUE range-scoped FormResponse count
+  // (not clamped at REPORT_SAMPLE_CAP); with a filter active use the sampled
+  // count (filter runs in memory over the capped sample). The funnel clamps
+  // display and nulls conversion %s when a filter is active.
+  const completions = selectCompletions(
+    rangeScopedTotal,
+    sampledResponses,
+    filterApplied,
+  );
+
+  const sampled = deriveSampled(
+    rangeScopedTotal,
+    responses.length,
+    REPORT_SAMPLE_CAP,
+    filterApplied,
+  );
 
   const funnel = computeFunnel(views, starts, completions, filterApplied);
 
@@ -3460,6 +3508,9 @@ export async function getFormReport(
 
   return {
     totalResponses,
+    sampled,
+    sampleCap: REPORT_SAMPLE_CAP,
+    sampledCount: sampledResponses,
     analytics: { views, submissions, conversionRate },
     funnel,
     metrics: {

@@ -98,6 +98,9 @@ type TimeSeriesPoint = { date: string; views: number; submissions: number };
 
 type FormReport = {
   totalResponses: number;
+  sampled: boolean;
+  sampleCap: number;
+  sampledCount: number;
   analytics: { views: number; submissions: number; conversionRate: number };
   funnel: {
     views: number;
@@ -365,6 +368,14 @@ export default function FormReportsPage() {
           </section>
         ) : (
           <>
+            {report.sampled ? (
+              <div className="inline-banner" style={{ maxWidth: 980, margin: "0 auto 12px" }}>
+                Showing analytics based on the most recent{" "}
+                {report.sampleCap.toLocaleString()} responses of{" "}
+                {report.totalResponses.toLocaleString()} total.
+              </div>
+            ) : null}
+
             <StatCards
               data={{
                 views: funnel.views,
