@@ -28,6 +28,21 @@ import {
 import { TEMPLATES } from "./templates.js";
 
 import {
+  createWebhookSchema,
+  updateWebhookSchema,
+  deliveriesQuerySchema,
+} from "../webhooks/webhook.schemas.js";
+
+import {
+  listWebhooks,
+  createWebhook,
+  updateWebhook,
+  regenerateSecret,
+  deleteWebhook,
+  listDeliveries,
+} from "../webhooks/webhook.service.js";
+
+import {
   closeForm,
   createForm,
   createQuestion,
@@ -1516,6 +1531,151 @@ formRouter.post(
           ...(result.quizScore ? { quizScore: result.quizScore } : {}),
         },
       });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+// ─── Webhooks ─────────────────────────────────────────────────────────────
+// Registered AFTER the existing /:formId/... sub-resource routes. All webhook
+// paths are parameterized under :formId (no new literal root segment), so they
+// neither shadow nor are shadowed by the existing literal routes. Every handler
+// authorizes editor-only via getEditableForm inside the service (a VIEWER gets
+// FORM_NOT_FOUND → 404, same as the other editor sub-resources).
+
+formRouter.get(
+  "/:formId/webhooks",
+  requireAuth,
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: { code: "UNAUTHENTICATED", message: "Authentication is required." } });
+        return;
+      }
+      const formId = req.params.formId;
+      if (typeof formId !== "string") {
+        res.status(400).json({ success: false, error: { code: "INVALID_FORM_ID", message: "A valid form ID is required." } });
+        return;
+      }
+      const webhooks = await listWebhooks(formId, req.user.id);
+      res.json({ success: true, data: { webhooks } });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+formRouter.post(
+  "/:formId/webhooks",
+  requireAuth,
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: { code: "UNAUTHENTICATED", message: "Authentication is required." } });
+        return;
+      }
+      const formId = req.params.formId;
+      if (typeof formId !== "string") {
+        res.status(400).json({ success: false, error: { code: "INVALID_FORM_ID", message: "A valid form ID is required." } });
+        return;
+      }
+      const input = createWebhookSchema.parse(req.body);
+      const webhook = await createWebhook(formId, req.user.id, {
+        url: input.url,
+        ...(input.description !== undefined ? { description: input.description } : {}),
+      });
+      res.status(201).json({ success: true, data: { webhook } });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+formRouter.patch(
+  "/:formId/webhooks/:webhookId",
+  requireAuth,
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: { code: "UNAUTHENTICATED", message: "Authentication is required." } });
+        return;
+      }
+      const { formId, webhookId } = req.params;
+      if (typeof formId !== "string" || typeof webhookId !== "string") {
+        res.status(400).json({ success: false, error: { code: "INVALID_WEBHOOK_ID", message: "Valid form and webhook IDs are required." } });
+        return;
+      }
+      const input = updateWebhookSchema.parse(req.body);
+      const webhook = await updateWebhook(formId, webhookId, req.user.id, { enabled: input.enabled });
+      res.json({ success: true, data: { webhook } });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+formRouter.post(
+  "/:formId/webhooks/:webhookId/regenerate-secret",
+  requireAuth,
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: { code: "UNAUTHENTICATED", message: "Authentication is required." } });
+        return;
+      }
+      const { formId, webhookId } = req.params;
+      if (typeof formId !== "string" || typeof webhookId !== "string") {
+        res.status(400).json({ success: false, error: { code: "INVALID_WEBHOOK_ID", message: "Valid form and webhook IDs are required." } });
+        return;
+      }
+      const webhook = await regenerateSecret(formId, webhookId, req.user.id);
+      res.json({ success: true, data: { webhook } });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+formRouter.delete(
+  "/:formId/webhooks/:webhookId",
+  requireAuth,
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: { code: "UNAUTHENTICATED", message: "Authentication is required." } });
+        return;
+      }
+      const { formId, webhookId } = req.params;
+      if (typeof formId !== "string" || typeof webhookId !== "string") {
+        res.status(400).json({ success: false, error: { code: "INVALID_WEBHOOK_ID", message: "Valid form and webhook IDs are required." } });
+        return;
+      }
+      await deleteWebhook(formId, webhookId, req.user.id);
+      res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+formRouter.get(
+  "/:formId/webhooks/:webhookId/deliveries",
+  requireAuth,
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: { code: "UNAUTHENTICATED", message: "Authentication is required." } });
+        return;
+      }
+      const { formId, webhookId } = req.params;
+      if (typeof formId !== "string" || typeof webhookId !== "string") {
+        res.status(400).json({ success: false, error: { code: "INVALID_WEBHOOK_ID", message: "Valid form and webhook IDs are required." } });
+        return;
+      }
+      const query = deliveriesQuerySchema.parse(req.query);
+      const deliveries = await listDeliveries(formId, webhookId, req.user.id, { limit: query.limit });
+      res.json({ success: true, data: { deliveries } });
     } catch (error) {
       next(error);
     }

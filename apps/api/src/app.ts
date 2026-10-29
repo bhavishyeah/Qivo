@@ -513,6 +513,26 @@ const errorHandler: ErrorRequestHandler = (
       });
       return;
 
+    case "WEBHOOK_NOT_FOUND":
+      res.status(404).json({
+        success: false,
+        error: {
+          code: "WEBHOOK_NOT_FOUND",
+          message: error.message,
+        },
+      });
+      return;
+
+    case "WEBHOOK_URL_INVALID":
+      res.status(400).json({
+        success: false,
+        error: {
+          code: "WEBHOOK_URL_INVALID",
+          message: error.message,
+        },
+      });
+      return;
+
     default:
       res.status(500).json({
         success: false,

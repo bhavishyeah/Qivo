@@ -64,6 +64,7 @@ model User {
   formShares        FormShare[]       @relation("FormShareUser")
   formSharesInvited FormShare[]       @relation("FormShareInviter")
   formTemplates     FormTemplate[]    @relation("FormTemplateCreator")
+  webhooks          Webhook[]         @relation("WebhookCreator")
 }
 
 model Session {
@@ -155,6 +156,7 @@ model Form {
   responses FormResponse[]
   versions  FormVersion[]
   shares    FormShare[]
+  webhooks  Webhook[]
 
   @@index([workspaceId])
   @@index([folderId])
@@ -309,4 +311,50 @@ model FormAnalytics {
 
   @@index([formId, event])
   @@index([formId, createdAt])
+}
+
+enum WebhookDeliveryStatus {
+  pending
+  delivered
+  failed
+  exhausted
+}
+
+model Webhook {
+  id          String   @id @default(cuid())
+  formId      String
+  url         String
+  secret      String
+  description String?
+  enabled     Boolean  @default(true)
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  form       Form              @relation(fields: [formId], references: [id], onDelete: Cascade)
+  createdBy  User              @relation("WebhookCreator", fields: [createdById], references: [id])
+  deliveries WebhookDelivery[]
+
+  @@index([formId])
+  @@index([createdById])
+}
+
+model WebhookDelivery {
+  id                 String                @id @default(cuid())
+  webhookId          String
+  event              String
+  status             WebhookDeliveryStatus @default(pending)
+  attempts           Int                   @default(0)
+  nextAttemptAt      DateTime?
+  lastResponseStatus Int?
+  lastError          String?
+  payload            Json
+  createdAt          DateTime              @default(now())
+  deliveredAt        DateTime?
+
+  webhook Webhook @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+
+  // Supports the due-retry query: WHERE status = 'failed' AND nextAttemptAt <= now
+  @@index([status, nextAttemptAt])
+  @@index([webhookId, createdAt])
 }

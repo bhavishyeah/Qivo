@@ -18,6 +18,10 @@ import {
   hasEditorShare,
   hasResponseViewShare,
 } from "../formShares/formShare.access.js";
+import {
+  sendWebhooksForResponse,
+  buildResponseCreatedPayload,
+} from "../../services/webhookDelivery.js";
 import { TEMPLATES } from "./templates.js";
 import type {
   UpdateFormSettingsInput,
@@ -358,7 +362,7 @@ async function getMembership(
   });
 }
 
-async function getEditableForm(
+export async function getEditableForm(
   formId: string,
   userId: string,
 ) {
@@ -2252,6 +2256,23 @@ if (
     });
   })().catch((err) => console.error("confirmation email failed:", err));
 }
+
+// Outbound webhooks (response.created). Fire-and-forget so a webhook can never
+// break submission. Reuses the in-scope `questions` local (schema questions
+// with ids + labels) for the payload's id→label map.
+void (async () => {
+  await sendWebhooksForResponse(
+    form.id,
+    buildResponseCreatedPayload({
+      formId: form.id,
+      formTitle: form.title,
+      responseId: response.id,
+      submittedAt: response.submittedAt,
+      answers: input.answers,
+      questions,
+    }),
+  );
+})().catch((err) => console.error("webhook trigger failed:", err));
 
 // Calculate quiz score if quiz mode is enabled (shared with the edit path).
 const quizScore = computeQuizScore(schema, input.answers);

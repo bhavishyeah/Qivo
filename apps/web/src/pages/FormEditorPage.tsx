@@ -10,6 +10,7 @@ import { Link, useParams } from "react-router-dom";
 import { api, ApiRequestError } from "../lib/api";
 import { PIPING_TOKEN_RE } from "../lib/piping";
 import { uploadToCloudinary } from "../lib/upload";
+import WebhooksTabPanel from "../components/WebhooksTabPanel";
 import {
   DEFAULT_ACCENT,
   ensureFontLoaded,
@@ -169,7 +170,7 @@ export default function FormEditorPage() {
   const [titleDraft, setTitleDraft] = useState("");
 
   // Workspace tabs
-  type EditorTab = "builder" | "responses" | "settings" | "appearance";
+  type EditorTab = "builder" | "responses" | "settings" | "appearance" | "webhooks";
   const [activeTab, setActiveTab] = useState<EditorTab>("builder");
 
   // ─── Load ──────────────────────────────────────────────────────────────────
@@ -870,6 +871,9 @@ export default function FormEditorPage() {
         <button type="button" className={`editor-tab ${activeTab === "appearance" ? "active" : ""}`} onClick={() => setActiveTab("appearance")}>
           Appearance
         </button>
+        <button type="button" className={`editor-tab ${activeTab === "webhooks" ? "active" : ""}`} onClick={() => setActiveTab("webhooks")}>
+          Webhooks
+        </button>
       </div>
 
       {/* ── TAB: Builder ── */}
@@ -1156,6 +1160,11 @@ export default function FormEditorPage() {
       {/* ── TAB: Responses ── */}
       {activeTab === "responses" ? (
         <ResponsesTabPanel formId={formId!} formTitle={form.title} questions={questions} />
+      ) : null}
+
+      {/* ── TAB: Webhooks ── */}
+      {activeTab === "webhooks" ? (
+        <WebhooksTabPanel formId={formId!} />
       ) : null}
 
       {/* ── TAB: Settings ── */}

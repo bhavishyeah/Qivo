@@ -178,3 +178,30 @@ export type UserInfo = {
   name: string;
   email: string;
 };
+
+export type Webhook = {
+  id: string;
+  formId: string;
+  url: string;
+  description: string | null;
+  enabled: boolean;
+  secret: string;
+  createdAt: string;
+};
+
+export type WebhookDeliveryStatus =
+  | "pending"
+  | "delivered"
+  | "failed"
+  | "exhausted";
+
+export type WebhookDelivery = {
+  id: string;
+  event: string;
+  status: WebhookDeliveryStatus;
+  attempts: number;
+  lastResponseStatus: number | null;
+  lastError: string | null;
+  createdAt: string;
+  deliveredAt: string | null;
+};
