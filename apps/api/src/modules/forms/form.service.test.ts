@@ -13,6 +13,7 @@ import {
   computeAvgTime,
   computeSectionCompleteness,
   computePeakDay,
+  isAllowedUploadUrl,
 } from "./form.service.js";
 
 // Minimal FormSchema builder for the shared answer-validation gate. We only
@@ -651,5 +652,98 @@ describe("computePeakDay", () => {
         { date: "2024-01-02", submissions: 0 },
       ]),
     ).toBeNull();
+  });
+});
+
+describe("FILE_UPLOAD / SIGNATURE url enforcement", () => {
+  const OK =
+    "https://res.cloudinary.com/demo/raw/upload/v1700000000/qivo/forms/f1/report.pdf";
+
+  it("accepts a valid https res.cloudinary.com delivery URL (type allowed)", () => {
+    expect(
+      isAllowedUploadUrl(OK, { kind: "file", allowedTypes: ["application/pdf"] }),
+    ).toBeNull();
+  });
+
+  it("rejects non-Cloudinary hosts, userinfo tricks, and http://", () => {
+    const msg = "file must be uploaded to this form";
+    // look-alike host (the classic regex-bypass) parses to a different hostname
+    expect(
+      isAllowedUploadUrl(
+        "https://res.cloudinary.com.evil.com/demo/raw/upload/v1/qivo/forms/f1/x.pdf",
+        { kind: "file", allowedTypes: [] },
+      ),
+    ).toBe(msg);
+    expect(
+      isAllowedUploadUrl("https://evil.com/x.pdf", { kind: "file", allowedTypes: [] }),
+    ).toBe(msg);
+    // userinfo trick: hostname is evil.com, not res.cloudinary.com
+    expect(
+      isAllowedUploadUrl(
+        "https://res.cloudinary.com@evil.com/demo/raw/upload/v1/qivo/forms/f1/x.pdf",
+        { kind: "file", allowedTypes: [] },
+      ),
+    ).toBe(msg);
+    // plain http is rejected before the host even matters
+    expect(
+      isAllowedUploadUrl(
+        "http://res.cloudinary.com/demo/raw/upload/v1/qivo/forms/f1/x.pdf",
+        { kind: "file", allowedTypes: [] },
+      ),
+    ).toBe("expected a file URL");
+  });
+
+  it("rejects a known disallowed extension when allowedFileTypes is set", () => {
+    expect(
+      isAllowedUploadUrl(
+        "https://res.cloudinary.com/demo/raw/upload/v1/qivo/forms/f1/malware.exe",
+        { kind: "file", allowedTypes: ["application/pdf"] },
+      ),
+    ).toBe("file type not allowed");
+    // a .pdf is disallowed when the allow-list is images-only
+    expect(
+      isAllowedUploadUrl(OK, { kind: "file", allowedTypes: ["image/*"] }),
+    ).toBe("file type not allowed");
+  });
+
+  it("accepts an extensionless URL via fallback, but the host check still wins", () => {
+    expect(
+      isAllowedUploadUrl(
+        "https://res.cloudinary.com/demo/raw/upload/v1/qivo/forms/f1/assetwithoutext",
+        { kind: "file", allowedTypes: ["application/pdf"] },
+      ),
+    ).toBeNull();
+    // same extensionless path on a bad host is still rejected
+    expect(
+      isAllowedUploadUrl(
+        "https://evil.com/demo/raw/upload/v1/qivo/forms/f1/assetwithoutext",
+        { kind: "file", allowedTypes: ["application/pdf"] },
+      ),
+    ).toBe("file must be uploaded to this form");
+  });
+
+  it("accepts SIGNATURE png/jpg and ignores allowedFileTypes", () => {
+    // allowedTypes is deliberately a document type to prove it is ignored.
+    expect(
+      isAllowedUploadUrl(
+        "https://res.cloudinary.com/demo/image/upload/v1/qivo/forms/f1/sig.png",
+        { kind: "signature", allowedTypes: ["application/pdf"] },
+      ),
+    ).toBeNull();
+    expect(
+      isAllowedUploadUrl(
+        "https://res.cloudinary.com/demo/image/upload/v1/qivo/forms/f1/sig.jpg",
+        { kind: "signature", allowedTypes: ["application/pdf"] },
+      ),
+    ).toBeNull();
+  });
+
+  it("rejects a non-image SIGNATURE", () => {
+    expect(
+      isAllowedUploadUrl(
+        "https://res.cloudinary.com/demo/raw/upload/v1/qivo/forms/f1/sig.pdf",
+        { kind: "signature", allowedTypes: [] },
+      ),
+    ).toBe("signature must be an image");
   });
 });

@@ -1419,6 +1419,88 @@ export async function getPublicForm(
  * checks. Assumes the value is non-empty (empties are filtered by the caller).
  */
 const MAX_TEXT_LEN = 10_000;
+
+// ─── FILE_UPLOAD / SIGNATURE url enforcement (M1 hardening) ───────────────────
+// Every FILE_UPLOAD/SIGNATURE answer is a Cloudinary `secure_url` delivery URL,
+// served from the default secure delivery host below. We host-match with the
+// built-in URL parser's `.hostname` (never a regex over the raw string), so
+// bypass tricks like `res.cloudinary.com.evil.com` or userinfo
+// (`https://res.cloudinary.com@evil.com/…`) are correctly rejected.
+const CLOUDINARY_DELIVERY_HOSTS = new Set(["res.cloudinary.com"]);
+
+// Pinned MIME → allowed-extension map covering the builder's allow-list
+// vocabulary (MIME_TO_EXT / MIME_FRIENDLY in PublicFormPage.tsx) plus the
+// browser-compression reality that FILE_UPLOAD images are re-encoded to .jpg.
+// The `image/*` wildcard's extension list is identical to isImageUrl's imageExts
+// in apps/web/src/lib/upload.ts so server and client agree on "what is an image".
+const MIME_EXTENSIONS: Record<string, string[]> = {
+  "image/*": ["png", "jpg", "jpeg", "gif", "webp", "svg", "avif", "bmp"],
+  "application/pdf": ["pdf"],
+  // Office — OpenXML
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ["docx"],
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ["xlsx"],
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation": ["pptx"],
+  // Office — legacy binary
+  "application/msword": ["doc"],
+  "application/vnd.ms-excel": ["xls"],
+  "application/vnd.ms-powerpoint": ["ppt"],
+};
+
+// Extensions treated as a valid signature image (strict subset of image/*).
+const SIGNATURE_EXTENSIONS = new Set(["png", "jpg", "jpeg"]);
+
+/**
+ * Validate a FILE_UPLOAD/SIGNATURE answer URL. Returns a user-facing error
+ * message, or null when the value is acceptable. Pure (no DB/IO) so it is unit
+ * tested directly. The host check is the security floor and always runs; the
+ * type check is best-effort tightening on top (an unknown/extensionless URL
+ * passes the type check once the host check succeeds).
+ */
+export function isAllowedUploadUrl(
+  value: unknown,
+  opts: { kind: "file" | "signature"; allowedTypes: string[] },
+): string | null {
+  if (typeof value !== "string") return "expected a file URL";
+
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return "expected a file URL";
+  }
+
+  if (url.protocol !== "https:") return "expected a file URL";
+  if (!CLOUDINARY_DELIVERY_HOSTS.has(url.hostname)) {
+    return "file must be uploaded to this form";
+  }
+
+  // Extension from the pathname's last segment only (never query/fragment).
+  const lastSeg = url.pathname.split("/").pop() ?? "";
+  const dot = lastSeg.lastIndexOf(".");
+  const ext = dot > 0 ? lastSeg.slice(dot + 1).toLowerCase() : "";
+
+  if (opts.kind === "signature") {
+    // SIGNATURE is never subject to allowedTypes; it is implicitly an image.
+    if (ext !== "" && !SIGNATURE_EXTENSIONS.has(ext)) {
+      return "signature must be an image";
+    }
+    return null;
+  }
+
+  // kind === "file": only restrict when an allow-list is configured.
+  if (opts.allowedTypes.length === 0) return null;
+
+  const allowedExts = new Set<string>();
+  for (const mime of opts.allowedTypes) {
+    const exts = MIME_EXTENSIONS[mime];
+    if (exts) for (const e of exts) allowedExts.add(e);
+  }
+
+  // Unknown (extensionless) → accept via fallback; known-but-not-allowed → reject.
+  if (ext !== "" && !allowedExts.has(ext)) return "file type not allowed";
+  return null;
+}
+
 function validateAnswerAgainstQuestion(
   question: FormQuestion,
   value: unknown,
@@ -1502,12 +1584,22 @@ function validateAnswerAgainstQuestion(
       return null;
     }
 
+    case "FILE_UPLOAD": {
+      // Answer is the delivered Cloudinary file URL. Enforce host + (when an
+      // allow-list is configured) file type server-side; the client accept/size
+      // checks are UX-only and not trusted.
+      const allowedTypes = Array.isArray(question.settings?.allowedFileTypes)
+        ? (question.settings!.allowedFileTypes as unknown[]).filter(
+            (t): t is string => typeof t === "string",
+          )
+        : [];
+      return isAllowedUploadUrl(value, { kind: "file", allowedTypes });
+    }
+
     case "SIGNATURE":
-    case "FILE_UPLOAD":
-      // Answer is the delivered file URL (SIGNATURE shares FILE_UPLOAD's rule:
-      // the signature PNG is uploaded to Cloudinary and the answer is its URL).
-      if (!isString || !/^https?:\/\//.test(value)) return "expected a file URL";
-      return null;
+      // Answer is the delivered Cloudinary signature image URL. Host-checked and
+      // constrained to an image type; never subject to allowedFileTypes.
+      return isAllowedUploadUrl(value, { kind: "signature", allowedTypes: [] });
 
     case "MULTI_ENTRY":
       if (!isArray) return "expected an array of text entries";
