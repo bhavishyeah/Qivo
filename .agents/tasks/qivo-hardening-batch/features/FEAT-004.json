@@ -1,0 +1,26 @@
+{
+  "id": "FEAT-004",
+  "type": "refactor",
+  "description": "L1 + L2 editor polish plus the .env.example verification. L1: remove the dead '🖼 Media' no-op button in FormEditorPage. L2: replace window.location.reload() after section delete with an in-place state refresh reusing the page's load logic. Plus confirm .env.example already documents the expected vars (verify-only; edit only if genuinely missing). Web-only + a read-only env check; independent of FEAT-001/002/003.",
+  "status": "completed",
+  "steps": [
+    "L1: in apps/web/src/pages/FormEditorPage.tsx (~L1138-1146) remove the floating '🖼 Media' button whose onClick is the empty /* Future: add image */ no-op, along with any now-unused handler/markup, leaving no dead code. Keep the '＋ Question' and '§ Section' floating buttons intact.",
+    "L2: extract the fetch + setState body of the loadEditor effect (~L177-218) into a reusable reloadEditorData() function that sets form/questions/sections and the settings/theme state but does NOT flip the initial loading flag. Call it from the existing load effect.",
+    "L2: in deleteSectionById (~L543) replace window.location.reload() with `await reloadEditorData()` so questions re-group correctly in place without a full reload or lost editor state. Keep the min-one-section guard and confirm() prompt.",
+    "env: verify .env.example already documents RESPONSE_EDIT_SECRET (with the 'SET A RANDOM VALUE IN PRODUCTION' note) and WEB_URL/EMAIL_FROM/RESEND_API_KEY. It currently does (confirmed in audit + read). Only add an entry if some genuinely new, undocumented process.env read was introduced; otherwise leave the file untouched (no churn)."
+  ],
+  "acceptance_criteria": [
+    "The '🖼 Media' button no longer renders and no unused handler/markup remains; lint reports no new unused-var errors.",
+    "Deleting a section refreshes the editor in place (form/questions/sections re-fetched into state) with no window.location.reload and no lost editor state; questions re-group under their sections.",
+    ".env.example is unchanged unless a new undocumented env var was actually introduced (none expected).",
+    "cd apps/web typecheck + pnpm build:web + pnpm test green."
+  ],
+  "verification": [
+    "cd apps/web && pnpm exec tsc -b --noEmit  (expect exit 0)",
+    "cd apps/web && pnpm lint  (expect no new unused-variable errors from the removed button)",
+    "(repo root) pnpm build:web  (expect success)",
+    "cd apps/web && pnpm test  (expect green)"
+  ],
+  "blocked_reason": null,
+  "findings": "Web-only. FormEditorPage.tsx: (1) removed the dead '🖼 Media' floating button (empty no-op onClick); '＋ Question' and '§ Section' buttons untouched. (2) Extracted the load effect's fetch+setState body into a module-level async reloadEditorData() that sets form/questions/sections/settings/theme but does NOT touch the initial `loading` flag (loading is still flipped in the effect's finally). The effect now awaits reloadEditorData(); added an `// eslint-disable-next-line react-hooks/exhaustive-deps` before the [formId] dep array to suppress the new exhaustive-deps warning (matches the existing suppression pattern used in AdminPanelPage/TeamPage/ResponseDashboardPage). (3) deleteSectionById now does `await reloadEditorData()` instead of window.location.reload(); min-one-section guard + confirm() prompt kept. .env.example verified unchanged — RESPONSE_EDIT_SECRET (with the 'SET A RANDOM VALUE IN PRODUCTION' note), WEB_URL, EMAIL_FROM, RESEND_API_KEY already documented; no new env var introduced. Verification: web typecheck (tsc -b --noEmit) exit 0; pnpm build:web OK; pnpm test 6 files/57 tests green. Lint: the edited file has only its 2 PRE-EXISTING baseline errors (react-hooks/purity on Date.now ~L240, react-hooks/immutability deleteEditorQuestion access-before-declare ~L325) — verified identical count via git-stash comparison; NO new unused-variable error from the removed button. The repo-wide `pnpm lint` still reports 8 other pre-existing baseline errors in StatCards/AdminPanel/Dashboard/FormReports/PublicForm/ResponseDashboard/Team (purity, immutability, set-state-in-effect, only-export-components) — all unrelated to this FEAT and present on the base commit. No files other than FormEditorPage.tsx changed."
+}

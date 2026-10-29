@@ -174,40 +174,47 @@ export default function FormEditorPage() {
 
   // ─── Load ──────────────────────────────────────────────────────────────────
 
+  // Fetch form/questions/sections and settings/theme into state. Does NOT touch
+  // the initial `loading` flag so it can be reused for in-place refreshes.
+  async function reloadEditorData() {
+    if (!formId) return;
+    const [formData, questionsData] = await Promise.all([
+      api.get<{ form: FormRecord }>(`/api/forms/${formId}`),
+      api.get<{ questions: Question[] }>(`/api/forms/${formId}/questions`),
+    ]);
+    setForm(formData.form);
+    setQuestions(questionsData.questions);
+    const schema = formData.form.schema;
+    setSections(
+      (schema.sections ?? []).map((s) => ({
+        id: s.id,
+        title: s.title,
+        ...(s.jumpRules ? { jumpRules: s.jumpRules } : {}),
+      })),
+    );
+    setCollectEmail(schema.settings?.collectEmail ?? false);
+    setAllowMultipleResponses(schema.settings?.allowMultipleResponses ?? true);
+    setConfirmationMessage(schema.confirmationMessage ?? "");
+    setScheduledPublishAt(toDatetimeLocal(schema.settings?.scheduledPublishAt));
+    setScheduledCloseAt(toDatetimeLocal(schema.settings?.scheduledCloseAt));
+    setQuizMode(schema.settings?.quizMode ?? false);
+    setShowScore(schema.settings?.showScore ?? false);
+    setResponseNotification(schema.settings?.responseNotification ?? "off");
+    setSendConfirmationEmail(schema.settings?.sendConfirmationEmail ?? false);
+    setResponseEditing(schema.settings?.responseEditing ?? "disabled");
+    setResponseEditMinutes(schema.settings?.responseEditMinutes ?? 15);
+    const theme = schema.settings?.theme;
+    setCoverImageUrl(theme?.coverImageUrl ?? "");
+    setAccentColor(theme?.accentColor ?? "");
+    setBackgroundColor(theme?.backgroundColor ?? "");
+    setFontFamily(theme?.fontFamily ?? "");
+  }
+
   useEffect(() => {
     async function loadEditor() {
       if (!formId) { setError("A form ID is missing."); setLoading(false); return; }
       try {
-        const [formData, questionsData] = await Promise.all([
-          api.get<{ form: FormRecord }>(`/api/forms/${formId}`),
-          api.get<{ questions: Question[] }>(`/api/forms/${formId}/questions`),
-        ]);
-        setForm(formData.form);
-        setQuestions(questionsData.questions);
-        const schema = formData.form.schema;
-        setSections(
-          (schema.sections ?? []).map((s) => ({
-            id: s.id,
-            title: s.title,
-            ...(s.jumpRules ? { jumpRules: s.jumpRules } : {}),
-          })),
-        );
-        setCollectEmail(schema.settings?.collectEmail ?? false);
-        setAllowMultipleResponses(schema.settings?.allowMultipleResponses ?? true);
-        setConfirmationMessage(schema.confirmationMessage ?? "");
-        setScheduledPublishAt(toDatetimeLocal(schema.settings?.scheduledPublishAt));
-        setScheduledCloseAt(toDatetimeLocal(schema.settings?.scheduledCloseAt));
-        setQuizMode(schema.settings?.quizMode ?? false);
-        setShowScore(schema.settings?.showScore ?? false);
-        setResponseNotification(schema.settings?.responseNotification ?? "off");
-        setSendConfirmationEmail(schema.settings?.sendConfirmationEmail ?? false);
-        setResponseEditing(schema.settings?.responseEditing ?? "disabled");
-        setResponseEditMinutes(schema.settings?.responseEditMinutes ?? 15);
-        const theme = schema.settings?.theme;
-        setCoverImageUrl(theme?.coverImageUrl ?? "");
-        setAccentColor(theme?.accentColor ?? "");
-        setBackgroundColor(theme?.backgroundColor ?? "");
-        setFontFamily(theme?.fontFamily ?? "");
+        await reloadEditorData();
       } catch (err) {
         setError(err instanceof ApiRequestError ? err.message : "Unable to load editor.");
       } finally {
@@ -215,6 +222,7 @@ export default function FormEditorPage() {
       }
     }
     void loadEditor();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formId]);
 
   // ─── Undo / Redo ────────────────────────────────────────────────────────────
@@ -540,8 +548,8 @@ export default function FormEditorPage() {
     setError(""); setMessage("");
     try {
       await api.delete(`/api/forms/${formId}/sections/${sectionId}`);
-      // Reload so questions re-group under their new section correctly.
-      window.location.reload();
+      // Refresh in place so questions re-group under their new section correctly.
+      await reloadEditorData();
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : "Unable to delete section.");
     }
@@ -1133,15 +1141,6 @@ export default function FormEditorPage() {
               >
                 <span>§</span>
                 <span className="editor-floating-label">Section</span>
-              </button>
-              <button
-                className="editor-floating-btn"
-                type="button"
-                onClick={() => {/* Future: add image */}}
-                title="Add image"
-              >
-                <span>🖼</span>
-                <span className="editor-floating-label">Media</span>
               </button>
             </div>
           </div>
