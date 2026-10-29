@@ -157,6 +157,7 @@ model Form {
   versions  FormVersion[]
   shares    FormShare[]
   webhooks  Webhook[]
+  payments  Payment[]
 
   @@index([workspaceId])
   @@index([folderId])
@@ -231,6 +232,7 @@ model FormResponse {
 
   form       Form  @relation(fields: [formId], references: [id], onDelete: Cascade)
   respondent User? @relation(fields: [respondentId], references: [id], onDelete: SetNull)
+  payment    Payment?
 
   @@unique([formId, respondentEmail])
   @@index([formId])
@@ -357,4 +359,31 @@ model WebhookDelivery {
   // Supports the due-retry query: WHERE status = 'failed' AND nextAttemptAt <= now
   @@index([status, nextAttemptAt])
   @@index([webhookId, createdAt])
+}
+
+enum PaymentStatus {
+  created // order created server-side; no payment yet
+  paid // webhook saw payment.captured/order.paid (reconciliation)
+  verified // client-side signature verified AND response created+linked
+  failed // explicit failure (webhook payment.failed, or verification rejected)
+}
+
+model Payment {
+  id                String        @id @default(cuid())
+  formId            String
+  responseId        String?       @unique // null until a verified submit links it
+  razorpayOrderId   String        @unique // one order per Payment row
+  razorpayPaymentId String?       @unique // set on verify/capture; unique = idempotency anchor
+  amount            Int // PAISE, integer, authoritative snapshot at order time
+  currency          String        @default("INR")
+  status            PaymentStatus @default(created)
+  notes             Json? // small reconciliation context (slug, event name)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  form     Form          @relation(fields: [formId], references: [id], onDelete: Cascade)
+  response FormResponse? @relation(fields: [responseId], references: [id], onDelete: SetNull)
+
+  @@index([formId])
+  @@index([status])
 }

@@ -10,6 +10,14 @@ import {
   verifyEditToken,
 } from "../../services/responseEditToken.js";
 import {
+  createRazorpayOrder,
+  getPublicKeyId,
+  isRazorpayConfigured,
+  isValidAmountPaise,
+  verifyPaymentSignature,
+  verifyWebhookSignature,
+} from "../../services/razorpay.js";
+import {
   sendNewResponseNotificationEmail,
   sendResponseConfirmationEmail,
   sendResponseDigestEmail,
@@ -246,6 +254,11 @@ type FormSchema = {
     theme?: FormTheme;
     responseEditing?: "disabled" | "timed" | "until_close";
     responseEditMinutes?: number;
+    payment?: {
+      enabled: boolean;
+      amount: number; // PAISE
+      description?: string;
+    };
   };
   confirmationMessage?: string;
 };
@@ -292,6 +305,36 @@ function getFormSchema(value: unknown): FormSchema {
         candidate?.settings?.responseEditing ?? "disabled",
       responseEditMinutes:
         candidate?.settings?.responseEditMinutes ?? 15,
+      // Carry payment through only when present and well-formed (same
+      // defensive, default-omitted posture as `theme`). A corrupt/partial
+      // payment object degrades to "no payment" rather than throwing.
+      ...(candidate?.settings?.payment !== undefined &&
+      candidate.settings.payment !== null &&
+      typeof candidate.settings.payment === "object" &&
+      typeof (candidate.settings.payment as { enabled?: unknown }).enabled ===
+        "boolean" &&
+      typeof (candidate.settings.payment as { amount?: unknown }).amount ===
+        "number"
+        ? {
+            payment: {
+              enabled: (candidate.settings.payment as { enabled: boolean })
+                .enabled,
+              amount: (candidate.settings.payment as { amount: number })
+                .amount,
+              ...((candidate.settings.payment as { description?: unknown })
+                .description !== undefined &&
+              typeof (
+                candidate.settings.payment as { description?: unknown }
+              ).description === "string"
+                ? {
+                    description: (
+                      candidate.settings.payment as { description: string }
+                    ).description,
+                  }
+                : {}),
+            },
+          }
+        : {}),
     },
     ...(candidate?.confirmationMessage !== undefined
       ? {
@@ -733,6 +776,17 @@ export async function updateFormSettings(
         : {}),
       ...(input.responseEditMinutes !== undefined
         ? { responseEditMinutes: input.responseEditMinutes }
+        : {}),
+      ...(input.payment !== undefined
+        ? {
+            payment: {
+              enabled: input.payment.enabled,
+              amount: input.payment.amount,
+              ...(input.payment.description !== undefined
+                ? { description: input.payment.description }
+                : {}),
+            },
+          }
         : {}),
     },
     ...(input.confirmationMessage !== undefined
@@ -1384,10 +1438,18 @@ export async function getPublicForm(
   // Strip owner-only settings (email engagement toggles) from the public
   // payload so anonymous respondents never see them. Mirrors stripAnswerKeys'
   // destructure-and-`void` pattern for intentional omission.
-  const { responseNotification, sendConfirmationEmail, ...publicSettings } =
-    schema.settings;
+  // Also strip `payment` from the public settings: it is re-exposed only via
+  // the derived top-level `payment` block below, so the client has a single
+  // source of truth (no duplicated shape). The secret is never read here.
+  const {
+    responseNotification,
+    sendConfirmationEmail,
+    payment,
+    ...publicSettings
+  } = schema.settings;
   void responseNotification;
   void sendConfirmationEmail;
+  void payment;
 
   return {
     id: form.id,
@@ -1399,6 +1461,21 @@ export async function getPublicForm(
       logoUrl: form.workspace.logoUrl,
       primaryColor: form.workspace.primaryColor,
     },
+    // Derived payment block, sibling of `schema` (matches PublicForm.payment).
+    // Guarded with isValidAmountPaise so the public label never advertises an
+    // amount the order endpoint would reject. Only the public key id is ever
+    // exposed; the secret and webhook secret are never read here.
+    payment:
+      payment?.enabled && isValidAmountPaise(payment.amount)
+        ? {
+            required: true as const,
+            amount: payment.amount,
+            currency: "INR" as const,
+            description: payment.description ?? null,
+            keyId: getPublicKeyId(),
+            configured: isRazorpayConfigured(),
+          }
+        : { required: false as const },
     schema: {
       version: schema.version,
       // Strip answer-key fields (correctAnswer/points) from every question so
@@ -1414,6 +1491,242 @@ export async function getPublicForm(
         : {}),
     },
   };
+}
+
+/**
+ * Create a Razorpay order for a payment-enabled published form. The amount is
+ * computed server-side from stored settings and never trusted from the client.
+ * Inserts a `Payment` row (status `created`) bound to the form/order before
+ * returning, so the verified-submit path and the webhook can both look it up.
+ */
+export async function createPaymentOrder(slug: string) {
+  const form = await prisma.form.findFirst({
+    where: { slug, deletedAt: null, status: "PUBLISHED" },
+  });
+  if (!form) {
+    const error = new Error("Published form not found.");
+    error.name = "PUBLIC_FORM_NOT_FOUND";
+    throw error;
+  }
+
+  const schema = getFormSchema(form.schema);
+  const payment = schema.settings.payment;
+
+  if (!payment?.enabled) {
+    const error = new Error("This form does not require payment.");
+    error.name = "PAYMENT_NOT_REQUIRED";
+    throw error;
+  }
+
+  if (!isRazorpayConfigured()) {
+    const error = new Error("Payments are not configured.");
+    error.name = "PAYMENTS_NOT_CONFIGURED";
+    throw error;
+  }
+
+  if (!isValidAmountPaise(payment.amount)) {
+    console.warn(
+      `[razorpay] PAYMENT_AMOUNT_INVALID form=${form.id} amount=${String(
+        payment.amount,
+      )}`,
+    );
+    const error = new Error("The configured payment amount is invalid.");
+    error.name = "PAYMENT_AMOUNT_INVALID";
+    throw error;
+  }
+
+  const amountPaise = payment.amount;
+  const order = await createRazorpayOrder({ amountPaise, slug });
+
+  await prisma.payment.create({
+    data: {
+      formId: form.id,
+      razorpayOrderId: order.id,
+      amount: amountPaise,
+      currency: "INR",
+      status: "created",
+      notes: { slug },
+    },
+  });
+
+  return {
+    orderId: order.id,
+    amount: amountPaise,
+    currency: "INR" as const,
+    keyId: getPublicKeyId(),
+  };
+}
+
+/**
+ * Pre-Checkout duplicate pre-check. Returns a boolean ONLY (never any response
+ * data or stored emails), and performs a DB lookup only when the form actually
+ * applies a duplicate guard (collectEmail && !allowMultipleResponses). Used so a
+ * known-duplicate respondent is not charged and then rejected on submit (FR31).
+ */
+export async function checkAlreadyResponded(
+  slug: string,
+  email: string,
+): Promise<{ alreadyResponded: boolean }> {
+  const form = await prisma.form.findFirst({
+    where: { slug, deletedAt: null, status: "PUBLISHED" },
+  });
+  if (!form) {
+    const error = new Error("Published form not found.");
+    error.name = "PUBLIC_FORM_NOT_FOUND";
+    throw error;
+  }
+
+  const schema = getFormSchema(form.schema);
+  const { collectEmail, allowMultipleResponses } = schema.settings;
+  if (!(collectEmail && !allowMultipleResponses)) {
+    return { alreadyResponded: false };
+  }
+
+  // Normalize identically to the submit-path duplicate guard (trim + lowercase).
+  const normalized = email.trim().toLowerCase();
+  const found = await prisma.formResponse.findFirst({
+    where: { formId: form.id, respondentEmail: normalized },
+    select: { id: true },
+  });
+  return { alreadyResponded: Boolean(found) };
+}
+
+/**
+ * Razorpay webhook handler (reconciliation; never the primary save path). It is
+ * `res`-free and returns Promise<void>: a bad/absent signature THROWS
+ * WEBHOOK_SIGNATURE_INVALID (the route maps it to 400); every other condition
+ * returns normally (the route acks 200). It never creates a FormResponse (it
+ * has no answers) and is idempotent.
+ */
+export async function handleRazorpayWebhook(
+  rawBody: Buffer | string | undefined,
+  signature: string,
+  parsedEvent: unknown,
+): Promise<void> {
+  // 1. Unconfigured: ack with a no-op but WARN on EVERY occurrence so a deploy
+  //    that forgot RAZORPAY_WEBHOOK_SECRET leaves a durable, greppable signal.
+  if (!isRazorpayConfigured() || !process.env.RAZORPAY_WEBHOOK_SECRET) {
+    console.warn(
+      "[razorpay] WEBHOOK_SECRET_UNSET — dropping webhook; reconciliation disabled",
+    );
+    return;
+  }
+
+  // 2. Signature check (fail-closed). Absent/empty body or a mismatch throws.
+  if (!rawBody || rawBody.length === 0) {
+    const error = new Error("Invalid signature.");
+    error.name = "WEBHOOK_SIGNATURE_INVALID";
+    throw error;
+  }
+  if (!verifyWebhookSignature(rawBody, signature)) {
+    const error = new Error("Invalid signature.");
+    error.name = "WEBHOOK_SIGNATURE_INVALID";
+    throw error;
+  }
+
+  // 3. Allow-list the handled events; everything else is acknowledged + ignored.
+  const event = (parsedEvent as { event?: unknown } | null)?.event;
+  if (event !== "payment.captured" && event !== "order.paid") {
+    return;
+  }
+
+  // 4. Per-event entity extraction (the two events nest differently).
+  const payload = (parsedEvent as { payload?: unknown } | null)?.payload as
+    | {
+        payment?: {
+          entity?: { id?: string; order_id?: string; amount?: number };
+        };
+        order?: { entity?: { id?: string; amount?: number } };
+      }
+    | undefined;
+  const paymentEntity = payload?.payment?.entity;
+  const orderEntity = payload?.order?.entity;
+  const orderId = paymentEntity?.order_id ?? orderEntity?.id;
+  const paymentId = paymentEntity?.id ?? null;
+  const observedAmount = paymentEntity?.amount ?? orderEntity?.amount ?? null;
+
+  if (!orderId) {
+    console.warn(
+      `[razorpay] WEBHOOK_ORDER_UNRESOLVED event=${String(event)} — no order id; skipping`,
+    );
+    return;
+  }
+
+  // 5. Idempotent reconciliation keyed by razorpayOrderId.
+  const existing = await prisma.payment.findUnique({
+    where: { razorpayOrderId: orderId },
+  });
+
+  if (!existing) {
+    // order-create always inserts the row first, so this should never run.
+    // Payment.formId is NOT NULL — never fabricate a formId-less row.
+    console.warn(
+      `[razorpay] WEBHOOK_PAYMENT_NOT_FOUND order=${orderId} — no Payment row; skipping`,
+    );
+    return;
+  }
+
+  // Amount reconciliation: the ONLY amount cross-check in the system. Never
+  // throw, never overwrite the authoritative snapshot; WARN-log on mismatch.
+  if (observedAmount != null && observedAmount !== existing.amount) {
+    console.warn(
+      `[razorpay] WEBHOOK_AMOUNT_MISMATCH order=${orderId} snapshot=${existing.amount} observed=${observedAmount}`,
+    );
+  }
+
+  // Merge reconciliation context into notes (last-writer-wins is acceptable).
+  const baseNotes =
+    existing.notes && typeof existing.notes === "object"
+      ? (existing.notes as Record<string, unknown>)
+      : {};
+  const mergedNotes = {
+    ...baseNotes,
+    webhookEvent: event,
+    observedAmount,
+  } satisfies Record<string, unknown>;
+
+  if (existing.status === "verified") {
+    // Response already exists; just record the reconciliation context.
+    await prisma.payment.update({
+      where: { razorpayOrderId: orderId },
+      data: { notes: mergedNotes as Prisma.InputJsonValue },
+    });
+    return;
+  }
+
+  if (existing.status === "created") {
+    try {
+      await prisma.payment.update({
+        where: { razorpayOrderId: orderId },
+        data: {
+          ...(paymentId && !existing.razorpayPaymentId
+            ? { razorpayPaymentId: paymentId }
+            : {}),
+          status: "paid",
+          notes: mergedNotes as Prisma.InputJsonValue,
+        },
+      });
+    } catch (err) {
+      // A concurrent verified submit may have claimed this payment id first.
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === "P2002"
+      ) {
+        console.warn(
+          `[razorpay] WEBHOOK_PAYMENT_ID_CLAIMED order=${orderId} — concurrent claim; skipping`,
+        );
+        return;
+      }
+      throw err;
+    }
+    return;
+  }
+
+  // Any other status (paid/failed): only refresh the reconciliation notes.
+  await prisma.payment.update({
+    where: { razorpayOrderId: orderId },
+    data: { notes: mergedNotes as Prisma.InputJsonValue },
+  });
 }
 
 /**
@@ -2069,6 +2382,13 @@ export async function submitFormResponse(
     metadata?:
       | Record<string, unknown>
       | undefined;
+    payment?:
+      | {
+          razorpayOrderId: string;
+          razorpayPaymentId: string;
+          razorpaySignature: string;
+        }
+      | undefined;
   },
   respondentId?: string,
 ) {
@@ -2099,6 +2419,103 @@ export async function submitFormResponse(
       throw error;
     }
   }
+
+  // ── Payment gate (paid forms only) ──
+  // Placed after the form load + schedule-close check and BEFORE creating the
+  // response. On a free form this whole block is skipped and behavior is
+  // unchanged. On a paid form the signature must verify before any response is
+  // ever persisted (save-only-after-verified-payment).
+  const paymentEnabled = schema.settings.payment?.enabled === true;
+  let paidPayment: {
+    razorpayOrderId: string;
+    razorpayPaymentId: string;
+    razorpaySignature: string;
+  } | null = null;
+
+  if (paymentEnabled) {
+    if (!input.payment) {
+      const error = new Error("Payment is required to submit this form.");
+      error.name = "PAYMENT_REQUIRED";
+      throw error;
+    }
+    if (!isRazorpayConfigured()) {
+      const error = new Error("Payments are not configured.");
+      error.name = "PAYMENTS_NOT_CONFIGURED";
+      throw error;
+    }
+
+    const { razorpayOrderId, razorpayPaymentId, razorpaySignature } =
+      input.payment;
+
+    // Idempotency short-circuit: if this payment id already linked a response,
+    // return the IDENTICAL shape the first submit returned (not a bare row).
+    const claimed = await prisma.payment.findUnique({
+      where: { razorpayPaymentId },
+    });
+    if (claimed?.responseId) {
+      const existingResponse = await prisma.formResponse.findUnique({
+        where: { id: claimed.responseId },
+      });
+      if (existingResponse) {
+        // quizScore from the STORED answers (what was actually persisted),
+        // not the retry's input.answers; editToken minted fresh (matches a
+        // first submit).
+        const quizScore = computeQuizScore(
+          schema,
+          existingResponse.answers as Record<string, unknown>,
+        );
+        const editToken = computeEditToken(schema, existingResponse.id);
+        return { ...existingResponse, quizScore, editToken };
+      }
+    }
+
+    // Bind the order to this form: the Payment row must exist (created at
+    // order time) and belong to this formId. The order snapshot is the
+    // authoritative amount; no submit-time amount comparison is done.
+    const orderPayment = await prisma.payment.findUnique({
+      where: { razorpayOrderId },
+    });
+    if (!orderPayment || orderPayment.formId !== form.id) {
+      console.warn(
+        `[razorpay] PAYMENT_ORDER_MISMATCH slug=${slug} order=${razorpayOrderId}`,
+      );
+      const error = new Error("This payment could not be matched to the form.");
+      error.name = "PAYMENT_ORDER_MISMATCH";
+      throw error;
+    }
+    // Claim committed but create crashed before link (made unreachable by the
+    // transaction below); treat as a conflict.
+    if (
+      orderPayment.status === "verified" &&
+      orderPayment.responseId === null
+    ) {
+      const error = new Error("This payment could not be matched to the form.");
+      error.name = "PAYMENT_ORDER_MISMATCH";
+      throw error;
+    }
+
+    if (
+      !verifyPaymentSignature({
+        orderId: razorpayOrderId,
+        paymentId: razorpayPaymentId,
+        signature: razorpaySignature,
+      })
+    ) {
+      console.warn(
+        `[razorpay] PAYMENT_VERIFICATION_FAILED slug=${slug} order=${razorpayOrderId}`,
+      );
+      const error = new Error("Payment verification failed.");
+      error.name = "PAYMENT_VERIFICATION_FAILED";
+      throw error;
+    }
+
+    paidPayment = {
+      razorpayOrderId,
+      razorpayPaymentId,
+      razorpaySignature,
+    };
+  }
+  // If payment is NOT enabled but input.payment is present, it is ignored.
 
   if (schema.settings.collectEmail) {
     if (!input.email?.trim()) {
@@ -2177,29 +2594,121 @@ const respondentEmail =
     ? normalizedEmail
     : null;
 
+const responseCreateData = {
+  formId: form.id,
+  ...(respondentId !== undefined ? { respondentId } : {}),
+  respondentEmail,
+  answers: input.answers as Prisma.InputJsonValue,
+  metadata: responseMetadata as Prisma.InputJsonValue,
+};
+
+// Disambiguate the two P2002 origins now in play on the paid path:
+//  - (formId, respondentEmail)      → duplicate email → DUPLICATE_RESPONSE
+//  - razorpayPaymentId / responseId → concurrent verified submit → idempotent
+function duplicateResponseError(): Error {
+  const error = new Error("You have already submitted a response.");
+  error.name = "DUPLICATE_RESPONSE";
+  return error;
+}
+
 let response;
-try {
-  response = await prisma.formResponse.create({
-    data: {
-      formId: form.id,
-      ...(respondentId !== undefined ? { respondentId } : {}),
-      respondentEmail,
-      answers: input.answers as Prisma.InputJsonValue,
-      metadata: responseMetadata as Prisma.InputJsonValue,
-    },
+if (paidPayment) {
+  // Paid path: claim → create → link in ONE transaction so a crash can never
+  // strand a `verified` Payment with no linked response (all-or-nothing).
+  const { razorpayOrderId, razorpayPaymentId } = paidPayment;
+  response = await prisma.$transaction(async (tx) => {
+    // (a) Conditional claim of the idempotency key. The OR makes
+    // "already set to this same payment id" a successful no-conflict claim
+    // (e.g. the webhook set it first), not a P2002.
+    const claim = await tx.payment.updateMany({
+      where: {
+        razorpayOrderId,
+        OR: [
+          { razorpayPaymentId: null },
+          { razorpayPaymentId },
+        ],
+      },
+      data: { razorpayPaymentId, status: "verified" },
+    });
+
+    if (claim.count === 0) {
+      // Another writer claimed this payment id on a different row. If it
+      // already linked a response, return that (idempotent success);
+      // otherwise it is mid-flight — surface a mismatch.
+      const other = await tx.payment.findUnique({
+        where: { razorpayPaymentId },
+      });
+      if (other?.responseId) {
+        const linked = await tx.formResponse.findUnique({
+          where: { id: other.responseId },
+        });
+        if (linked) return linked;
+      }
+      const error = new Error(
+        "This payment could not be matched to the form.",
+      );
+      error.name = "PAYMENT_ORDER_MISMATCH";
+      throw error;
+    }
+
+    // (b) Create the response.
+    let created;
+    try {
+      created = await tx.formResponse.create({ data: responseCreateData });
+    } catch (err) {
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === "P2002"
+      ) {
+        const target = err.meta?.target;
+        const targetStr = Array.isArray(target)
+          ? target.join(",")
+          : String(target ?? "");
+        if (targetStr.includes("respondentEmail")) {
+          throw duplicateResponseError();
+        }
+        if (
+          targetStr.includes("razorpayPaymentId") ||
+          targetStr.includes("responseId")
+        ) {
+          // A concurrent verified submit linked first — return its response.
+          const other = await tx.payment.findUnique({
+            where: { razorpayPaymentId },
+          });
+          if (other?.responseId) {
+            const linked = await tx.formResponse.findUnique({
+              where: { id: other.responseId },
+            });
+            if (linked) return linked;
+          }
+        }
+      }
+      throw err;
+    }
+
+    // (c) Link the payment to the created response (status already verified).
+    await tx.payment.update({
+      where: { razorpayOrderId },
+      data: { responseId: created.id },
+    });
+
+    return created;
   });
-} catch (err) {
-  // Unique violation on (formId, respondentEmail) → duplicate submission that
-  // slipped past the pre-check due to a concurrent request.
-  if (
-    err instanceof Prisma.PrismaClientKnownRequestError &&
-    err.code === "P2002"
-  ) {
-    const error = new Error("You have already submitted a response.");
-    error.name = "DUPLICATE_RESPONSE";
-    throw error;
+} else {
+  // Free path: unchanged, non-transactional create.
+  try {
+    response = await prisma.formResponse.create({ data: responseCreateData });
+  } catch (err) {
+    // Unique violation on (formId, respondentEmail) → duplicate submission that
+    // slipped past the pre-check due to a concurrent request.
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === "P2002"
+    ) {
+      throw duplicateResponseError();
+    }
+    throw err;
   }
-  throw err;
 }
 
 // Track submission analytics + milestone notification (fire-and-forget, but

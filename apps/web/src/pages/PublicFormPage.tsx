@@ -7,7 +7,13 @@ import {
   type FormEvent,
 } from "react";
 import { useParams } from "react-router-dom";
-import { publicGet, publicPost, ApiRequestError } from "../lib/api";
+import {
+  publicGet,
+  publicPost,
+  createPaymentOrder,
+  checkResponseExists,
+  ApiRequestError,
+} from "../lib/api";
 import { evaluateConditions } from "../lib/conditions";
 import { computeReachedSections, nextSectionAfter } from "../lib/sectionJumps";
 import { resolvePipedLabel } from "../lib/piping";
@@ -15,6 +21,69 @@ import { isImageUrl, uploadToCloudinary } from "../lib/upload";
 import SignaturePad, { type SignaturePadHandle } from "../components/SignaturePad";
 import { ensureFontLoaded, resolveTheme } from "../lib/theme";
 import type { AnswerValue, PublicForm, Question, Section } from "../types";
+
+// ─── Razorpay Checkout (lazy-loaded) ───────────────────────────────────────
+
+type RazorpayCheckoutOptions = {
+  key: string;
+  order_id: string;
+  amount: number;
+  currency: string;
+  name?: string;
+  description?: string;
+  handler: (resp: {
+    razorpay_payment_id: string;
+    razorpay_order_id: string;
+    razorpay_signature: string;
+  }) => void;
+  modal?: { ondismiss?: () => void };
+};
+
+type RazorpayInstance = { open: () => void };
+
+declare global {
+  interface Window {
+    Razorpay?: new (options: RazorpayCheckoutOptions) => RazorpayInstance;
+  }
+}
+
+const RAZORPAY_CHECKOUT_SRC = "https://checkout.razorpay.com/v1/checkout.js";
+let razorpayLoadPromise: Promise<void> | null = null;
+
+// Inject checkout.js exactly once and resolve when window.Razorpay exists.
+function loadRazorpayCheckout(): Promise<void> {
+  if (typeof window !== "undefined" && window.Razorpay) return Promise.resolve();
+  if (razorpayLoadPromise) return razorpayLoadPromise;
+  razorpayLoadPromise = new Promise<void>((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>(
+      `script[src="${RAZORPAY_CHECKOUT_SRC}"]`,
+    );
+    if (existing) {
+      if (window.Razorpay) {
+        resolve();
+        return;
+      }
+      existing.addEventListener("load", () => resolve());
+      existing.addEventListener("error", () =>
+        reject(new Error("Failed to load Razorpay Checkout.")),
+      );
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = RAZORPAY_CHECKOUT_SRC;
+    script.async = true;
+    script.onload = () => {
+      if (window.Razorpay) resolve();
+      else reject(new Error("Razorpay Checkout did not initialize."));
+    };
+    script.onerror = () => {
+      razorpayLoadPromise = null;
+      reject(new Error("Failed to load Razorpay Checkout."));
+    };
+    document.body.appendChild(script);
+  });
+  return razorpayLoadPromise;
+}
 
 // ─── File type helpers ────────────────────────────────────────────────────────
 
@@ -265,9 +334,19 @@ export default function PublicFormPage() {
     setSubmitting(true);
     try {
       const collectEmail = Boolean(form?.schema.settings.collectEmail);
-      const body = {
+      const normalizedEmail = email.trim().toLowerCase();
+      const body: {
+        answers: typeof answers;
+        email?: string;
+        metadata: Record<string, unknown>;
+        payment?: {
+          razorpayOrderId: string;
+          razorpayPaymentId: string;
+          razorpaySignature: string;
+        };
+      } = {
         answers,
-        ...(collectEmail ? { email: email.trim().toLowerCase() } : {}),
+        ...(collectEmail ? { email: normalizedEmail } : {}),
         metadata: {
           source: "qivo-web",
           ...(startedAtRef.current
@@ -296,26 +375,106 @@ export default function PublicFormPage() {
         return;
       }
 
-      const result = await publicPost<{
-        response?: { id: string; submittedAt: string };
-        quizScore?: { earned: number; total: number; percentage: number };
-        editToken?: string;
-      }>(
-        `/api/forms/public/${slug}/responses`,
-        body,
-      );
-      if (result?.quizScore) setQuizScore(result.quizScore);
+      // Post the final response (free or paid) and render the confirmation.
+      const postResponse = async () => {
+        const result = await publicPost<{
+          response?: { id: string; submittedAt: string };
+          quizScore?: { earned: number; total: number; percentage: number };
+          editToken?: string;
+        }>(
+          `/api/forms/public/${slug}/responses`,
+          body,
+        );
+        if (result?.quizScore) setQuizScore(result.quizScore);
 
-      // Capture the edit token + compute the client-side window end for the UI.
-      if (result?.editToken && result.response?.id) {
-        setResponseId(result.response.id);
-        setEditToken(result.editToken);
-        setEditWindowExpiresAt(computeEditWindowEnd(result.response.submittedAt));
-        setNow(Date.now());
+        // Capture the edit token + compute the client-side window end for the UI.
+        if (result?.editToken && result.response?.id) {
+          setResponseId(result.response.id);
+          setEditToken(result.editToken);
+          setEditWindowExpiresAt(
+            computeEditWindowEnd(result.response.submittedAt),
+          );
+          setNow(Date.now());
+        }
+
+        setSubmitted(true);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      };
+
+      // ── Paid flow: new responses on payment-required forms only ──
+      if (form?.payment?.required) {
+        if (form.payment.configured === false) {
+          setSubmitError(
+            "Payments are temporarily unavailable. Please try again later.",
+          );
+          return;
+        }
+
+        // Pre-check so a known duplicate is not charged then rejected.
+        if (
+          form.schema.settings.collectEmail &&
+          !form.schema.settings.allowMultipleResponses
+        ) {
+          const check = await checkResponseExists(slug, normalizedEmail);
+          if (check.alreadyResponded) {
+            setSubmitError("You have already responded to this form.");
+            return;
+          }
+        }
+
+        const order = await createPaymentOrder(slug);
+        await loadRazorpayCheckout();
+        if (!order.keyId || !window.Razorpay) {
+          setSubmitError("Could not start the payment. Please try again.");
+          return;
+        }
+
+        const checkout = new window.Razorpay({
+          key: order.keyId,
+          order_id: order.orderId,
+          amount: order.amount,
+          currency: order.currency,
+          ...(form.branding?.workspaceName
+            ? { name: form.branding.workspaceName }
+            : {}),
+          ...(form.payment.description
+            ? { description: form.payment.description }
+            : {}),
+          handler: (resp) => {
+            // On a verified payment, submit the answers + razorpay fields.
+            body.payment = {
+              razorpayOrderId: resp.razorpay_order_id,
+              razorpayPaymentId: resp.razorpay_payment_id,
+              razorpaySignature: resp.razorpay_signature,
+            };
+            void (async () => {
+              setSubmitting(true);
+              try {
+                await postResponse();
+              } catch (err) {
+                setSubmitError(
+                  err instanceof ApiRequestError
+                    ? mapEditErrorMessage(err)
+                    : "Unable to submit your response.",
+                );
+              } finally {
+                setSubmitting(false);
+              }
+            })();
+          },
+          modal: {
+            ondismiss: () => {
+              setSubmitError("Payment cancelled — you can try again.");
+              setSubmitting(false);
+            },
+          },
+        });
+        checkout.open();
+        // Keep `submitting` true while Checkout is open; handler/ondismiss clear it.
+        return;
       }
 
-      setSubmitted(true);
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      await postResponse();
     } catch (err) {
       setSubmitError(
         err instanceof ApiRequestError
@@ -631,10 +790,23 @@ export default function PublicFormPage() {
                     : "Submitting..."
                   : isEditing
                     ? "Save changes"
-                    : "Submit response"}
+                    : !isEditing &&
+                        form.payment?.required &&
+                        typeof form.payment.amount === "number"
+                      ? `Pay ₹${form.payment.amount / 100} & Submit`
+                      : "Submit response"}
               </button>
             )}
           </div>
+          {!isEditing &&
+          isLastSection &&
+          form.payment?.required &&
+          typeof form.payment.amount === "number" ? (
+            <p className="muted" style={{ textAlign: "center", marginTop: 12 }}>
+              A payment of ₹{form.payment.amount / 100} is required to submit
+              this form.
+            </p>
+          ) : null}
         </form>
 
         <p className="public-form-brand">Powered by Qivo Forms</p>

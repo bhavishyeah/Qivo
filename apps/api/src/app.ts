@@ -12,6 +12,7 @@ import { z } from "zod";
 
 import prisma from "./db/prisma.js";
 import { csrfProtection } from "./middleware/csrf.js";
+import { isRazorpayConfigured } from "./services/razorpay.js";
 import authRouter from "./modules/auth/auth.routes.js";
 import formRouter from "./modules/forms/form.routes.js";
 import formShareRouter from "./modules/formShares/formShare.routes.js";
@@ -87,7 +88,18 @@ app.use(
   }),
 );
 
-app.use(express.json({ limit: "1mb" }));
+app.use(
+  express.json({
+    limit: "1mb",
+    // Capture the exact pre-parse bytes so the Razorpay webhook can verify the
+    // HMAC against the raw body (a re-serialized parsed body changes the bytes).
+    // Set for every request but only read by the webhook handler; the buffer is
+    // a few KB retained only for the request lifetime.
+    verify: (req, _res, buf) => {
+      (req as Express.Request).rawBody = buf;
+    },
+  }),
+);
 app.use(express.urlencoded({ extended: false, limit: "1mb" }));
 app.use(cookieParser());
 app.use(morgan("dev"));
@@ -141,6 +153,12 @@ app.get("/api/health", (_req, res) => {
       service: "qivo-api",
       status: "ok",
       ts: Date.now(),
+      // Booleans only (never the key values) so this stays safe on the public
+      // health endpoint. Lets ops confirm keys/webhook secret post-deploy.
+      payments: {
+        configured: isRazorpayConfigured(),
+        webhookConfigured: Boolean(process.env.RAZORPAY_WEBHOOK_SECRET),
+      },
     },
   });
 });
@@ -528,6 +546,86 @@ const errorHandler: ErrorRequestHandler = (
         success: false,
         error: {
           code: "WEBHOOK_URL_INVALID",
+          message: error.message,
+        },
+      });
+      return;
+
+    case "PAYMENTS_NOT_CONFIGURED":
+      res.status(503).json({
+        success: false,
+        error: {
+          code: "PAYMENTS_NOT_CONFIGURED",
+          message: error.message,
+        },
+      });
+      return;
+
+    case "PAYMENT_NOT_REQUIRED":
+      res.status(400).json({
+        success: false,
+        error: {
+          code: "PAYMENT_NOT_REQUIRED",
+          message: error.message,
+        },
+      });
+      return;
+
+    case "PAYMENT_AMOUNT_INVALID":
+      res.status(400).json({
+        success: false,
+        error: {
+          code: "PAYMENT_AMOUNT_INVALID",
+          message: error.message,
+        },
+      });
+      return;
+
+    case "PAYMENT_ORDER_FAILED":
+      res.status(502).json({
+        success: false,
+        error: {
+          code: "PAYMENT_ORDER_FAILED",
+          message: error.message,
+        },
+      });
+      return;
+
+    case "PAYMENT_REQUIRED":
+      res.status(402).json({
+        success: false,
+        error: {
+          code: "PAYMENT_REQUIRED",
+          message: error.message,
+        },
+      });
+      return;
+
+    case "PAYMENT_ORDER_MISMATCH":
+      res.status(400).json({
+        success: false,
+        error: {
+          code: "PAYMENT_ORDER_MISMATCH",
+          message: error.message,
+        },
+      });
+      return;
+
+    case "PAYMENT_VERIFICATION_FAILED":
+      res.status(402).json({
+        success: false,
+        error: {
+          code: "PAYMENT_VERIFICATION_FAILED",
+          message: error.message,
+        },
+      });
+      return;
+
+    case "WEBHOOK_SIGNATURE_INVALID":
+      res.status(400).json({
+        success: false,
+        error: {
+          code: "WEBHOOK_SIGNATURE_INVALID",
           message: error.message,
         },
       });

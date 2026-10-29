@@ -47,6 +47,20 @@ export const updateFormSettingsSchema = z.object({
   theme: themeSchema,
   responseEditing: z.enum(["disabled", "timed", "until_close"]).optional(),
   responseEditMinutes: z.coerce.number().int().min(1).max(1440).optional(),
+  // Payment config. `amount` is PAISE (the web client converts rupees→paise
+  // before sending). strictObject rejects smuggled keys. `amount` is required
+  // and bounded, so a missing/out-of-bounds value is rejected in every case
+  // including `enabled: true` — no cross-field refinement needed. The
+  // enablement-dependent "payment required on submit" rule can't be expressed
+  // here (Zod doesn't see stored settings) and lives in the service as
+  // PAYMENT_REQUIRED.
+  payment: z
+    .strictObject({
+      enabled: z.boolean(),
+      amount: z.number().int().min(100).max(15_000_000),
+      description: z.string().trim().max(300).optional(),
+    })
+    .optional(),
 });
 
 export type UpdateFormSettingsInput = z.infer<
@@ -145,7 +159,25 @@ export const submitResponseSchema = z.object({
   metadata: z
     .record(z.string(), z.unknown())
     .optional(),
+  // Present only when the form requires payment. All three ids/signature are
+  // required when present; the service enforces presence (PAYMENT_REQUIRED)
+  // when the form has payment enabled.
+  payment: z
+    .object({
+      razorpayOrderId: z.string().min(1).max(200),
+      razorpayPaymentId: z.string().min(1).max(200),
+      razorpaySignature: z.string().min(1).max(500),
+    })
+    .optional(),
 });
+
+// Body for the pre-Checkout duplicate pre-check (POST /public/:slug/response-check).
+// Boolean-only response; same email rule as submit.
+export const responseCheckSchema = z.object({
+  email: z.email(),
+});
+
+export type ResponseCheckInput = z.infer<typeof responseCheckSchema>;
 
 export const editResponseSchema = submitResponseSchema.extend({
   editToken: z.string().min(1).max(2000),

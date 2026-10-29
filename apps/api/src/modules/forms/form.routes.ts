@@ -23,6 +23,7 @@ import {
   saveAsTemplateSchema,
   reportQuerySchema,
   trackEventSchema,
+  responseCheckSchema,
 } from "./form.schemas.js";
 
 import { TEMPLATES } from "./templates.js";
@@ -81,6 +82,9 @@ import {
   deleteTemplate,
   isCustomTemplateId,
   stripCustomTemplatePrefix,
+  createPaymentOrder,
+  checkAlreadyResponded,
+  handleRazorpayWebhook,
 } from "./form.service.js";
 
 const formRouter: ExpressRouter = Router();
@@ -1439,6 +1443,81 @@ formRouter.post(
   },
 );
 
+// Create a Razorpay order for a payment-enabled form. Takes NO body: the amount
+// is computed server-side from stored settings (never trusted from the client).
+formRouter.post(
+  "/public/:slug/payment/order",
+  async (req, res, next) => {
+    try {
+      const slug = req.params.slug;
+      if (typeof slug !== "string") {
+        res.status(400).json({
+          success: false,
+          error: { code: "INVALID_FORM_SLUG", message: "A valid form slug is required." },
+        });
+        return;
+      }
+      const data = await createPaymentOrder(slug);
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+      res.json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+// Pre-Checkout duplicate pre-check. Boolean-only; no response data leaked.
+formRouter.post(
+  "/public/:slug/response-check",
+  async (req, res, next) => {
+    try {
+      const slug = req.params.slug;
+      if (typeof slug !== "string") {
+        res.status(400).json({
+          success: false,
+          error: { code: "INVALID_FORM_SLUG", message: "A valid form slug is required." },
+        });
+        return;
+      }
+      const input = responseCheckSchema.parse(req.body);
+      const data = await checkAlreadyResponded(slug, input.email);
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+      res.json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+// Razorpay webhook (reconciliation). CSRF-exempt via /public/. Reads the raw
+// body (captured by the global express.json verify hook) + the signature
+// header. The handler throws WEBHOOK_SIGNATURE_INVALID for a bad/absent
+// signature (mapped to 400 here); every other error is logged and 200'd so
+// Razorpay stops retrying against a transient issue.
+formRouter.post(
+  "/public/razorpay/webhook",
+  async (req, res) => {
+    try {
+      const signature = req.get("x-razorpay-signature") ?? "";
+      await handleRazorpayWebhook(req.rawBody, signature, req.body);
+      res.status(200).json({ success: true });
+    } catch (err) {
+      if (err instanceof Error && err.name === "WEBHOOK_SIGNATURE_INVALID") {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "WEBHOOK_SIGNATURE_INVALID",
+            message: "Invalid signature.",
+          },
+        });
+        return;
+      }
+      console.error("[razorpay] webhook handling failed:", err);
+      res.status(200).json({ success: true });
+    }
+  },
+);
+
 formRouter.post(
   "/public/:slug/responses",
   async (req, res, next) => {
@@ -1467,6 +1546,9 @@ formRouter.post(
       : {}),
     ...(input.metadata !== undefined
       ? { metadata: input.metadata }
+      : {}),
+    ...(input.payment !== undefined
+      ? { payment: input.payment }
       : {}),
   },
 );

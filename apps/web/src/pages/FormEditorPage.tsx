@@ -138,6 +138,10 @@ export default function FormEditorPage() {
   const [sendConfirmationEmail, setSendConfirmationEmail] = useState(false);
   const [responseEditing, setResponseEditing] = useState<"disabled" | "timed" | "until_close">("disabled");
   const [responseEditMinutes, setResponseEditMinutes] = useState(15);
+  const [paymentEnabled, setPaymentEnabled] = useState(false);
+  // Rupee text input; converted to/from paise at load/save.
+  const [paymentAmountRupees, setPaymentAmountRupees] = useState("");
+  const [paymentDescription, setPaymentDescription] = useState("");
   const [savingSettings, setSavingSettings] = useState(false);
 
   // Appearance (per-form theme). "" means inherit / default.
@@ -204,6 +208,14 @@ export default function FormEditorPage() {
     setSendConfirmationEmail(schema.settings?.sendConfirmationEmail ?? false);
     setResponseEditing(schema.settings?.responseEditing ?? "disabled");
     setResponseEditMinutes(schema.settings?.responseEditMinutes ?? 15);
+    const payment = schema.settings?.payment;
+    setPaymentEnabled(payment?.enabled ?? false);
+    setPaymentAmountRupees(
+      payment && typeof payment.amount === "number"
+        ? String(payment.amount / 100)
+        : "",
+    );
+    setPaymentDescription(payment?.description ?? "");
     const theme = schema.settings?.theme;
     setCoverImageUrl(theme?.coverImageUrl ?? "");
     setAccentColor(theme?.accentColor ?? "");
@@ -691,6 +703,45 @@ export default function FormEditorPage() {
     if (accentColor) theme.accentColor = accentColor;
     if (backgroundColor) theme.backgroundColor = backgroundColor;
     if (fontFamily) theme.fontFamily = fontFamily;
+
+    // Build the payment block. amount is required by the API schema even when
+    // disabled, so carry the current value (or the ₹1 floor) when off. When
+    // enabled, mirror the server floor exactly (≥ ₹1, integer paise in
+    // [100, 15_000_000], ≤ 2 decimals) so a sub-₹1 entry is caught here.
+    let payment: { enabled: boolean; amount: number; description?: string };
+    if (paymentEnabled) {
+      const rupees = Number(paymentAmountRupees);
+      const amountPaise = Math.round(rupees * 100);
+      if (
+        !Number.isFinite(rupees) ||
+        rupees < 1 ||
+        Math.abs(amountPaise / 100 - rupees) > 1e-9 ||
+        amountPaise < 100 ||
+        amountPaise > 15_000_000
+      ) {
+        setSavingSettings(false);
+        setError(
+          "Enter a payment amount of at least ₹1 (up to ₹1,50,000, max 2 decimals).",
+        );
+        return;
+      }
+      payment = { enabled: true, amount: amountPaise };
+      const desc = paymentDescription.trim();
+      if (desc) payment.description = desc;
+    } else {
+      const currentRupees = Number(paymentAmountRupees);
+      const currentPaise = Math.round(currentRupees * 100);
+      payment = {
+        enabled: false,
+        amount:
+          Number.isFinite(currentRupees) &&
+          currentPaise >= 100 &&
+          currentPaise <= 15_000_000
+            ? currentPaise
+            : 100,
+      };
+    }
+
     try {
       const data = await api.patch<{ form: FormRecord }>(
         `/api/forms/${formId}/settings`,
@@ -706,6 +757,7 @@ export default function FormEditorPage() {
           sendConfirmationEmail,
           responseEditing,
           responseEditMinutes,
+          payment,
           theme,
         },
       );
@@ -1195,6 +1247,27 @@ export default function FormEditorPage() {
             </SettingsGroup>
             <SettingsGroup title="Presentation" description="What respondents see after submitting" summary={confirmationMessage ? "Custom message set" : "Default message"}>
               <div className="question-field"><label htmlFor="s-confirm">Confirmation message</label><textarea id="s-confirm" rows={3} value={confirmationMessage} onChange={(e) => setConfirmationMessage(e.target.value)} placeholder="Thanks for your response." /><small className="muted">Shown to respondents after they submit.</small></div>
+            </SettingsGroup>
+            <SettingsGroup title="Payments" description="Require a payment before respondents can submit" summary={paymentEnabled ? `Required · ₹${paymentAmountRupees || "0"}` : "Off"}>
+              <label className="settings-toggle"><input type="checkbox" checked={paymentEnabled} onChange={(e) => setPaymentEnabled(e.target.checked)} /><span><strong>Require payment to submit</strong><small>Respondents pay with Razorpay before their response is saved.</small></span></label>
+              {paymentEnabled ? (
+                <>
+                  <div className="question-field">
+                    <label htmlFor="s-payment-amount">Amount (₹)</label>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span aria-hidden="true" style={{ color: "#64748b" }}>₹</span>
+                      <input id="s-payment-amount" type="number" min={1} max={150000} step="0.01" inputMode="decimal" value={paymentAmountRupees} onChange={(e) => setPaymentAmountRupees(e.target.value)} placeholder="100" style={{ flex: 1, border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }} />
+                    </div>
+                    <small className="muted">Fixed amount per response. Minimum ₹1 (up to ₹1,50,000).</small>
+                  </div>
+                  <div className="question-field">
+                    <label htmlFor="s-payment-description">Payment description (optional)</label>
+                    <textarea id="s-payment-description" rows={2} maxLength={300} value={paymentDescription} onChange={(e) => setPaymentDescription(e.target.value)} placeholder="Shown to the respondent in Checkout." />
+                    <small className="muted">Up to 300 characters.</small>
+                  </div>
+                  <small className="muted">Razorpay keys must be set on the server to collect live payments.</small>
+                </>
+              ) : null}
             </SettingsGroup>
           </form>
         </section>

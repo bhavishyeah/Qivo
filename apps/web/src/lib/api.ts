@@ -162,3 +162,25 @@ export async function publicPost<T>(
 
   return parseApiResponse<T>(response);
 }
+
+// Create a Razorpay order for a payment-enabled form. No body is sent — the
+// amount is computed server-side from stored settings.
+export async function createPaymentOrder(
+  slug: string,
+): Promise<{
+  orderId: string;
+  amount: number;
+  currency: string;
+  keyId: string | null;
+}> {
+  return publicPost(`/api/forms/public/${slug}/payment/order`, {});
+}
+
+// Pre-Checkout duplicate pre-check. Boolean-only; called before opening
+// Checkout on collectEmail && !allowMultipleResponses forms.
+export async function checkResponseExists(
+  slug: string,
+  email: string,
+): Promise<{ alreadyResponded: boolean }> {
+  return publicPost(`/api/forms/public/${slug}/response-check`, { email });
+}

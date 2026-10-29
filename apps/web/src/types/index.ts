@@ -93,6 +93,11 @@ export type FormSchema = {
     theme?: FormTheme;
     responseEditing?: "disabled" | "timed" | "until_close";
     responseEditMinutes?: number;
+    payment?: {
+      enabled: boolean;
+      amount: number; // PAISE
+      description?: string;
+    };
   };
   confirmationMessage?: string;
 };
@@ -120,6 +125,15 @@ export type PublicForm = {
     workspaceName: string;
     logoUrl?: string | null;
     primaryColor?: string | null;
+  };
+  // Top-level derived payment block (sibling of schema), from getPublicForm.
+  payment?: {
+    required: boolean;
+    amount?: number; // PAISE
+    currency?: string;
+    description?: string | null;
+    keyId?: string | null;
+    configured?: boolean;
   };
   schema: FormSchema;
 };
