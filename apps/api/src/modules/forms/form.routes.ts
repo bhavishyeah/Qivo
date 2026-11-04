@@ -16,6 +16,7 @@ import {
   reorderQuestionsSchema,
   responseListQuerySchema,
   submitResponseSchema,
+  paymentOrderSchema,
   editResponseSchema,
   updateFormSchema,
   updateQuestionSchema,
@@ -1443,8 +1444,9 @@ formRouter.post(
   },
 );
 
-// Create a Razorpay order for a payment-enabled form. Takes NO body: the amount
-// is computed server-side from stored settings (never trusted from the client).
+// Create a Razorpay order for a payment-enabled form. The body carries only the
+// respondent's answers + email, which are pre-validated before any order exists;
+// the amount is computed server-side from stored settings (never from the client).
 formRouter.post(
   "/public/:slug/payment/order",
   async (req, res, next) => {
@@ -1457,7 +1459,11 @@ formRouter.post(
         });
         return;
       }
-      const data = await createPaymentOrder(slug);
+      const input = paymentOrderSchema.parse(req.body);
+      const data = await createPaymentOrder(slug, {
+        answers: input.answers,
+        ...(input.email !== undefined ? { email: input.email } : {}),
+      });
       res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
       res.json({ success: true, data });
     } catch (error) {

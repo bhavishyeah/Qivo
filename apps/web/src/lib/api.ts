@@ -167,13 +167,14 @@ export async function publicPost<T>(
 // amount is computed server-side from stored settings.
 export async function createPaymentOrder(
   slug: string,
+  body: { answers: Record<string, unknown>; email?: string },
 ): Promise<{
   orderId: string;
   amount: number;
   currency: string;
   keyId: string | null;
 }> {
-  return publicPost(`/api/forms/public/${slug}/payment/order`, {});
+  return publicPost(`/api/forms/public/${slug}/payment/order`, body);
 }
 
 // Pre-Checkout duplicate pre-check. Boolean-only; called before opening

@@ -171,6 +171,14 @@ export const submitResponseSchema = z.object({
     .optional(),
 });
 
+// Body for POST /public/:slug/payment/order. The respondent's answers + email
+// are validated (without persisting) BEFORE an order is created, so a payer is
+// never charged for a submission the server would reject.
+export const paymentOrderSchema = z.object({
+  answers: z.record(z.string(), z.unknown()),
+  email: z.email().optional(),
+});
+
 // Body for the pre-Checkout duplicate pre-check (POST /public/:slug/response-check).
 // Boolean-only response; same email rule as submit.
 export const responseCheckSchema = z.object({

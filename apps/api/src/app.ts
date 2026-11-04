@@ -13,6 +13,7 @@ import { z } from "zod";
 import prisma from "./db/prisma.js";
 import { csrfProtection } from "./middleware/csrf.js";
 import { isRazorpayConfigured } from "./services/razorpay.js";
+import { zodErrorMessage } from "./utils/zodMessage.js";
 import authRouter from "./modules/auth/auth.routes.js";
 import formRouter from "./modules/forms/form.routes.js";
 import formShareRouter from "./modules/formShares/formShare.routes.js";
@@ -202,7 +203,7 @@ const errorHandler: ErrorRequestHandler = (
       success: false,
       error: {
         code: "VALIDATION_ERROR",
-        message: "Invalid request data.",
+        message: zodErrorMessage(error),
         details: error.flatten(),
       },
     });

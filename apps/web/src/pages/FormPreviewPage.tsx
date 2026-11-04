@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, ApiRequestError } from "../lib/api";
 import { evaluateConditions } from "../lib/conditions";
+import { validateQuestionFormat } from "../lib/validation";
 import { nextSectionAfter } from "../lib/sectionJumps";
 import { resolvePipedLabel } from "../lib/piping";
 import { DEFAULT_ACCENT, ensureFontLoaded, resolveTheme } from "../lib/theme";
@@ -25,6 +26,9 @@ export default function FormPreviewPage() {
   // Set when jump logic lands on the submit sentinel from a non-last section —
   // preview never submits, so it shows the disabled submit control instead.
   const [reachedEnd, setReachedEnd] = useState(false);
+  // Inline per-field format errors, keyed by question id — mirrors the public
+  // form so editors see exactly what respondents will.
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     async function loadForm() {
@@ -57,6 +61,52 @@ export default function FormPreviewPage() {
 
   function updateAnswer(questionId: string, value: AnswerValue) {
     setAnswers((c) => ({ ...c, [questionId]: value }));
+    // Clear a shown error once the value becomes valid.
+    setFieldErrors((errs) => {
+      if (!errs[questionId]) return errs;
+      const question = sections
+        .flatMap((s) => s.questions)
+        .find((q) => q.id === questionId);
+      if (question && validateQuestionFormat(question, value) === null) {
+        const { [questionId]: _r, ...rest } = errs;
+        return rest;
+      }
+      return errs;
+    });
+  }
+
+  function handleFieldBlur(question: Question) {
+    const message = validateQuestionFormat(question, answers[question.id]);
+    setFieldErrors((errs) => {
+      if (message) return { ...errs, [question.id]: message };
+      if (!errs[question.id]) return errs;
+      const { [question.id]: _r, ...rest } = errs;
+      return rest;
+    });
+  }
+
+  // Validate the current section's visible questions' formats before advancing.
+  // Returns true when it is safe to proceed.
+  function validateCurrentSection(): boolean {
+    const errors: Record<string, string> = {};
+    let firstInvalidId: string | null = null;
+    for (const q of questions) {
+      const message = validateQuestionFormat(q, answers[q.id]);
+      if (message) {
+        errors[q.id] = message;
+        if (!firstInvalidId) firstInvalidId = `preview-question-${q.id}`;
+      }
+    }
+    if (firstInvalidId) {
+      setFieldErrors((errs) => ({ ...errs, ...errors }));
+      const el = document.getElementById(firstInvalidId);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.focus({ preventScroll: true });
+      }
+      return false;
+    }
+    return true;
   }
 
   function handleInputChange(questionId: string, event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) {
@@ -195,6 +245,8 @@ export default function FormPreviewPage() {
               answers={answers}
               onChange={updateAnswer}
               onInputChange={handleInputChange}
+              error={fieldErrors[question.id]}
+              onBlur={() => handleFieldBlur(question)}
             />
           ))}
 
@@ -222,6 +274,7 @@ export default function FormPreviewPage() {
                 className="submit-button"
                 style={{ maxWidth: 240, background: previewAccent }}
                 onClick={() => {
+                  if (!validateCurrentSection()) return;
                   const step = nextSectionAfter(sections, currentSection, answers);
                   if (step.kind === "submit") {
                     setReachedEnd(true);
@@ -254,6 +307,8 @@ function PreviewQuestion({
   answers,
   onChange,
   onInputChange,
+  error,
+  onBlur,
 }: {
   question: Question;
   value: AnswerValue | undefined;
@@ -261,8 +316,17 @@ function PreviewQuestion({
   answers: Record<string, AnswerValue>;
   onChange: (id: string, value: AnswerValue) => void;
   onInputChange: (id: string, event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
+  error?: string | undefined;
+  onBlur?: (() => void) | undefined;
 }) {
   const resolvedLabel = resolvePipedLabel(question.label, allQuestions, answers);
+  const previewId = `preview-question-${question.id}`;
+  const errorId = `${previewId}-error`;
+  const errorElement = error ? (
+    <p className="field-error" id={errorId} role="alert" aria-live="polite">
+      {error}
+    </p>
+  ) : null;
 
   const label = (
     <span className="question-label">
@@ -477,9 +541,19 @@ function PreviewQuestion({
   const placeholder = question.type === "PHONE" ? "+91 98765 43210" : question.type === "URL" ? "https://example.com" : "Your answer...";
   return (
     <div className="question-field">
-      <label>{label}</label>
+      <label htmlFor={previewId}>{label}</label>
       {desc}
-      <input type={inputType} value={typeof value === "string" || typeof value === "number" ? value : ""} onChange={(e) => onInputChange(question.id, e)} placeholder={placeholder} />
+      <input
+        id={previewId}
+        type={inputType}
+        value={typeof value === "string" || typeof value === "number" ? value : ""}
+        onChange={(e) => onInputChange(question.id, e)}
+        onBlur={onBlur}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? errorId : undefined}
+        placeholder={placeholder}
+      />
+      {errorElement}
     </div>
   );
 }

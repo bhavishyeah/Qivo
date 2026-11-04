@@ -151,6 +151,8 @@ form {
 .question-field input[type="email"],
 .question-field input[type="number"],
 .question-field input[type="date"],
+.question-field input[type="tel"],
+.question-field input[type="url"],
 .question-field textarea {
   display: block;
   width: 100%;
@@ -245,6 +247,34 @@ form {
   padding: 12px 14px;
   color: #991b1b;
   background: #fef2f2;
+}
+
+/* Prominent "payment received but save failed" notice — the last-resort net. */
+.submit-error.payment-warning {
+  color: #92400e;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  font-weight: 600;
+}
+
+/* Inline per-field validation message, shown under the offending input. */
+.field-error {
+  margin: 6px 0 0;
+  color: #b91c1c;
+  font-size: 0.85rem;
+  line-height: 1.3;
+}
+
+/* Red border on an invalid field so the error is visible without scrolling. */
+.question-field input[aria-invalid="true"],
+.question-field textarea[aria-invalid="true"] {
+  border-color: #dc2626;
+}
+
+.question-field input[aria-invalid="true"]:focus,
+.question-field textarea[aria-invalid="true"]:focus {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 4px rgb(220 38 38 / 14%);
 }
 
 .empty-state {

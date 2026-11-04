@@ -15,6 +15,7 @@ import {
   ApiRequestError,
 } from "../lib/api";
 import { evaluateConditions } from "../lib/conditions";
+import { isValidEmail, validateQuestionFormat } from "../lib/validation";
 import { computeReachedSections, nextSectionAfter } from "../lib/sectionJumps";
 import { resolvePipedLabel } from "../lib/piping";
 import { isImageUrl, uploadToCloudinary } from "../lib/upload";
@@ -135,6 +136,13 @@ export default function PublicFormPage() {
   const [error, setError] = useState("");
   const [errorCode, setErrorCode] = useState("");
   const [submitError, setSubmitError] = useState("");
+  // Inline per-field format errors, keyed by field id ("respondent-email" or a
+  // question id). A field appears here only once it has been touched (blur) or a
+  // submit/Next attempt surfaced it; clearing to "" removes the message.
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  // True once the post-payment save failed, so the error banner can explain the
+  // payment was received (distinct styling + copy).
+  const [paymentSaveFailed, setPaymentSaveFailed] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [quizScore, setQuizScore] = useState<{ earned: number; total: number; percentage: number } | null>(null);
   // Stack of section INDICES the respondent has actually visited, in order.
@@ -224,7 +232,83 @@ export default function PublicFormPage() {
         () => {},
       );
     }
-    setAnswers((current) => ({ ...current, [questionId]: value }));
+    setAnswers((current) => {
+      const next = { ...current, [questionId]: value };
+      // If this field already shows an error, clear it as soon as the new value
+      // is valid (live feedback once touched). Uses the merged `next` value.
+      setFieldErrors((errs) => {
+        if (!errs[questionId]) return errs;
+        const question = allQuestions.find((q) => q.id === questionId);
+        if (!question) return errs;
+        if (validateQuestionFormat(question, value) === null) {
+          const { [questionId]: _removed, ...rest } = errs;
+          return rest;
+        }
+        return errs;
+      });
+      return next;
+    });
+  }
+
+  // Validate one question's format on blur (after it has been touched). Empty
+  // values never show a format error here — required-ness is handled on submit.
+  function handleFieldBlur(question: Question) {
+    const message = validateQuestionFormat(question, answers[question.id]);
+    setFieldErrors((errs) => {
+      if (message) return { ...errs, [question.id]: message };
+      if (!errs[question.id]) return errs;
+      const { [question.id]: _removed, ...rest } = errs;
+      return rest;
+    });
+  }
+
+  function handleEmailBlur() {
+    if (!form?.schema.settings.collectEmail) return;
+    const value = email.trim();
+    let message = "";
+    if (value && !isValidEmail(value)) {
+      message = "Please enter a valid email address, like name@example.com.";
+    }
+    setFieldErrors((errs) => {
+      if (message) return { ...errs, "respondent-email": message };
+      if (!errs["respondent-email"]) return errs;
+      const { "respondent-email": _removed, ...rest } = errs;
+      return rest;
+    });
+  }
+
+  // Scroll to and focus the first element whose id is in `ids`, in DOM order.
+  function focusFirstInvalid(ids: string[]) {
+    for (const id of ids) {
+      const el = document.getElementById(id);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        (el as HTMLElement).focus({ preventScroll: true });
+        return;
+      }
+    }
+  }
+
+  // Collect format errors for every VISIBLE question in the given sections
+  // (respecting conditional visibility). Returns the map plus ordered ids so the
+  // caller can focus the first offender. Does not include required-ness.
+  function collectFormatErrors(sectionsToCheck: Section[]): {
+    errors: Record<string, string>;
+    orderedIds: string[];
+  } {
+    const errors: Record<string, string> = {};
+    const orderedIds: string[] = [];
+    for (const section of sectionsToCheck) {
+      for (const q of section.questions) {
+        if (!evaluateConditions(q.conditions, answers)) continue;
+        const message = validateQuestionFormat(q, answers[q.id]);
+        if (message) {
+          errors[q.id] = message;
+          orderedIds.push(`question-${q.id}`);
+        }
+      }
+    }
+    return { errors, orderedIds };
   }
 
   function handleInputChange(
@@ -266,8 +350,13 @@ export default function PublicFormPage() {
 
   function validateAll(): string {
     // Check email
-    if (form?.schema.settings.collectEmail && !email.trim()) {
-      return "Please enter your email address.";
+    if (form?.schema.settings.collectEmail) {
+      if (!email.trim()) return "Please enter your email address.";
+      // The form is noValidate, so check the format ourselves — the server
+      // rejects malformed addresses with a generic 400 otherwise.
+      if (!isValidEmail(email)) {
+        return "Please enter a valid email address, like name@example.com.";
+      }
     }
     // Reach-aware: a required question in a section skipped by jump logic must
     // not block submission. The server recomputes this regardless; this only
@@ -292,6 +381,16 @@ export default function PublicFormPage() {
 
   async function handleNext() {
     setSubmitError("");
+    // Format errors for the current section's visible questions.
+    const { errors, orderedIds } = currentSection
+      ? collectFormatErrors([currentSection])
+      : { errors: {}, orderedIds: [] };
+    if (orderedIds.length > 0) {
+      setFieldErrors((errs) => ({ ...errs, ...errors }));
+      setSubmitError("Please fix the highlighted fields before continuing.");
+      focusFirstInvalid(orderedIds);
+      return;
+    }
     const validationError = validateSection(currentQuestions);
     if (validationError) {
       setSubmitError(validationError);
@@ -319,6 +418,30 @@ export default function PublicFormPage() {
 
   async function doSubmit() {
     setSubmitError("");
+    setPaymentSaveFailed(false);
+
+    // Format checks across every reached section's visible questions, plus the
+    // respondent email. Collect first so we can focus the first offender.
+    const reached = computeReachedSections(sections, answers);
+    const reachedSections = sections.filter((s) => reached.has(s.id));
+    const { errors, orderedIds } = collectFormatErrors(reachedSections);
+
+    const focusIds = [...orderedIds];
+    if (form?.schema.settings.collectEmail) {
+      const value = email.trim();
+      if (value && !isValidEmail(value)) {
+        errors["respondent-email"] =
+          "Please enter a valid email address, like name@example.com.";
+        focusIds.unshift("respondent-email");
+      }
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors((errs) => ({ ...errs, ...errors }));
+      setSubmitError("Please fix the highlighted fields before submitting.");
+      focusFirstInvalid(focusIds);
+      return;
+    }
 
     const validationError = validateAll();
     if (validationError) {
@@ -422,7 +545,13 @@ export default function PublicFormPage() {
           }
         }
 
-        const order = await createPaymentOrder(slug);
+        // Server-side pre-check: validate answers + email BEFORE an order
+        // exists, so a payer is never charged for a submission the server would
+        // reject. A 400 here surfaces the specific message and opens no Checkout.
+        const order = await createPaymentOrder(slug, {
+          answers,
+          ...(collectEmail ? { email: normalizedEmail } : {}),
+        });
         await loadRazorpayCheckout();
         if (!order.keyId || !window.Razorpay) {
           setSubmitError("Could not start the payment. Please try again.");
@@ -452,10 +581,16 @@ export default function PublicFormPage() {
               try {
                 await postResponse();
               } catch (err) {
-                setSubmitError(
+                // Last-resort net: the payment succeeded but the save failed.
+                // Make it unmistakable that money was taken and how to proceed.
+                const reason =
                   err instanceof ApiRequestError
                     ? mapEditErrorMessage(err)
-                    : "Unable to submit your response.",
+                    : "an unexpected error occurred.";
+                setPaymentSaveFailed(true);
+                setSubmitError(
+                  `Your payment was received but we could not save your response: ${reason} ` +
+                    `Please contact the form owner and quote payment id ${resp.razorpay_payment_id}.`,
                 );
               } finally {
                 setSubmitting(false);
@@ -715,11 +850,39 @@ export default function PublicFormPage() {
                 id="respondent-email"
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  // Clear the error as soon as it becomes valid (once touched).
+                  setFieldErrors((errs) => {
+                    if (!errs["respondent-email"]) return errs;
+                    if (isValidEmail(e.target.value.trim())) {
+                      const { "respondent-email": _r, ...rest } = errs;
+                      return rest;
+                    }
+                    return errs;
+                  });
+                }}
+                onBlur={handleEmailBlur}
                 required
                 autoComplete="email"
                 placeholder="you@example.com"
+                aria-invalid={fieldErrors["respondent-email"] ? true : undefined}
+                aria-describedby={
+                  fieldErrors["respondent-email"]
+                    ? "respondent-email-error"
+                    : undefined
+                }
               />
+              {fieldErrors["respondent-email"] ? (
+                <p
+                  className="field-error"
+                  id="respondent-email-error"
+                  role="alert"
+                  aria-live="polite"
+                >
+                  {fieldErrors["respondent-email"]}
+                </p>
+              ) : null}
             </div>
           ) : null}
 
@@ -743,6 +906,8 @@ export default function PublicFormPage() {
                       answers={answers}
                       onChange={updateAnswer}
                       onInputChange={handleInputChange}
+                      error={fieldErrors[question.id]}
+                      onBlur={() => handleFieldBlur(question)}
                     />
                   ))
               )}
@@ -751,7 +916,12 @@ export default function PublicFormPage() {
 
           {/* Error */}
           {submitError ? (
-            <p className="submit-error" role="alert" style={{ marginBottom: 16 }}>
+            <p
+              className={`submit-error${paymentSaveFailed ? " payment-warning" : ""}`}
+              role="alert"
+              aria-live="assertive"
+              style={{ marginBottom: 16 }}
+            >
               {submitError}
             </p>
           ) : null}
@@ -825,6 +995,8 @@ function QuestionField({
   answers,
   onChange,
   onInputChange,
+  error,
+  onBlur,
 }: {
   question: Question;
   value: AnswerValue | undefined;
@@ -836,10 +1008,20 @@ function QuestionField({
     questionId: string,
     event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => void;
+  error?: string | undefined;
+  onBlur?: (() => void) | undefined;
 }) {
   const inputId = `question-${question.id}`;
   const descriptionId = `${inputId}-description`;
+  const errorId = `${inputId}-error`;
   const description = question.description ?? undefined;
+
+  // Inline validation message shown under the offending field.
+  const errorElement = error ? (
+    <p className="field-error" id={errorId} role="alert" aria-live="polite">
+      {error}
+    </p>
+  ) : null;
 
   // File-upload state (unconditional hooks; only used by the FILE_UPLOAD branch)
   const [uploading, setUploading] = useState(false);
@@ -1327,9 +1509,18 @@ function QuestionField({
                 type="text"
                 value={entry}
                 onChange={(e) => updateEntry(idx, e.target.value)}
+                onBlur={idx === entries.length - 1 ? onBlur : undefined}
                 placeholder={`Entry ${idx + 1}`}
                 aria-label={`${question.label} — entry ${idx + 1}`}
-                aria-describedby={description && idx === 0 ? descriptionId : undefined}
+                aria-invalid={error && idx === 0 ? true : undefined}
+                aria-describedby={
+                  [
+                    description && idx === 0 ? descriptionId : null,
+                    error && idx === 0 ? errorId : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" ") || undefined
+                }
                 style={{
                   flex: 1,
                   border: "1px solid #cbd5e1",
@@ -1388,6 +1579,7 @@ function QuestionField({
             + Add another
           </button>
         )}
+        {errorElement}
       </div>
     );
   }
@@ -1417,9 +1609,16 @@ function QuestionField({
         type={inputType}
         value={typeof value === "string" || typeof value === "number" ? value : ""}
         onChange={(event) => onInputChange(question.id, event)}
-        aria-describedby={description ? descriptionId : undefined}
+        onBlur={onBlur}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={
+          [description ? descriptionId : null, error ? errorId : null]
+            .filter(Boolean)
+            .join(" ") || undefined
+        }
         placeholder={placeholder}
       />
+      {errorElement}
     </div>
   );
 }

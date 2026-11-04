@@ -1499,7 +1499,10 @@ export async function getPublicForm(
  * Inserts a `Payment` row (status `created`) bound to the form/order before
  * returning, so the verified-submit path and the webhook can both look it up.
  */
-export async function createPaymentOrder(slug: string) {
+export async function createPaymentOrder(
+  slug: string,
+  input: { answers: Record<string, unknown>; email?: string | undefined },
+) {
   const form = await prisma.form.findFirst({
     where: { slug, deletedAt: null, status: "PUBLISHED" },
   });
@@ -1532,6 +1535,25 @@ export async function createPaymentOrder(slug: string) {
     );
     const error = new Error("The configured payment amount is invalid.");
     error.name = "PAYMENT_AMOUNT_INVALID";
+    throw error;
+  }
+
+  // Non-persisting pre-check, run BEFORE any order exists so a payer is never
+  // charged for a submission the real submit would reject. Same rules as
+  // submitFormResponse (which remains the authoritative gate).
+  const normalizedEmail = input.email?.trim().toLowerCase();
+  if (schema.settings.collectEmail && !normalizedEmail) {
+    const error = new Error("Email address is required.");
+    error.name = "EMAIL_REQUIRED";
+    throw error;
+  }
+  validateSubmission(schema, input.answers);
+  if (
+    normalizedEmail &&
+    (await hasDuplicateResponse(form.id, schema, normalizedEmail))
+  ) {
+    const error = new Error("You have already submitted a response.");
+    error.name = "DUPLICATE_RESPONSE";
     throw error;
   }
 
@@ -1577,18 +1599,31 @@ export async function checkAlreadyResponded(
   }
 
   const schema = getFormSchema(form.schema);
-  const { collectEmail, allowMultipleResponses } = schema.settings;
-  if (!(collectEmail && !allowMultipleResponses)) {
-    return { alreadyResponded: false };
-  }
-
   // Normalize identically to the submit-path duplicate guard (trim + lowercase).
   const normalized = email.trim().toLowerCase();
+  return {
+    alreadyResponded: await hasDuplicateResponse(form.id, schema, normalized),
+  };
+}
+
+/**
+ * True when this (already normalized) email has a stored response AND the form
+ * applies a duplicate guard (collectEmail && !allowMultipleResponses). Shared by
+ * the response-check route and the payment-order pre-check; only hits the DB
+ * when the guard applies.
+ */
+async function hasDuplicateResponse(
+  formId: string,
+  schema: FormSchema,
+  normalizedEmail: string,
+): Promise<boolean> {
+  const { collectEmail, allowMultipleResponses } = schema.settings;
+  if (!(collectEmail && !allowMultipleResponses)) return false;
   const found = await prisma.formResponse.findFirst({
-    where: { formId: form.id, respondentEmail: normalized },
+    where: { formId, respondentEmail: normalizedEmail },
     select: { id: true },
   });
-  return { alreadyResponded: Boolean(found) };
+  return Boolean(found);
 }
 
 /**
@@ -1822,6 +1857,18 @@ export function isAllowedUploadUrl(
   return null;
 }
 
+/**
+ * Lenient phone rule: only digits, spaces, `+`, `-`, `(`, `)`, `.` and 7-15
+ * digits in total (E.164 max). Rejects obvious garbage without blocking
+ * international formats. Keep identical to isValidPhone in
+ * apps/web/src/lib/validation.ts.
+ */
+export function isValidPhoneNumber(value: string): boolean {
+  if (!/^[0-9\s+\-().]+$/.test(value)) return false;
+  const digits = value.replace(/\D/g, "").length;
+  return digits >= 7 && digits <= 15;
+}
+
 function validateAnswerAgainstQuestion(
   question: FormQuestion,
   value: unknown,
@@ -1848,8 +1895,12 @@ function validateAnswerAgainstQuestion(
   switch (question.type) {
     case "SHORT_TEXT":
     case "LONG_TEXT":
+      if (!isString) return "expected text";
+      return null;
+
     case "PHONE":
       if (!isString) return "expected text";
+      if (!isValidPhoneNumber(value)) return "invalid phone number";
       return null;
 
     case "EMAIL":
