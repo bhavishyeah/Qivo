@@ -290,7 +290,7 @@ describe("deleteExpiredDrafts", () => {
     prismaMock.formDraft.deleteMany.mockResolvedValue({ count: 3 });
     const count = await deleteExpiredDrafts();
     expect(count).toBe(3);
-    const call = prismaMock.formDraft.deleteMany.mock.calls[0][0];
+    const call = prismaMock.formDraft.deleteMany.mock.calls[0]![0];
     expect(call.where.expiresAt.lte).toBeInstanceOf(Date);
   });
 });

@@ -14,6 +14,9 @@ import {
   getPublicKeyId,
   isRazorpayConfigured,
   isValidAmountPaise,
+  MIN_PAISE,
+  MAX_PAISE,
+  paiseToRupees,
   verifyPaymentSignature,
   verifyWebhookSignature,
 } from "../../services/razorpay.js";
@@ -258,11 +261,20 @@ type FormSchema = {
     theme?: FormTheme;
     responseEditing?: "disabled" | "timed" | "until_close";
     responseEditMinutes?: number;
-    payment?: {
-      enabled: boolean;
-      amount: number; // PAISE
-      description?: string;
-    };
+    payment?:
+      | {
+          enabled: boolean;
+          mode: "fixed";
+          amount: number; // PAISE
+          description?: string;
+        }
+      | {
+          enabled: boolean;
+          mode: "respondent";
+          minAmount?: number; // PAISE
+          maxAmount?: number; // PAISE
+          description?: string;
+        };
   };
   confirmationMessage?: string;
 };
@@ -314,33 +326,55 @@ function getFormSchema(value: unknown): FormSchema {
       // Carry payment through only when present and well-formed (same
       // defensive, default-omitted posture as `theme`). A corrupt/partial
       // payment object degrades to "no payment" rather than throwing.
-      ...(candidate?.settings?.payment !== undefined &&
-      candidate.settings.payment !== null &&
-      typeof candidate.settings.payment === "object" &&
-      typeof (candidate.settings.payment as { enabled?: unknown }).enabled ===
-        "boolean" &&
-      typeof (candidate.settings.payment as { amount?: unknown }).amount ===
-        "number"
-        ? {
-            payment: {
-              enabled: (candidate.settings.payment as { enabled: boolean })
-                .enabled,
-              amount: (candidate.settings.payment as { amount: number })
-                .amount,
-              ...((candidate.settings.payment as { description?: unknown })
-                .description !== undefined &&
-              typeof (
-                candidate.settings.payment as { description?: unknown }
-              ).description === "string"
-                ? {
-                    description: (
-                      candidate.settings.payment as { description: string }
-                    ).description,
-                  }
-                : {}),
-            },
-          }
-        : {}),
+      //
+      // Mode-aware entry guard (back-compat): `enabled` must be boolean. A
+      // numeric `amount` is required ONLY for fixed/legacy (mode absent) forms;
+      // a respondent form has NO `amount` and must still survive the round-trip
+      // (otherwise the whole payment block would silently drop). Missing `mode`
+      // defaults to "fixed". amount/minAmount/maxAmount are spread only when
+      // numeric; description only when a string.
+      ...(() => {
+        const pay = candidate?.settings?.payment as
+          | {
+              enabled?: unknown;
+              mode?: unknown;
+              amount?: unknown;
+              minAmount?: unknown;
+              maxAmount?: unknown;
+              description?: unknown;
+            }
+          | null
+          | undefined;
+
+        const payOk =
+          pay != null &&
+          typeof pay === "object" &&
+          typeof pay.enabled === "boolean" &&
+          (((pay.mode === "fixed" || pay.mode === undefined) &&
+            typeof pay.amount === "number") ||
+            pay.mode === "respondent");
+
+        if (!payOk) return {};
+
+        return {
+          payment: {
+            enabled: pay.enabled as boolean,
+            mode: (typeof pay.mode === "string" ? pay.mode : "fixed") as
+              | "fixed"
+              | "respondent",
+            ...(typeof pay.amount === "number" ? { amount: pay.amount } : {}),
+            ...(typeof pay.minAmount === "number"
+              ? { minAmount: pay.minAmount }
+              : {}),
+            ...(typeof pay.maxAmount === "number"
+              ? { maxAmount: pay.maxAmount }
+              : {}),
+            ...(typeof pay.description === "string"
+              ? { description: pay.description }
+              : {}),
+          } as NonNullable<FormSchema["settings"]["payment"]>,
+        };
+      })(),
     },
     ...(candidate?.confirmationMessage !== undefined
       ? {
@@ -382,6 +416,15 @@ function formNotFoundError(
 function forbiddenError(message: string) {
   const error = new Error(message);
   error.name = "FORBIDDEN";
+  return error;
+}
+
+// Consolidated money-path amount error. `name` maps to HTTP 400 in app.ts. Used
+// by createPaymentOrder for both fixed (corrupt settings) and respondent
+// (out-of-range proposal) rejections so the name/code can never drift.
+function amountInvalid(message: string): Error {
+  const error = new Error(message);
+  error.name = "PAYMENT_AMOUNT_INVALID";
   return error;
 }
 
@@ -788,13 +831,33 @@ export async function updateFormSettings(
         : {}),
       ...(input.payment !== undefined
         ? {
-            payment: {
-              enabled: input.payment.enabled,
-              amount: input.payment.amount,
-              ...(input.payment.description !== undefined
-                ? { description: input.payment.description }
-                : {}),
-            },
+            // Per-arm merge: persist `mode` always; write only the fields the
+            // selected mode owns (never a cross-mode field). The input has
+            // already passed the Zod discriminated union, so narrowing on
+            // `mode` is sound.
+            payment:
+              input.payment.mode === "respondent"
+                ? {
+                    enabled: input.payment.enabled,
+                    mode: "respondent" as const,
+                    ...(input.payment.minAmount !== undefined
+                      ? { minAmount: input.payment.minAmount }
+                      : {}),
+                    ...(input.payment.maxAmount !== undefined
+                      ? { maxAmount: input.payment.maxAmount }
+                      : {}),
+                    ...(input.payment.description !== undefined
+                      ? { description: input.payment.description }
+                      : {}),
+                  }
+                : {
+                    enabled: input.payment.enabled,
+                    mode: "fixed" as const,
+                    amount: input.payment.amount,
+                    ...(input.payment.description !== undefined
+                      ? { description: input.payment.description }
+                      : {}),
+                  },
           }
         : {}),
     },
@@ -1488,17 +1551,38 @@ export async function getPublicForm(
     // Guarded with isValidAmountPaise so the public label never advertises an
     // amount the order endpoint would reject. Only the public key id is ever
     // exposed; the secret and webhook secret are never read here.
-    payment:
-      payment?.enabled && isValidAmountPaise(payment.amount)
-        ? {
-            required: true as const,
-            amount: payment.amount,
-            currency: "INR" as const,
-            description: payment.description ?? null,
-            keyId: getPublicKeyId(),
-            configured: isRazorpayConfigured(),
-          }
-        : { required: false as const },
+    payment: (() => {
+      if (!payment?.enabled) return { required: false as const };
+      // Narrow on `payment.mode` directly so the discriminated union resolves
+      // per-mode fields. A legacy form carries `mode: "fixed"` from the
+      // normalizer, so the fixed branch covers it too.
+      if (payment.mode === "respondent") {
+        // respondent: resolve concrete bounds (defaults to the global range) so
+        // the client always has an explicit range to display and validate.
+        return {
+          required: true as const,
+          mode: "respondent" as const,
+          minAmount: payment.minAmount ?? MIN_PAISE,
+          maxAmount: payment.maxAmount ?? MAX_PAISE,
+          currency: "INR" as const,
+          description: payment.description ?? null,
+          keyId: getPublicKeyId(),
+          configured: isRazorpayConfigured(),
+        };
+      }
+      if (!isValidAmountPaise(payment.amount)) {
+        return { required: false as const };
+      }
+      return {
+        required: true as const,
+        mode: "fixed" as const,
+        amount: payment.amount,
+        currency: "INR" as const,
+        description: payment.description ?? null,
+        keyId: getPublicKeyId(),
+        configured: isRazorpayConfigured(),
+      };
+    })(),
     schema: {
       version: schema.version,
       // Strip answer-key fields (correctAnswer/points) from every question so
@@ -1524,7 +1608,11 @@ export async function getPublicForm(
  */
 export async function createPaymentOrder(
   slug: string,
-  input: { answers: Record<string, unknown>; email?: string | undefined },
+  input: {
+    answers: Record<string, unknown>;
+    email?: string | undefined;
+    requestedAmount?: number | undefined;
+  },
 ) {
   const form = await prisma.form.findFirst({
     where: { slug, deletedAt: null, status: "PUBLISHED" },
@@ -1550,17 +1638,6 @@ export async function createPaymentOrder(
     throw error;
   }
 
-  if (!isValidAmountPaise(payment.amount)) {
-    console.warn(
-      `[razorpay] PAYMENT_AMOUNT_INVALID form=${form.id} amount=${String(
-        payment.amount,
-      )}`,
-    );
-    const error = new Error("The configured payment amount is invalid.");
-    error.name = "PAYMENT_AMOUNT_INVALID";
-    throw error;
-  }
-
   // Non-persisting pre-check, run BEFORE any order exists so a payer is never
   // charged for a submission the real submit would reject. Same rules as
   // submitFormResponse (which remains the authoritative gate).
@@ -1580,7 +1657,47 @@ export async function createPaymentOrder(
     throw error;
   }
 
-  const amountPaise = payment.amount;
+  // Resolve the authoritative amount server-side. The client proposal
+  // (requestedAmount) is consulted ONLY in respondent mode, and only after
+  // bounds validation. This runs BEFORE createRazorpayOrder and payment.create,
+  // so a rejected amount produces no order and no Payment row.
+  let amountPaise: number;
+
+  // Narrow on `payment.mode` directly. The normalizer (getFormSchema) always
+  // sets `mode` ("fixed" for legacy forms), so a missing mode never reaches
+  // here; the fixed branch is the back-compat path.
+  if (payment.mode === "respondent") {
+    const requested = input.requestedAmount;
+    if (requested == null) {
+      throw amountInvalid("Please enter an amount to pay.");
+    }
+    const min = payment.minAmount ?? MIN_PAISE; // floor at ₹1
+    const max = payment.maxAmount ?? MAX_PAISE; // cap at ₹1,50,000
+    if (!isValidAmountPaise(requested) || requested < min || requested > max) {
+      console.warn(
+        `[razorpay] PAYMENT_AMOUNT_INVALID form=${form.id} requested=${String(
+          requested,
+        )} min=${min} max=${max}`,
+      );
+      const minRs = paiseToRupees(min).toLocaleString("en-IN");
+      const maxRs = paiseToRupees(max).toLocaleString("en-IN");
+      throw amountInvalid(`Amount must be between ₹${minRs} and ₹${maxRs}.`);
+    }
+    amountPaise = requested;
+  } else {
+    // fixed: ignore any client amount entirely (existing behavior, existing
+    // guard preserved).
+    if (!isValidAmountPaise(payment.amount)) {
+      console.warn(
+        `[razorpay] PAYMENT_AMOUNT_INVALID form=${form.id} amount=${String(
+          payment.amount,
+        )}`,
+      );
+      throw amountInvalid("The configured payment amount is invalid.");
+    }
+    amountPaise = payment.amount;
+  }
+
   const order = await createRazorpayOrder({ amountPaise, slug });
 
   await prisma.payment.create({

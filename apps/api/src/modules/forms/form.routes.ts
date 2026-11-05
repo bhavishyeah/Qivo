@@ -1587,6 +1587,9 @@ formRouter.post(
       const data = await createPaymentOrder(slug, {
         answers: input.answers,
         ...(input.email !== undefined ? { email: input.email } : {}),
+        ...(input.requestedAmount !== undefined
+          ? { requestedAmount: input.requestedAmount }
+          : {}),
       });
       res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
       res.json({ success: true, data });

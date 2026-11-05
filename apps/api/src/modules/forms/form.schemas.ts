@@ -21,6 +21,10 @@ const HEX_COLOR = z
   .string()
   .regex(/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/, "must be a hex color");
 
+// Integer paise bounds: ₹1 .. ₹1,50,000. Mirrors razorpay.ts MIN_PAISE/MAX_PAISE
+// — keep in sync (the service enforces the same global range as a second gate).
+const PAISE = z.number().int().min(100).max(15_000_000);
+
 // z.strictObject rejects unknown keys so a crafted PATCH can't smuggle extra
 // JSON into stored settings.
 const themeSchema = z
@@ -48,19 +52,53 @@ export const updateFormSettingsSchema = z.object({
   theme: themeSchema,
   responseEditing: z.enum(["disabled", "timed", "until_close"]).optional(),
   responseEditMinutes: z.coerce.number().int().min(1).max(1440).optional(),
-  // Payment config. `amount` is PAISE (the web client converts rupees→paise
-  // before sending). strictObject rejects smuggled keys. `amount` is required
-  // and bounded, so a missing/out-of-bounds value is rejected in every case
-  // including `enabled: true` — no cross-field refinement needed. The
-  // enablement-dependent "payment required on submit" rule can't be expressed
-  // here (Zod doesn't see stored settings) and lives in the service as
-  // PAYMENT_REQUIRED.
+  // Payment config. Amounts are PAISE (the web client converts rupees→paise
+  // before sending). Two modes, discriminated on `mode`:
+  //  - "fixed": owner sets a required, bounded `amount`; respondent pays it.
+  //  - "respondent": owner sets optional `minAmount`/`maxAmount` bounds; the
+  //    respondent enters the amount at pay time (validated server-side).
+  // Both arms are strictObject so a crafted PATCH can't smuggle extra keys or a
+  // cross-mode field (e.g. `amount` on a respondent body). A `z.preprocess`
+  // defaults a missing `mode` to "fixed" so legacy editor clients (which send
+  // no `mode`) keep working; the fixed arm still requires `amount`. Keep PAISE
+  // bounds in sync with razorpay.ts MIN_PAISE/MAX_PAISE. The enablement-dependent
+  // "payment required on submit" rule can't be expressed here (Zod doesn't see
+  // stored settings) and lives in the service as PAYMENT_REQUIRED.
   payment: z
-    .strictObject({
-      enabled: z.boolean(),
-      amount: z.number().int().min(100).max(15_000_000),
-      description: z.string().trim().max(300).optional(),
-    })
+    .preprocess(
+      (v) =>
+        v &&
+        typeof v === "object" &&
+        (v as { mode?: unknown }).mode === undefined
+          ? { ...(v as object), mode: "fixed" }
+          : v,
+      z.discriminatedUnion("mode", [
+        z.strictObject({
+          enabled: z.boolean(),
+          mode: z.literal("fixed"),
+          amount: PAISE,
+          description: z.string().trim().max(300).optional(),
+        }),
+        z
+          .strictObject({
+            enabled: z.boolean(),
+            mode: z.literal("respondent"),
+            minAmount: PAISE.optional(),
+            maxAmount: PAISE.optional(),
+            description: z.string().trim().max(300).optional(),
+          })
+          .refine(
+            (p) =>
+              p.minAmount == null ||
+              p.maxAmount == null ||
+              p.minAmount <= p.maxAmount,
+            {
+              message: "Minimum amount must not exceed the maximum.",
+              path: ["minAmount"],
+            },
+          ),
+      ]),
+    )
     .optional(),
 });
 
@@ -178,6 +216,11 @@ export const submitResponseSchema = z.object({
 export const paymentOrderSchema = z.object({
   answers: z.record(z.string(), z.unknown()),
   email: z.email().optional(),
+  // Respondent-mode only: the amount the respondent proposes to pay, in integer
+  // PAISE. Bounded to the global range here as a cheap first gate; the
+  // authoritative per-form min/max check happens in the service (Zod can't see
+  // stored settings). Ignored entirely in fixed mode.
+  requestedAmount: PAISE.optional(),
 });
 
 // Body for the pre-Checkout duplicate pre-check (POST /public/:slug/response-check).

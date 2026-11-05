@@ -10,9 +10,13 @@ const razorpayMock = vi.hoisted(() => ({
   createRazorpayOrder: vi.fn(),
   getPublicKeyId: vi.fn(() => "rzp_test_key"),
   isRazorpayConfigured: vi.fn(() => true),
-  isValidAmountPaise: vi.fn(() => true),
+  isValidAmountPaise: vi.fn((_p: unknown) => true),
   verifyPaymentSignature: vi.fn(),
   verifyWebhookSignature: vi.fn(),
+  // Global paise bounds + rupee formatter used by the respondent-mode switch.
+  MIN_PAISE: 100,
+  MAX_PAISE: 15_000_000,
+  paiseToRupees: (paise: number) => paise / 100,
 }));
 
 vi.mock("../../db/prisma.js", () => ({ default: prismaMock }));
@@ -24,7 +28,14 @@ function formRow(opts: {
   paid?: boolean;
   collectEmail?: boolean;
   allowMultipleResponses?: boolean;
+  // Override the stored payment block (respondent mode, legacy-no-mode, etc.).
+  // When omitted, defaults to the fixed-amount block (back-compat shape).
+  payment?: Record<string, unknown>;
 }) {
+  const paymentBlock =
+    opts.payment !== undefined
+      ? opts.payment
+      : { enabled: true, amount: 50000 };
   return {
     id: "form_1",
     slug: "my-form",
@@ -43,7 +54,7 @@ function formRow(opts: {
       settings: {
         collectEmail: opts.collectEmail ?? true,
         allowMultipleResponses: opts.allowMultipleResponses ?? true,
-        ...(opts.paid === false ? {} : { payment: { enabled: true, amount: 50000 } }),
+        ...(opts.paid === false ? {} : { payment: paymentBlock }),
       },
     },
   };
@@ -142,6 +153,244 @@ describe("createPaymentOrder — pre-validation before any order", () => {
       createPaymentOrder("my-form", { answers: {}, email: "a@example.com" }),
     ).rejects.toMatchObject({ name: "PAYMENT_NOT_REQUIRED" });
     expect(razorpayMock.createRazorpayOrder).not.toHaveBeenCalled();
+  });
+});
+
+describe("createPaymentOrder — respondent mode", () => {
+  const validAnswers = { q_name: "Asha" };
+
+  it("accepts a valid in-range requestedAmount, creates the order with it, and snapshots it", async () => {
+    prismaMock.form.findFirst.mockResolvedValue(
+      formRow({
+        payment: {
+          enabled: true,
+          mode: "respondent",
+          minAmount: 10000, // ₹100
+          maxAmount: 500000, // ₹5000
+        },
+      }),
+    );
+    const result = await createPaymentOrder("my-form", {
+      answers: validAnswers,
+      email: "a@example.com",
+      requestedAmount: 25000, // ₹250, in range
+    });
+    expect(result.amount).toBe(25000);
+    // Razorpay order created with the validated amount.
+    expect(razorpayMock.createRazorpayOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ amountPaise: 25000 }),
+    );
+    // Payment row snapshots the validated amount.
+    expect(prismaMock.payment.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ amount: 25000 }),
+      }),
+    );
+  });
+
+  it("accepts exactly the min and max bounds (inclusive)", async () => {
+    prismaMock.form.findFirst.mockResolvedValue(
+      formRow({
+        payment: { enabled: true, mode: "respondent", minAmount: 10000, maxAmount: 500000 },
+      }),
+    );
+    const atMin = await createPaymentOrder("my-form", {
+      answers: validAnswers,
+      email: "a@example.com",
+      requestedAmount: 10000,
+    });
+    expect(atMin.amount).toBe(10000);
+
+    vi.clearAllMocks();
+    razorpayMock.isRazorpayConfigured.mockReturnValue(true);
+    razorpayMock.isValidAmountPaise.mockReturnValue(true);
+    razorpayMock.createRazorpayOrder.mockResolvedValue({ id: "order_2" });
+    prismaMock.formResponse.findFirst.mockResolvedValue(null);
+    prismaMock.payment.create.mockResolvedValue({});
+    prismaMock.form.findFirst.mockResolvedValue(
+      formRow({
+        payment: { enabled: true, mode: "respondent", minAmount: 10000, maxAmount: 500000 },
+      }),
+    );
+    const atMax = await createPaymentOrder("my-form", {
+      answers: validAnswers,
+      email: "a@example.com",
+      requestedAmount: 500000,
+    });
+    expect(atMax.amount).toBe(500000);
+  });
+
+  it("falls back to the global [₹1, ₹1,50,000] range when bounds are unset", async () => {
+    prismaMock.form.findFirst.mockResolvedValue(
+      formRow({ payment: { enabled: true, mode: "respondent" } }),
+    );
+    const result = await createPaymentOrder("my-form", {
+      answers: validAnswers,
+      email: "a@example.com",
+      requestedAmount: 100, // global floor ₹1
+    });
+    expect(result.amount).toBe(100);
+  });
+
+  it("rejects below-min with PAYMENT_AMOUNT_INVALID and creates NO order", async () => {
+    prismaMock.form.findFirst.mockResolvedValue(
+      formRow({ payment: { enabled: true, mode: "respondent", minAmount: 10000, maxAmount: 500000 } }),
+    );
+    await expect(
+      createPaymentOrder("my-form", {
+        answers: validAnswers,
+        email: "a@example.com",
+        requestedAmount: 9999,
+      }),
+    ).rejects.toMatchObject({ name: "PAYMENT_AMOUNT_INVALID" });
+    expect(razorpayMock.createRazorpayOrder).not.toHaveBeenCalled();
+    expect(prismaMock.payment.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects above-max with PAYMENT_AMOUNT_INVALID and creates NO order", async () => {
+    prismaMock.form.findFirst.mockResolvedValue(
+      formRow({ payment: { enabled: true, mode: "respondent", minAmount: 10000, maxAmount: 500000 } }),
+    );
+    await expect(
+      createPaymentOrder("my-form", {
+        answers: validAnswers,
+        email: "a@example.com",
+        requestedAmount: 500001,
+      }),
+    ).rejects.toMatchObject({ name: "PAYMENT_AMOUNT_INVALID" });
+    expect(razorpayMock.createRazorpayOrder).not.toHaveBeenCalled();
+    expect(prismaMock.payment.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects a non-integer requestedAmount (service guard) and creates NO order", async () => {
+    // Make the amount validator reflect real integer-checking for this case.
+    razorpayMock.isValidAmountPaise.mockImplementation(
+      (p: unknown) =>
+        typeof p === "number" && Number.isInteger(p) && p >= 100 && p <= 15_000_000,
+    );
+    prismaMock.form.findFirst.mockResolvedValue(
+      formRow({ payment: { enabled: true, mode: "respondent", minAmount: 10000, maxAmount: 500000 } }),
+    );
+    await expect(
+      createPaymentOrder("my-form", {
+        answers: validAnswers,
+        email: "a@example.com",
+        requestedAmount: 25000.5,
+      }),
+    ).rejects.toMatchObject({ name: "PAYMENT_AMOUNT_INVALID" });
+    expect(razorpayMock.createRazorpayOrder).not.toHaveBeenCalled();
+    expect(prismaMock.payment.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects an out-of-global-bounds requestedAmount and creates NO order", async () => {
+    razorpayMock.isValidAmountPaise.mockImplementation(
+      (p: unknown) =>
+        typeof p === "number" && Number.isInteger(p) && p >= 100 && p <= 15_000_000,
+    );
+    prismaMock.form.findFirst.mockResolvedValue(
+      formRow({ payment: { enabled: true, mode: "respondent" } }),
+    );
+    await expect(
+      createPaymentOrder("my-form", {
+        answers: validAnswers,
+        email: "a@example.com",
+        requestedAmount: 15_000_001, // above global max
+      }),
+    ).rejects.toMatchObject({ name: "PAYMENT_AMOUNT_INVALID" });
+    expect(razorpayMock.createRazorpayOrder).not.toHaveBeenCalled();
+    expect(prismaMock.payment.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects a missing requestedAmount with PAYMENT_AMOUNT_INVALID and creates NO order", async () => {
+    prismaMock.form.findFirst.mockResolvedValue(
+      formRow({ payment: { enabled: true, mode: "respondent", minAmount: 10000 } }),
+    );
+    await expect(
+      createPaymentOrder("my-form", {
+        answers: validAnswers,
+        email: "a@example.com",
+      }),
+    ).rejects.toMatchObject({ name: "PAYMENT_AMOUNT_INVALID" });
+    expect(razorpayMock.createRazorpayOrder).not.toHaveBeenCalled();
+    expect(prismaMock.payment.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("createPaymentOrder — fixed mode & back-compat", () => {
+  it("fixed mode ignores a client requestedAmount and uses settings.amount", async () => {
+    prismaMock.form.findFirst.mockResolvedValue(
+      formRow({ payment: { enabled: true, mode: "fixed", amount: 50000 } }),
+    );
+    const result = await createPaymentOrder("my-form", {
+      answers: { q_name: "Asha" },
+      email: "a@example.com",
+      requestedAmount: 999999, // must be ignored
+    });
+    expect(result.amount).toBe(50000);
+    expect(razorpayMock.createRazorpayOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ amountPaise: 50000 }),
+    );
+    expect(prismaMock.payment.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ amount: 50000 }) }),
+    );
+  });
+
+  it("legacy row { enabled, amount } with no mode charges as fixed and ignores requestedAmount", async () => {
+    prismaMock.form.findFirst.mockResolvedValue(
+      formRow({ payment: { enabled: true, amount: 50000 } }),
+    );
+    const result = await createPaymentOrder("my-form", {
+      answers: { q_name: "Asha" },
+      email: "a@example.com",
+      requestedAmount: 12345, // ignored on a legacy/fixed form
+    });
+    expect(result.amount).toBe(50000);
+    expect(razorpayMock.createRazorpayOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ amountPaise: 50000 }),
+    );
+  });
+
+  it("a respondent form with only minAmount (no amount) survives normalization (not dropped)", async () => {
+    // If the normalizer dropped the amount-less respondent block, this would
+    // throw PAYMENT_NOT_REQUIRED instead of validating the respondent amount.
+    prismaMock.form.findFirst.mockResolvedValue(
+      formRow({ payment: { enabled: true, mode: "respondent", minAmount: 10000 } }),
+    );
+    const result = await createPaymentOrder("my-form", {
+      answers: { q_name: "Asha" },
+      email: "a@example.com",
+      requestedAmount: 20000,
+    });
+    expect(result.amount).toBe(20000);
+  });
+});
+
+describe("paymentOrderSchema — requestedAmount Zod gate", () => {
+  it("rejects a non-integer requestedAmount at the schema boundary", async () => {
+    const { paymentOrderSchema } = await import("./form.schemas.js");
+    const parsed = paymentOrderSchema.safeParse({
+      answers: {},
+      requestedAmount: 25000.5,
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it("rejects an out-of-global-range requestedAmount at the schema boundary", async () => {
+    const { paymentOrderSchema } = await import("./form.schemas.js");
+    expect(
+      paymentOrderSchema.safeParse({ answers: {}, requestedAmount: 99 }).success,
+    ).toBe(false);
+    expect(
+      paymentOrderSchema.safeParse({ answers: {}, requestedAmount: 15_000_001 })
+        .success,
+    ).toBe(false);
+  });
+
+  it("accepts a valid in-global-range integer requestedAmount", async () => {
+    const { paymentOrderSchema } = await import("./form.schemas.js");
+    expect(
+      paymentOrderSchema.safeParse({ answers: {}, requestedAmount: 25000 }).success,
+    ).toBe(true);
   });
 });
 
