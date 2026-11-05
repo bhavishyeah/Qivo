@@ -150,6 +150,10 @@ export default function FormEditorPage() {
   const [paymentMinRupees, setPaymentMinRupees] = useState("");
   const [paymentMaxRupees, setPaymentMaxRupees] = useState("");
   const [paymentDescription, setPaymentDescription] = useState("");
+  // Response capacity ("seats left"). Off by default; limit kept as text so an
+  // empty field during editing doesn't fight the number input.
+  const [capacityEnabled, setCapacityEnabled] = useState(false);
+  const [capacityLimit, setCapacityLimit] = useState("");
   const [savingSettings, setSavingSettings] = useState(false);
 
   // Appearance (per-form theme). "" means inherit / default.
@@ -238,6 +242,13 @@ export default function FormEditorPage() {
         : "",
     );
     setPaymentDescription(payment?.description ?? "");
+    const capacity = schema.settings?.capacity;
+    setCapacityEnabled(capacity?.enabled ?? false);
+    setCapacityLimit(
+      capacity && typeof capacity.limit === "number"
+        ? String(capacity.limit)
+        : "",
+    );
     const theme = schema.settings?.theme;
     setCoverImageUrl(theme?.coverImageUrl ?? "");
     setAccentColor(theme?.accentColor ?? "");
@@ -821,6 +832,34 @@ export default function FormEditorPage() {
       }
     }
 
+    // Build the capacity block. `limit` is ALWAYS a valid integer in
+    // [1, 1_000_000] (mirroring how payment always sends a valid amount), so
+    // disabling capacity never loses the saved limit. When enabled, validate
+    // the owner's entry; when disabled, carry the current value (or 1).
+    let capacity: { enabled: boolean; limit: number };
+    const parsedLimit = Math.trunc(Number(capacityLimit));
+    if (capacityEnabled) {
+      if (
+        !Number.isFinite(Number(capacityLimit)) ||
+        !Number.isInteger(parsedLimit) ||
+        parsedLimit < 1 ||
+        parsedLimit > 1_000_000
+      ) {
+        setSavingSettings(false);
+        setError("Enter a maximum of responses between 1 and 1,000,000.");
+        return;
+      }
+      capacity = { enabled: true, limit: parsedLimit };
+    } else {
+      const carried =
+        Number.isInteger(parsedLimit) &&
+        parsedLimit >= 1 &&
+        parsedLimit <= 1_000_000
+          ? parsedLimit
+          : 1;
+      capacity = { enabled: false, limit: carried };
+    }
+
     try {
       const data = await api.patch<{ form: FormRecord }>(
         `/api/forms/${formId}/settings`,
@@ -839,6 +878,7 @@ export default function FormEditorPage() {
           responseEditMinutes,
           payment,
           theme,
+          capacity,
         },
       );
       setForm(data.form); setMessage("Settings saved.");
@@ -1377,6 +1417,16 @@ export default function FormEditorPage() {
                   </div>
                   <small className="muted">Razorpay keys must be set on the server to collect live payments.</small>
                 </>
+              ) : null}
+            </SettingsGroup>
+            <SettingsGroup title="Capacity" description="Cap the number of responses this form accepts" summary={capacityEnabled ? `Limited · ${capacityLimit || "0"} max` : "Unlimited"}>
+              <label className="settings-toggle"><input type="checkbox" checked={capacityEnabled} onChange={(e) => setCapacityEnabled(e.target.checked)} /><span><strong>Limit the number of responses</strong><small>Stop accepting responses once the maximum is reached (e.g. event seats). Raise the limit later to reopen.</small></span></label>
+              {capacityEnabled ? (
+                <div className="question-field">
+                  <label htmlFor="s-capacity-limit">Maximum responses</label>
+                  <input id="s-capacity-limit" type="number" min={1} max={1000000} step={1} inputMode="numeric" value={capacityLimit} onChange={(e) => setCapacityLimit(e.target.value)} placeholder="120" style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }} />
+                  <small className="muted">The form shows "X of N seats left" and becomes fully booked at this count. Between 1 and 1,000,000.</small>
+                </div>
               ) : null}
             </SettingsGroup>
           </form>

@@ -26,6 +26,12 @@ import {
   validatePaymentAmountRupees,
 } from "../lib/validation";
 import { computeReachedSections, nextSectionAfter } from "../lib/sectionJumps";
+import {
+  isScheduleClosed,
+  isFullyBooked,
+  shouldShowSeatsCounter,
+  seatsLeftLabel,
+} from "../lib/capacity";
 import { clampResumeSection } from "../lib/resumeSection";
 import { resolvePipedLabel } from "../lib/piping";
 import { isImageUrl, uploadToCloudinary } from "../lib/upload";
@@ -157,6 +163,10 @@ export default function PublicFormPage() {
   // True once the post-payment save failed, so the error banner can explain the
   // payment was received (distinct styling + copy).
   const [paymentSaveFailed, setPaymentSaveFailed] = useState(false);
+  // Flipped true when a submit is rejected with FORM_FULL (the form filled
+  // between load and submit), so the page re-renders the fully-booked card
+  // instead of a generic submit error.
+  const [fullyBooked, setFullyBooked] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [quizScore, setQuizScore] = useState<{ earned: number; total: number; percentage: number } | null>(null);
   // Stack of section INDICES the respondent has actually visited, in order.
@@ -780,6 +790,13 @@ export default function PublicFormPage() {
 
       await postResponse();
     } catch (err) {
+      // Free-path FORM_FULL: the form filled between load and submit. Flip into
+      // the fully-booked card instead of leaving a confusing generic error.
+      if (err instanceof ApiRequestError && err.code === "FORM_FULL") {
+        setFullyBooked(true);
+        setSubmitting(false);
+        return;
+      }
       setSubmitError(
         err instanceof ApiRequestError
           ? mapEditErrorMessage(err)
@@ -814,6 +831,11 @@ export default function PublicFormPage() {
         return "Editing is no longer allowed.";
       case "INVALID_EDIT_TOKEN":
         return "This edit link is no longer valid.";
+      case "FORM_FULL":
+        // Cosmetic: the default already returns err.message; kept explicit so
+        // the paid-path "payment received but not saved: <reason>" sentence
+        // reads cleanly.
+        return err.message;
       default:
         return err.message;
     }
@@ -934,6 +956,27 @@ export default function PublicFormPage() {
     );
   }
 
+  // ─── Fully booked (capacity reached) ────────────────────────────────────────
+
+  // A form past its scheduled close takes precedence: it never shows the
+  // fully-booked card (the submit-time FORM_CLOSED is the authoritative gate for
+  // that state). Otherwise, show the fully-booked card when either the payload
+  // reported 0 seats at load, or a submit raced to full (fullyBooked flag).
+  const scheduleClosed = isScheduleClosed(form.schema.settings);
+
+  if (isFullyBooked(form.capacity, fullyBooked, scheduleClosed)) {
+    return (
+      <main className="public-form-shell">
+        <div className="public-status-card public-status-error">
+          <div className="public-status-icon" aria-hidden="true">🎟️</div>
+          <h1>Fully booked</h1>
+          <p>This form is fully booked — no more responses are being accepted.</p>
+          <p className="public-status-brand">Powered by Qivo Forms</p>
+        </div>
+      </main>
+    );
+  }
+
   // ─── Form ─────────────────────────────────────────────────────────────────
 
   const isLastSection = currentSectionIndex === totalSections - 1;
@@ -1021,6 +1064,22 @@ export default function PublicFormPage() {
             <p className="public-section-counter" aria-live="polite">
               Section {currentSectionIndex + 1} of {totalSections}
               {currentSection?.title ? ` — ${currentSection.title}` : ""}
+            </p>
+          ) : null}
+          {/* Seats-left counter. Shown only when capacity is on and seats remain
+              (the fully-booked card above handles 0 seats). Read from the load
+              payload; the authoritative gate is the atomic submit. */}
+          {shouldShowSeatsCounter(form.capacity) ? (
+            <p
+              className="public-capacity-counter"
+              aria-live="polite"
+              style={{
+                margin: "10px 0 0",
+                fontWeight: 600,
+                color: resolved.accent ?? "var(--qivo-text-secondary, #475569)",
+              }}
+            >
+              {seatsLeftLabel(form.capacity!)}
             </p>
           ) : null}
         </header>

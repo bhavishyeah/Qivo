@@ -108,6 +108,8 @@ export type FormSchema = {
           maxAmount?: number; // PAISE
           description?: string;
         };
+    // Response capacity ("seats left"). Off by default (absent = unlimited).
+    capacity?: { enabled: boolean; limit: number };
   };
   confirmationMessage?: string;
 };
@@ -149,6 +151,16 @@ export type PublicForm = {
     description?: string | null;
     keyId?: string | null;
     configured?: boolean;
+  };
+  // Top-level derived capacity block (sibling of schema), from getPublicForm.
+  // Present always; `enabled: false` when the form has no capacity limit. When
+  // enabled, `limit`/`submitted`/`seatsLeft` describe the live seat usage
+  // (seatsLeft is server-clamped to >= 0).
+  capacity?: {
+    enabled: boolean;
+    limit?: number;
+    submitted?: number;
+    seatsLeft?: number;
   };
   schema: FormSchema;
 };
