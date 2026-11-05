@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { WEBHOOK_EVENTS } from "../../services/webhookDelivery.js";
+
 /**
  * Synchronous validation only. The URL is checked for shape + https scheme
  * here; the async SSRF/DNS check lives in the service (an async refinement
@@ -18,10 +20,12 @@ export const createWebhookSchema = z.object({
       }
     }, "Webhook URL must use https."),
   description: z.string().trim().max(200).optional(),
+  events: z.array(z.enum(WEBHOOK_EVENTS)).min(1).optional(),
 });
 
 export const updateWebhookSchema = z.object({
   enabled: z.boolean(),
+  events: z.array(z.enum(WEBHOOK_EVENTS)).min(1).optional(),
 });
 
 export const deliveriesQuerySchema = z.object({

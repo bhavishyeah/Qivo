@@ -1672,6 +1672,7 @@ formRouter.post(
       const webhook = await createWebhook(formId, req.user.id, {
         url: input.url,
         ...(input.description !== undefined ? { description: input.description } : {}),
+        ...(input.events !== undefined ? { events: input.events } : {}),
       });
       res.status(201).json({ success: true, data: { webhook } });
     } catch (error) {
@@ -1695,7 +1696,10 @@ formRouter.patch(
         return;
       }
       const input = updateWebhookSchema.parse(req.body);
-      const webhook = await updateWebhook(formId, webhookId, req.user.id, { enabled: input.enabled });
+      const webhook = await updateWebhook(formId, webhookId, req.user.id, {
+        enabled: input.enabled,
+        ...(input.events !== undefined ? { events: input.events } : {}),
+      });
       res.json({ success: true, data: { webhook } });
     } catch (error) {
       next(error);

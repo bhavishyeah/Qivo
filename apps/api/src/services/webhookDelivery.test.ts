@@ -8,6 +8,8 @@ import {
   classifyAddress,
   isBlockedHostname,
   buildResponseCreatedPayload,
+  buildFormEventPayload,
+  webhookAcceptsEvent,
 } from "./webhookDelivery.js";
 
 describe("computeSignature", () => {
@@ -298,5 +300,55 @@ describe("buildResponseCreatedPayload (AC8)", () => {
       q_single: "option_gone",
       q_multi: ["Known", "orphan"],
     });
+  });
+});
+
+describe("buildFormEventPayload", () => {
+  it("produces the pinned {event,formId,formTitle,slug,status,at} shape", () => {
+    const payload = buildFormEventPayload("form.published", {
+      id: "form_1",
+      title: "Customer Survey",
+      slug: "customer-survey",
+      status: "PUBLISHED",
+    });
+    expect(payload.event).toBe("form.published");
+    expect(payload.formId).toBe("form_1");
+    expect(payload.formTitle).toBe("Customer Survey");
+    expect(payload.slug).toBe("customer-survey");
+    expect(payload.status).toBe("PUBLISHED");
+    expect(Object.keys(payload).sort()).toEqual(
+      ["at", "event", "formId", "formTitle", "slug", "status"],
+    );
+  });
+
+  it("stamps `at` as a parseable ISO-8601 string", () => {
+    const payload = buildFormEventPayload("form.closed", {
+      id: "f",
+      title: "t",
+      slug: "s",
+      status: "CLOSED",
+    });
+    expect(typeof payload.at).toBe("string");
+    expect(payload.at).toBe(new Date(payload.at).toISOString());
+    expect(Number.isNaN(Date.parse(payload.at))).toBe(false);
+  });
+});
+
+describe("webhookAcceptsEvent", () => {
+  it("is false when a response-only webhook is tested for form.published", () => {
+    expect(webhookAcceptsEvent(["response.created"], "form.published")).toBe(false);
+  });
+
+  it("is true when the subscribed list includes the event", () => {
+    expect(webhookAcceptsEvent(["form.published"], "form.published")).toBe(true);
+    expect(
+      webhookAcceptsEvent(["response.created", "form.closed"], "form.closed"),
+    ).toBe(true);
+  });
+
+  it("is false for null, undefined, or an empty list", () => {
+    expect(webhookAcceptsEvent(null, "form.published")).toBe(false);
+    expect(webhookAcceptsEvent(undefined, "form.published")).toBe(false);
+    expect(webhookAcceptsEvent([], "form.published")).toBe(false);
   });
 });

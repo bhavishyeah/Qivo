@@ -29,6 +29,7 @@ import {
 import {
   sendWebhooksForResponse,
   buildResponseCreatedPayload,
+  sendFormEventWebhooks,
 } from "../../services/webhookDelivery.js";
 import { stripPipingTokens } from "../../utils/pipingTokens.js";
 import { TEMPLATES } from "./templates.js";
@@ -1390,6 +1391,20 @@ export async function publishForm(
     });
   })().catch((err) => console.error("FORM_PUBLISHED notification failed:", err));
 
+  // Outbound webhooks (form.published). Fire-and-forget so a webhook can never
+  // break publishing.
+  void (async () => {
+    await sendFormEventWebhooks(
+      {
+        id: updatedForm.id,
+        title: updatedForm.title,
+        slug: updatedForm.slug,
+        status: updatedForm.status,
+      },
+      "form.published",
+    );
+  })().catch((err) => console.error("form.published webhook trigger failed:", err));
+
   return updatedForm;
 }
 
@@ -2325,6 +2340,24 @@ export async function closeDueForms(now: Date = new Date()): Promise<number> {
     where: { id: { in: dueIds } },
     data: { status: "CLOSED" },
   });
+
+  // Outbound webhooks (form.closed) for each just-closed form. Fire-and-forget
+  // in one try/catch so a webhook failure never breaks the sweep.
+  void (async () => {
+    const closed = await prisma.form.findMany({
+      where: { id: { in: dueIds } },
+      select: { id: true, title: true, slug: true, status: true },
+    });
+    await Promise.allSettled(
+      closed.map((f) =>
+        sendFormEventWebhooks(
+          { id: f.id, title: f.title, slug: f.slug, status: f.status },
+          "form.closed",
+        ),
+      ),
+    );
+  })().catch((err) => console.error("form.closed sweep webhook trigger failed:", err));
+
   return result.count;
 }
 
@@ -3486,6 +3519,20 @@ export async function closeForm(
     entityId: form.id,
     metadata: { title: form.title },
   }).catch((err) => console.error("logAction FORM_CLOSED failed:", err));
+
+  // Outbound webhooks (form.closed). Fire-and-forget so a webhook can never
+  // break closing.
+  void (async () => {
+    await sendFormEventWebhooks(
+      {
+        id: updatedForm.id,
+        title: updatedForm.title,
+        slug: updatedForm.slug,
+        status: updatedForm.status,
+      },
+      "form.closed",
+    );
+  })().catch((err) => console.error("form.closed webhook trigger failed:", err));
 
   return updatedForm;
 }

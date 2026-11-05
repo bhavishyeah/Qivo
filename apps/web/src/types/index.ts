@@ -199,6 +199,7 @@ export type Webhook = {
   url: string;
   description: string | null;
   enabled: boolean;
+  events: string[];
   secret: string;
   createdAt: string;
 };

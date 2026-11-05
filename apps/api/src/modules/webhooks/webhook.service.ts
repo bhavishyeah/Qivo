@@ -20,6 +20,7 @@ type WebhookDto = {
   url: string;
   description: string | null;
   enabled: boolean;
+  events: string[];
   secret: string;
   createdAt: Date;
 };
@@ -53,6 +54,7 @@ function toWebhookDto(w: {
   url: string;
   description: string | null;
   enabled: boolean;
+  events: string[];
   secret: string;
   createdAt: Date;
 }): WebhookDto {
@@ -62,6 +64,7 @@ function toWebhookDto(w: {
     url: w.url,
     description: w.description,
     enabled: w.enabled,
+    events: w.events,
     secret: w.secret,
     createdAt: w.createdAt,
   };
@@ -88,7 +91,7 @@ export async function listWebhooks(formId: string, userId: string): Promise<Webh
 export async function createWebhook(
   formId: string,
   userId: string,
-  input: { url: string; description?: string | undefined },
+  input: { url: string; description?: string | undefined; events?: string[] | undefined },
 ): Promise<WebhookDto> {
   await getEditableForm(formId, userId);
 
@@ -110,6 +113,7 @@ export async function createWebhook(
       url: input.url,
       secret,
       description: input.description ?? null,
+      events: input.events ?? ["response.created"],
       createdById: userId,
     },
   });
@@ -120,13 +124,16 @@ export async function updateWebhook(
   formId: string,
   webhookId: string,
   userId: string,
-  input: { enabled: boolean },
+  input: { enabled: boolean; events?: string[] | undefined },
 ): Promise<WebhookDto> {
   await getEditableForm(formId, userId);
   await getWebhookForForm(formId, webhookId);
   const updated = await prisma.webhook.update({
     where: { id: webhookId },
-    data: { enabled: input.enabled },
+    data: {
+      enabled: input.enabled,
+      ...(input.events !== undefined ? { events: input.events } : {}),
+    },
   });
   return toWebhookDto(updated);
 }

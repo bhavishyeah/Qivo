@@ -35,6 +35,18 @@ export const MAX_WEBHOOKS_PER_FORM = 10;
 
 const EVENT_RESPONSE_CREATED = "response.created";
 
+/**
+ * All event names a webhook can subscribe to. Readonly tuple so the Zod schema
+ * (z.enum) and the TS union stay in lockstep with this single source of truth.
+ */
+export const WEBHOOK_EVENTS = [
+  "response.created",
+  "form.published",
+  "form.closed",
+] as const;
+
+export type WebhookEvent = (typeof WEBHOOK_EVENTS)[number];
+
 // ── Signing (pure) ───────────────────────────────────────────────────────────
 
 /**
@@ -173,6 +185,48 @@ export function buildResponseCreatedPayload(args: {
     questions,
     optionLabels,
   };
+}
+
+// ── Form-event payload + subscription predicate (pure) ───────────────────────
+
+/** Pinned payload shape for the form-lifecycle events (published/closed). */
+export type FormEventPayload = {
+  event: WebhookEvent;
+  formId: string;
+  formTitle: string;
+  slug: string;
+  status: string;
+  at: string;
+};
+
+/**
+ * Build the pinned payload for a form-lifecycle event. `at` is the emit time as
+ * an ISO-8601 string.
+ */
+export function buildFormEventPayload(
+  event: WebhookEvent,
+  form: { id: string; title: string; slug: string; status: string },
+): FormEventPayload {
+  return {
+    event,
+    formId: form.id,
+    formTitle: form.title,
+    slug: form.slug,
+    status: form.status,
+    at: new Date().toISOString(),
+  };
+}
+
+/**
+ * Whether a webhook's subscribed `events` list opts into `event`. A missing or
+ * non-array list (e.g. a legacy row read before backfill) subscribes to
+ * nothing here; the DB default guarantees real rows carry response.created.
+ */
+export function webhookAcceptsEvent(
+  events: string[] | null | undefined,
+  event: string,
+): boolean {
+  return Array.isArray(events) && events.includes(event);
 }
 
 // ── Due-selection predicate (pure) ───────────────────────────────────────────
@@ -484,9 +538,11 @@ export async function sendWebhooksForResponse(
   payload: ResponseCreatedPayload,
 ): Promise<void> {
   try {
-    const webhooks = await prisma.webhook.findMany({
-      where: { formId, enabled: true },
-    });
+    const webhooks = (
+      await prisma.webhook.findMany({
+        where: { formId, enabled: true },
+      })
+    ).filter((w) => webhookAcceptsEvent(w.events, payload.event));
     if (webhooks.length === 0) return;
 
     const deliveryIds: string[] = [];
@@ -506,6 +562,49 @@ export async function sendWebhooksForResponse(
     await Promise.allSettled(deliveryIds.map((id) => attemptDelivery(id)));
   } catch (err) {
     console.error("[webhook] sendWebhooksForResponse failed:", err);
+  }
+}
+
+/**
+ * Immediate fan-out for a form-lifecycle event (form.published/form.closed).
+ * Loads the form's enabled webhooks, keeps only those subscribed to `event`,
+ * bounds fan-out by MAX_WEBHOOKS_PER_FORM, creates a pending delivery per row
+ * with the pinned FormEventPayload, and runs the first attempt immediately.
+ * Mirrors sendWebhooksForResponse and never throws to its caller.
+ */
+export async function sendFormEventWebhooks(
+  form: { id: string; title: string; slug: string; status: string },
+  event: WebhookEvent,
+): Promise<void> {
+  try {
+    const webhooks = (
+      await prisma.webhook.findMany({
+        where: { formId: form.id, enabled: true },
+      })
+    )
+      .filter((w) => webhookAcceptsEvent(w.events, event))
+      .slice(0, MAX_WEBHOOKS_PER_FORM);
+    if (webhooks.length === 0) return;
+
+    const payload = buildFormEventPayload(event, form);
+
+    const deliveryIds: string[] = [];
+    for (const webhook of webhooks) {
+      const delivery = await prisma.webhookDelivery.create({
+        data: {
+          webhookId: webhook.id,
+          event,
+          status: WebhookDeliveryStatus.pending,
+          attempts: 0,
+          payload: payload as unknown as object,
+        },
+      });
+      deliveryIds.push(delivery.id);
+    }
+
+    await Promise.allSettled(deliveryIds.map((id) => attemptDelivery(id)));
+  } catch (err) {
+    console.error("[webhook] sendFormEventWebhooks failed:", err);
   }
 }
 

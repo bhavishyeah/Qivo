@@ -17,6 +17,20 @@ const STATUS_LABELS: Record<WebhookDelivery["status"], string> = {
   exhausted: "Exhausted",
 };
 
+/** Friendly labels for each subscribable webhook event. */
+const EVENT_LABELS: Record<string, string> = {
+  "response.created": "New response",
+  "form.published": "Form published",
+  "form.closed": "Form closed",
+};
+
+/** The events a user can subscribe a webhook to, in display order. */
+const EVENT_OPTIONS = [
+  "response.created",
+  "form.published",
+  "form.closed",
+] as const;
+
 function statusBadgeStyle(status: WebhookDelivery["status"]): React.CSSProperties {
   const palette: Record<WebhookDelivery["status"], { bg: string; fg: string }> = {
     delivered: { bg: "#dcfce7", fg: "#166534" },
@@ -59,7 +73,14 @@ export default function WebhooksTabPanel({ formId }: { formId: string }) {
   // Add-form state
   const [url, setUrl] = useState("");
   const [description, setDescription] = useState("");
+  const [events, setEvents] = useState<string[]>(["response.created"]);
   const [adding, setAdding] = useState(false);
+
+  function toggleEvent(event: string) {
+    setEvents((prev) =>
+      prev.includes(event) ? prev.filter((e) => e !== event) : [...prev, event],
+    );
+  }
 
   const load = useCallback(async () => {
     try {
@@ -86,13 +107,16 @@ export default function WebhooksTabPanel({ formId }: { formId: string }) {
     }
     setAdding(true);
     try {
+      const chosenEvents = events.length > 0 ? events : ["response.created"];
       const data = await api.post<{ webhook: Webhook }>(`/api/forms/${formId}/webhooks`, {
         url: url.trim(),
         ...(description.trim() ? { description: description.trim() } : {}),
+        events: chosenEvents,
       });
       setWebhooks((prev) => [...prev, data.webhook]);
       setUrl("");
       setDescription("");
+      setEvents(["response.created"]);
       setMessage("Webhook added.");
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : "Unable to add webhook.");
@@ -191,6 +215,22 @@ export default function WebhooksTabPanel({ formId }: { formId: string }) {
             placeholder="e.g. Zapier intake"
           />
         </label>
+        <fieldset style={{ display: "grid", gap: 6, border: "none", padding: 0, margin: 0 }}>
+          <span style={{ fontWeight: 600 }}>Events</span>
+          {EVENT_OPTIONS.map((event) => (
+            <label
+              key={event}
+              style={{ display: "flex", gap: 8, alignItems: "center", fontWeight: 400 }}
+            >
+              <input
+                type="checkbox"
+                checked={events.includes(event)}
+                onChange={() => toggleEvent(event)}
+              />
+              <span>{EVENT_LABELS[event]}</span>
+            </label>
+          ))}
+        </fieldset>
         <div>
           <button type="submit" className="secondary-button" disabled={adding}>
             {adding ? "Adding..." : "Add webhook"}
@@ -275,6 +315,12 @@ function WebhookRow({
           {webhook.description ? (
             <p style={{ margin: "4px 0 0", color: "#64748b" }}>{webhook.description}</p>
           ) : null}
+          <p style={{ margin: "6px 0 0", color: "#64748b", fontSize: 13 }}>
+            Events:{" "}
+            {webhook.events.length > 0
+              ? webhook.events.map((e) => EVENT_LABELS[e] ?? e).join(", ")
+              : "None"}
+          </p>
         </div>
         <label className="settings-toggle" style={{ flexShrink: 0 }}>
           <input type="checkbox" checked={webhook.enabled} onChange={onToggle} />
