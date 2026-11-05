@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolvePipedLabel } from "./piping";
+import { resolvePipedLabel, stripPipingTokens } from "./piping";
 import type { AnswerValue, Question } from "../types";
 
 function q(partial: Partial<Question> & { id: string }): Question {
@@ -143,5 +143,43 @@ describe("resolvePipedLabel", () => {
     expect(resolve("{{question_a}}", questions, { question_a: "option_1" })).toBe(
       "option_1",
     );
+  });
+});
+
+describe("stripPipingTokens", () => {
+  it("resolves a token to the referenced question's label in brackets", () => {
+    const questions = [q({ id: "question_team", label: "Team name" })];
+    expect(stripPipingTokens("Welcome {{question_team}}!", questions)).toBe(
+      "Welcome [Team name]!",
+    );
+  });
+
+  it("falls back to [answer] for an unknown token", () => {
+    expect(stripPipingTokens("Hello {{question_missing}}", [])).toBe(
+      "Hello [answer]",
+    );
+  });
+
+  it("neutralizes multiple tokens in one label", () => {
+    const questions = [
+      q({ id: "question_team", label: "Team name" }),
+      q({ id: "question_city", label: "City" }),
+    ];
+    expect(
+      stripPipingTokens(
+        "{{question_team}} in {{question_city}} ({{question_gone}})",
+        questions,
+      ),
+    ).toBe("[Team name] in [City] ([answer])");
+  });
+
+  it("leaves a label without tokens unchanged", () => {
+    const questions = [q({ id: "question_a", label: "Plain" })];
+    expect(stripPipingTokens("Plain label", questions)).toBe("Plain label");
+  });
+
+  it("tolerates whitespace inside the braces", () => {
+    const questions = [q({ id: "question_a", label: "Name" })];
+    expect(stripPipingTokens("Hi {{  question_a  }}", questions)).toBe("Hi [Name]");
   });
 });

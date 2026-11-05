@@ -1283,9 +1283,9 @@ export default function FormEditorPage() {
             </button>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 320px)", gap: 24 }}>
+          <div className="appearance-layout">
             {/* Controls */}
-            <div style={{ display: "grid", gap: 20 }}>
+            <div className="appearance-controls">
               {/* Cover image */}
               <div className="question-field">
                 <label>Cover image</label>
@@ -1427,7 +1427,7 @@ function AppearancePreview({
   const previewAccent = resolved.accent ?? DEFAULT_ACCENT;
 
   return (
-    <div>
+    <div className="appearance-preview">
       <p className="eyebrow" style={{ marginBottom: 8 }}>Live preview</p>
       <div
         style={{

@@ -4,7 +4,18 @@ import * as XLSX from "xlsx";
 import { api, ApiRequestError } from "../lib/api";
 import { isImageUrl } from "../lib/upload";
 import { Chips } from "../components/Chips";
+import { stripPipingTokens } from "../lib/piping";
 import type { FormRecord, Question, ResponseRecord } from "../types";
+
+/**
+ * Column header for a question's stored label. The response dashboard and its
+ * CSV/XLSX exports are non-resolving contexts, so neutralize any `{{questionId}}`
+ * piping tokens to a readable placeholder (referenced label or "[answer]")
+ * instead of leaking raw braces. Display-only; the stored label is untouched.
+ */
+function questionHeaderLabel(question: Question, questions: Question[]): string {
+  return stripPipingTokens(question.label, questions);
+}
 
 function formatResponseValue(value: unknown): string {
   if (value === null || value === undefined) return "—";
@@ -58,7 +69,11 @@ function downloadResponsesCsv(
   questions: Question[],
   formTitle: string,
 ) {
-  const headers = ["Submitted at", "Email", ...questions.map((q) => q.label)];
+  const headers = [
+    "Submitted at",
+    "Email",
+    ...questions.map((q) => questionHeaderLabel(q, questions)),
+  ];
 
   const rows = responses.map((response) => {
     const email =
@@ -91,7 +106,11 @@ function downloadResponsesExcel(
   questions: Question[],
   formTitle: string,
 ) {
-  const headers = ["Submitted at", "Email", ...questions.map((q) => q.label)];
+  const headers = [
+    "Submitted at",
+    "Email",
+    ...questions.map((q) => questionHeaderLabel(q, questions)),
+  ];
 
   const rows = responses.map((response) => {
     const email = typeof response.metadata?.email === "string" ? response.metadata.email : "";
@@ -429,7 +448,11 @@ function ResponseDetail({
   questions: Question[];
   onClose: () => void;
 }) {
-  const questionLabels = new Map(questions.map((q) => [q.id, q.label]));
+  // Non-resolving context: neutralize piping tokens in stored labels so the
+  // detail view shows a readable placeholder, never raw `{{question_abc}}`.
+  const questionLabels = new Map(
+    questions.map((q) => [q.id, stripPipingTokens(q.label, questions)]),
+  );
   const answerEntries = Object.entries(response.answers);
 
   return (

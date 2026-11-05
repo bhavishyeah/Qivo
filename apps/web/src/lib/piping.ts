@@ -97,3 +97,32 @@ export function resolvePipedLabel(
     return renderAnswerValue(q, value);
   });
 }
+
+/** Neutral placeholder used when a referenced question label is unavailable. */
+const STRIP_FALLBACK = "[answer]";
+
+/**
+ * Display-only neutralization of piping tokens for contexts that do NOT
+ * live-resolve them (reports page, response-dashboard headers, CSV/XLSX export
+ * headers). A question's stored label may embed `{{questionId}}` tokens; outside
+ * the live form those would leak as raw `{{question_abc}}`. This replaces each
+ * token with the referenced question's own label in brackets when resolvable
+ * (e.g. `{{q_team}}` -> `[Team name]`), otherwise with a generic `[answer]`.
+ *
+ * The stored label is never mutated — pass the raw label and use the result for
+ * display only. A label with no tokens is returned unchanged.
+ */
+export function stripPipingTokens(
+  label: string,
+  questions: Question[],
+): string {
+  if (typeof label !== "string" || label.indexOf("{{") === -1) return label;
+
+  const byId = new Map<string, Question>();
+  for (const q of questions) byId.set(q.id, q);
+
+  return label.replace(PIPING_TOKEN_RE, (_match, id: string) => {
+    const referenced = byId.get(id)?.label?.trim();
+    return referenced ? `[${referenced}]` : STRIP_FALLBACK;
+  });
+}

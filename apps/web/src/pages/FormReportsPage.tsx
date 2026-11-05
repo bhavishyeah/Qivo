@@ -14,6 +14,7 @@ import {
 } from "recharts";
 import { api, ApiRequestError } from "../lib/api";
 import { isImageUrl } from "../lib/upload";
+import { stripPipingTokens } from "../lib/piping";
 import { Chips } from "../components/Chips";
 import { FunnelChart } from "../components/FunnelChart";
 import { StatCards } from "../components/StatCards";
@@ -273,10 +274,17 @@ export default function FormReportsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formId, range, filter, reloadKey]);
 
-  const questions: ToolbarQuestion[] = useMemo(
-    () => (report ? report.questions.map((q) => ({ id: q.questionId, label: q.label })) : []),
-    [report],
-  );
+  const questions: ToolbarQuestion[] = useMemo(() => {
+    if (!report) return [];
+    const resolution = report.questions.map((q) => ({
+      id: q.questionId,
+      label: q.label,
+    })) as unknown as Parameters<typeof stripPipingTokens>[1];
+    return report.questions.map((q) => ({
+      id: q.questionId,
+      label: stripPipingTokens(q.label, resolution),
+    }));
+  }, [report]);
 
   function handleClearFilters() {
     setRange(DEFAULT_RANGE);
@@ -311,7 +319,20 @@ export default function FormReportsPage() {
 
   if (!report) return null; // unreachable once loaded, keeps TS narrow
 
-  const { totalResponses, funnel, metrics, timeSeries, questions: questionReports } = report;
+  const { totalResponses, funnel, metrics, timeSeries, questions: rawQuestionReports } = report;
+
+  // Stored question labels may embed `{{questionId}}` piping tokens. The reports
+  // page is a non-resolving context, so neutralize them to a readable
+  // placeholder (referenced label or "[answer]") before display — never leak
+  // raw braces. Resolution source is the sibling questions' own labels.
+  const labelResolutionList = rawQuestionReports.map((q) => ({
+    id: q.questionId,
+    label: q.label,
+  })) as unknown as Parameters<typeof stripPipingTokens>[1];
+  const questionReports = rawQuestionReports.map((q) => ({
+    ...q,
+    label: stripPipingTokens(q.label, labelResolutionList),
+  }));
   const filterActive = report.filterApplied;
   const rangeActive = range.preset !== "all";
   const scopeCount = funnel.completions;

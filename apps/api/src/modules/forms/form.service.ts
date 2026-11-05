@@ -30,6 +30,7 @@ import {
   sendWebhooksForResponse,
   buildResponseCreatedPayload,
 } from "../../services/webhookDelivery.js";
+import { stripPipingTokens } from "../../utils/pipingTokens.js";
 import { TEMPLATES } from "./templates.js";
 import type {
   UpdateFormSettingsInput,
@@ -2218,6 +2219,11 @@ function buildConfirmationAnswerList(
 ): Array<{ label: string; value: string }> {
   const list: Array<{ label: string; value: string }> = [];
 
+  // Map of question id -> raw label, so piping tokens in one label can resolve
+  // to the referenced question's label (display-only; stored labels untouched).
+  const labelsById = new Map<string, string>();
+  for (const q of questions) labelsById.set(q.id, q.label);
+
   for (const question of questions) {
     const raw = answers[question.id];
     if (raw === undefined || raw === null || raw === "") continue;
@@ -2247,7 +2253,7 @@ function buildConfirmationAnswerList(
     if (rendered === null || rendered.trim() === "") continue;
 
     list.push({
-      label: escapeHtml(question.label),
+      label: escapeHtml(stripPipingTokens(question.label, labelsById)),
       value: escapeHtml(rendered),
     });
   }

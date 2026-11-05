@@ -2578,6 +2578,38 @@ form {
   }
 }
 
+/* ── Appearance tab layout ──
+   Two columns on wide viewports (controls + live preview); stacks to a single
+   full-width column on narrow screens so labels stay readable and the live
+   preview never overlaps the cover-image controls. */
+.appearance-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 320px);
+  gap: 24px;
+  align-items: start;
+}
+
+.appearance-controls {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+
+.appearance-preview {
+  min-width: 0;
+}
+
+@media (max-width: 860px) {
+  .appearance-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .appearance-preview {
+    /* Keep the preview below the controls at a comfortable, readable width. */
+    max-width: 420px;
+  }
+}
+
 /* ===== Rich Analytics Dashboard (FEAT-003) ===== */
 
 /* Screen-reader-only utility (design-review Finding 1 — new). Visually hides

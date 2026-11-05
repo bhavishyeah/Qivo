@@ -163,10 +163,15 @@ describe("buildResponseCreatedPayload (AC8)", () => {
         question_ab12cd34: "Alice",
         question_ef56gh78: ["red", "blue"],
       },
+      answersLabeled: {
+        question_ab12cd34: "Alice",
+        question_ef56gh78: ["red", "blue"],
+      },
       questions: {
         question_ab12cd34: "Your name",
         question_ef56gh78: "Favourite colours",
       },
+      optionLabels: {},
     });
   });
 
@@ -180,6 +185,118 @@ describe("buildResponseCreatedPayload (AC8)", () => {
       questions: [{ id: "known", label: "Known" }],
     });
     expect(payload.answers).toEqual({ orphan: "value" });
+    expect(payload.answersLabeled).toEqual({ orphan: "value" });
     expect(payload.questions).toEqual({ known: "Known" });
+    expect(payload.optionLabels).toEqual({});
+  });
+
+  it("keeps raw answers untouched while answersLabeled renders human labels", () => {
+    const payload = buildResponseCreatedPayload({
+      formId: "f",
+      formTitle: "t",
+      responseId: "r",
+      submittedAt: new Date(0),
+      answers: {
+        q_single: "option_1787471217224",
+        q_multi: ["option_1", "option_2"],
+        q_yesno: "yes",
+        q_text: "free text",
+        q_num: 42,
+        q_entries: ["one", "two"],
+      },
+      questions: [
+        {
+          id: "q_single",
+          label: "Plan",
+          type: "SINGLE_CHOICE",
+          options: [{ value: "option_1787471217224", label: "Premium" }],
+        },
+        {
+          id: "q_multi",
+          label: "Toppings",
+          type: "MULTIPLE_CHOICE",
+          options: [
+            { value: "option_1", label: "Cheese" },
+            { value: "option_2", label: "Mushroom" },
+          ],
+        },
+        { id: "q_yesno", label: "Subscribe?", type: "YES_NO" },
+        { id: "q_text", label: "Notes", type: "SHORT_TEXT" },
+        { id: "q_num", label: "Age", type: "NUMBER" },
+        { id: "q_entries", label: "Guests", type: "MULTI_ENTRY" },
+      ],
+    });
+
+    // Raw answers are preserved exactly (back-compat).
+    expect(payload.answers).toEqual({
+      q_single: "option_1787471217224",
+      q_multi: ["option_1", "option_2"],
+      q_yesno: "yes",
+      q_text: "free text",
+      q_num: 42,
+      q_entries: ["one", "two"],
+    });
+
+    // Labeled rendering is readable.
+    expect(payload.answersLabeled).toEqual({
+      q_single: "Premium",
+      q_multi: ["Cheese", "Mushroom"],
+      q_yesno: "Yes",
+      q_text: "free text",
+      q_num: 42,
+      q_entries: ["one", "two"],
+    });
+
+    // Option maps exposed for choice questions only.
+    expect(payload.optionLabels).toEqual({
+      q_single: { option_1787471217224: "Premium" },
+      q_multi: { option_1: "Cheese", option_2: "Mushroom" },
+    });
+  });
+
+  it("renders YES_NO boolean values and no-case", () => {
+    const payload = buildResponseCreatedPayload({
+      formId: "f",
+      formTitle: "t",
+      responseId: "r",
+      submittedAt: new Date(0),
+      answers: { q_yes: true, q_no: "no" },
+      questions: [
+        { id: "q_yes", label: "A", type: "YES_NO" },
+        { id: "q_no", label: "B", type: "YES_NO" },
+      ],
+    });
+    expect(payload.answersLabeled).toEqual({ q_yes: "Yes", q_no: "No" });
+  });
+
+  it("falls back to the raw value when a choice option is unknown or missing", () => {
+    const payload = buildResponseCreatedPayload({
+      formId: "f",
+      formTitle: "t",
+      responseId: "r",
+      submittedAt: new Date(0),
+      answers: {
+        q_single: "option_gone",
+        q_multi: ["known", "orphan"],
+      },
+      questions: [
+        {
+          id: "q_single",
+          label: "Plan",
+          type: "SINGLE_CHOICE",
+          options: [{ value: "option_here", label: "Here" }],
+        },
+        {
+          id: "q_multi",
+          label: "Picks",
+          type: "MULTIPLE_CHOICE",
+          options: [{ value: "known", label: "Known" }],
+        },
+      ],
+    });
+    expect(payload.answersLabeled).toEqual({
+      q_single: "option_gone",
+      q_multi: ["Known", "orphan"],
+    });
   });
 });

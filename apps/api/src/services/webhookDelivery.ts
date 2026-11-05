@@ -58,6 +58,21 @@ export function backoffMs(attempts: number): number {
 
 // ── Payload (pure) ─────────────────────────────────────────────────────────
 
+/** Minimal shape of a choice option as stored on a question. */
+export type PayloadQuestionOption = { value: string; label: string };
+
+/**
+ * Minimal question shape the payload builder needs. `type` and `options` are
+ * optional so existing callers that only pass `{ id, label }` keep compiling;
+ * when they are present the builder can render human-readable choice labels.
+ */
+export type PayloadQuestion = {
+  id: string;
+  label: string;
+  type?: string;
+  options?: PayloadQuestionOption[];
+};
+
 export type ResponseCreatedPayload = {
   event: string;
   formId: string;
@@ -65,13 +80,61 @@ export type ResponseCreatedPayload = {
   responseId: string;
   submittedAt: string;
   answers: Record<string, unknown>;
+  /** Human-readable rendering of each answer, keyed by questionId (back-compat add). */
+  answersLabeled: Record<string, unknown>;
   questions: Record<string, string>;
+  /** Per-question option value→label map so receivers can resolve either way. */
+  optionLabels: Record<string, Record<string, string>>;
 };
 
 /**
+ * Render a single stored answer value into a human-readable form using the
+ * question's type + options. Choice option values map to their labels; YES_NO
+ * renders "Yes"/"No"; everything else (text, number, date, MULTI_ENTRY,
+ * file/signature URLs) passes through unchanged. An unknown/missing option
+ * value falls back to the raw value — this never throws.
+ */
+function renderAnswerLabel(
+  question: PayloadQuestion | undefined,
+  raw: unknown,
+): unknown {
+  if (!question) return raw;
+
+  const options = question.options ?? [];
+  const labelFor = (value: unknown): unknown => {
+    if (typeof value !== "string") return value;
+    const match = options.find((o) => o.value === value);
+    return match ? match.label : value;
+  };
+
+  switch (question.type) {
+    case "SINGLE_CHOICE":
+      return labelFor(raw);
+    case "MULTIPLE_CHOICE":
+      // Stored as an array of option values; map each to its label.
+      if (Array.isArray(raw)) return raw.map((v) => labelFor(v));
+      return labelFor(raw);
+    case "YES_NO":
+      if (raw === "yes" || raw === true) return "Yes";
+      if (raw === "no" || raw === false) return "No";
+      return raw;
+    default:
+      // Text/number/date/MULTI_ENTRY/FILE_UPLOAD/SIGNATURE: pass through.
+      return raw;
+  }
+}
+
+/**
  * Build the pinned `response.created` payload. `answers` is the stored
- * FormResponse.answers (raw, as submitted). `questions` is reduced to an
- * id→label map from the in-scope schema questions local.
+ * FormResponse.answers (raw, as submitted) and is preserved verbatim for
+ * back-compatibility. `questions` is reduced to an id→label map from the
+ * in-scope schema questions local.
+ *
+ * Two readability fields are ADDED (no existing field is renamed/removed):
+ *  - `answersLabeled`: the same id→answer map but with choice option values
+ *    rendered to their human labels and YES_NO rendered "Yes"/"No".
+ *  - `optionLabels`: per-question value→label map for choice questions, so a
+ *    receiver can resolve raw `answers` on its own if it prefers.
  */
 export function buildResponseCreatedPayload(args: {
   formId: string;
@@ -79,11 +142,24 @@ export function buildResponseCreatedPayload(args: {
   responseId: string;
   submittedAt: Date;
   answers: Record<string, unknown>;
-  questions: Array<{ id: string; label: string }>;
+  questions: PayloadQuestion[];
 }): ResponseCreatedPayload {
   const questions: Record<string, string> = {};
+  const optionLabels: Record<string, Record<string, string>> = {};
+  const byId = new Map<string, PayloadQuestion>();
   for (const q of args.questions) {
     questions[q.id] = q.label;
+    byId.set(q.id, q);
+    if (q.options && q.options.length > 0) {
+      const map: Record<string, string> = {};
+      for (const o of q.options) map[o.value] = o.label;
+      optionLabels[q.id] = map;
+    }
+  }
+
+  const answersLabeled: Record<string, unknown> = {};
+  for (const [id, raw] of Object.entries(args.answers)) {
+    answersLabeled[id] = renderAnswerLabel(byId.get(id), raw);
   }
 
   return {
@@ -93,7 +169,9 @@ export function buildResponseCreatedPayload(args: {
     responseId: args.responseId,
     submittedAt: args.submittedAt.toISOString(),
     answers: args.answers,
+    answersLabeled,
     questions,
+    optionLabels,
   };
 }
 
