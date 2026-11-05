@@ -220,7 +220,13 @@ export default function FormPreviewPage() {
 
         {/* Progress */}
         {totalSections > 1 ? (
-          <div className="public-progress-bar">
+          <div
+            className="public-progress-bar"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.min(100, Math.max(0, Math.round(((history.length - 1) / totalSections) * 100)))}
+          >
             <div className="public-progress-fill" style={{ width: `${Math.min(100, Math.max(0, Math.round(((history.length - 1) / totalSections) * 100)))}%` }} />
           </div>
         ) : null}
@@ -232,7 +238,7 @@ export default function FormPreviewPage() {
           <h1 className="public-form-title">{form.title}</h1>
           {form.description ? <p className="public-form-description">{form.description}</p> : null}
           {totalSections > 1 ? (
-            <p className="public-section-counter">
+            <p className="public-section-counter" aria-live="polite">
               Section {currentSection + 1} of {totalSections}
               {section?.title ? ` — ${section.title}` : ""}
             </p>
@@ -243,8 +249,8 @@ export default function FormPreviewPage() {
         <div className="public-form-body">
           {form.schema.settings.collectEmail && currentSection === 0 ? (
             <div className="question-field">
-              <label><span className="question-label">Email address <span className="required-mark">*</span></span></label>
-              <input type="email" placeholder="you@example.com" disabled style={{ opacity: 0.6 }} />
+              <label htmlFor="preview-respondent-email"><span className="question-label">Email address <span className="required-mark" aria-hidden="true">*</span><span className="required-text"> (required)</span></span></label>
+              <input id="preview-respondent-email" type="email" placeholder="you@example.com" disabled aria-required="true" style={{ opacity: 0.6 }} />
             </div>
           ) : null}
 
@@ -333,6 +339,7 @@ function PreviewQuestion({
 }) {
   const resolvedLabel = resolvePipedLabel(question.label, allQuestions, answers);
   const previewId = `preview-question-${question.id}`;
+  const descriptionId = `${previewId}-description`;
   const errorId = `${previewId}-error`;
   const errorElement = error ? (
     <p className="field-error" id={errorId} role="alert" aria-live="polite">
@@ -343,12 +350,17 @@ function PreviewQuestion({
   const label = (
     <span className="question-label">
       {resolvedLabel}
-      {question.required ? <span className="required-mark"> *</span> : null}
+      {question.required ? (
+        <>
+          <span className="required-mark" aria-hidden="true"> *</span>
+          <span className="required-text"> (required)</span>
+        </>
+      ) : null}
     </span>
   );
 
   const desc = question.description ? (
-    <span className="question-description">{question.description}</span>
+    <span className="question-description" id={descriptionId}>{question.description}</span>
   ) : null;
 
   if (question.type === "SINGLE_CHOICE" || question.type === "YES_NO") {
@@ -357,9 +369,20 @@ function PreviewQuestion({
       : question.options ?? [];
     return (
       <fieldset className="question-field">
-        <legend>{label}</legend>
+        <legend id={`${previewId}-legend`}>{label}</legend>
         {desc}
-        <div className="choice-list">
+        <div
+          className="choice-list"
+          role="radiogroup"
+          aria-labelledby={`${previewId}-legend`}
+          aria-required={question.required ? true : undefined}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={
+            [question.description ? descriptionId : null, error ? errorId : null]
+              .filter(Boolean)
+              .join(" ") || undefined
+          }
+        >
           {options.map((o) => (
             <label className="choice-item" key={o.value}>
               <input type="radio" name={question.id} value={o.value} checked={value === o.value} onChange={() => onChange(question.id, o.value)} />
@@ -367,6 +390,7 @@ function PreviewQuestion({
             </label>
           ))}
         </div>
+        {errorElement}
       </fieldset>
     );
   }
@@ -375,9 +399,20 @@ function PreviewQuestion({
     const selected = Array.isArray(value) ? value : [];
     return (
       <fieldset className="question-field">
-        <legend>{label}</legend>
+        <legend id={`${previewId}-legend`}>{label}</legend>
         {desc}
-        <div className="choice-list">
+        <div
+          className="choice-list"
+          role="group"
+          aria-labelledby={`${previewId}-legend`}
+          aria-required={question.required ? true : undefined}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={
+            [question.description ? descriptionId : null, error ? errorId : null]
+              .filter(Boolean)
+              .join(" ") || undefined
+          }
+        >
           {(question.options ?? []).map((o) => (
             <label className="choice-item" key={o.value}>
               <input type="checkbox" checked={selected.includes(o.value)} onChange={() => {
@@ -388,6 +423,7 @@ function PreviewQuestion({
             </label>
           ))}
         </div>
+        {errorElement}
       </fieldset>
     );
   }
@@ -398,9 +434,20 @@ function PreviewQuestion({
     const current = typeof value === "number" ? value : null;
     return (
       <fieldset className="question-field">
-        <legend>{label}</legend>
+        <legend id={`${previewId}-legend`}>{label}</legend>
         {desc}
-        <div className="rating-list">
+        <div
+          className="rating-list"
+          role="radiogroup"
+          aria-labelledby={`${previewId}-legend`}
+          aria-required={question.required ? true : undefined}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={
+            [question.description ? descriptionId : null, error ? errorId : null]
+              .filter(Boolean)
+              .join(" ") || undefined
+          }
+        >
           {Array.from({ length: max - min + 1 }, (_, i) => min + i).map((r) => (
             <label className="rating-item" key={r}>
               <input type="radio" name={question.id} checked={current === r} onChange={() => onChange(question.id, r)} />
@@ -408,6 +455,7 @@ function PreviewQuestion({
             </label>
           ))}
         </div>
+        {errorElement}
       </fieldset>
     );
   }
@@ -415,9 +463,24 @@ function PreviewQuestion({
   if (question.type === "LONG_TEXT") {
     return (
       <div className="question-field">
-        <label>{label}</label>
+        <label htmlFor={previewId}>{label}</label>
         {desc}
-        <textarea rows={4} value={typeof value === "string" ? value : ""} onChange={(e) => onInputChange(question.id, e)} placeholder="Your answer..." />
+        <textarea
+          id={previewId}
+          rows={4}
+          value={typeof value === "string" ? value : ""}
+          onChange={(e) => onInputChange(question.id, e)}
+          onBlur={onBlur}
+          aria-required={question.required ? true : undefined}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={
+            [question.description ? descriptionId : null, error ? errorId : null]
+              .filter(Boolean)
+              .join(" ") || undefined
+          }
+          placeholder="Your answer..."
+        />
+        {errorElement}
       </div>
     );
   }
@@ -428,9 +491,20 @@ function PreviewQuestion({
     const current = typeof value === "number" ? value : null;
     return (
       <fieldset className="question-field">
-        <legend>{label}</legend>
+        <legend id={`${previewId}-legend`}>{label}</legend>
         {desc}
-        <div className="rating-list">
+        <div
+          className="rating-list"
+          role="radiogroup"
+          aria-labelledby={`${previewId}-legend`}
+          aria-required={question.required ? true : undefined}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={
+            [question.description ? descriptionId : null, error ? errorId : null]
+              .filter(Boolean)
+              .join(" ") || undefined
+          }
+        >
           {Array.from({ length: max - min + 1 }, (_, i) => min + i).map((r) => (
             <label className="rating-item" key={r}>
               <input type="radio" name={question.id} checked={current === r} onChange={() => onChange(question.id, r)} />
@@ -442,14 +516,15 @@ function PreviewQuestion({
           <span>{question.settings?.minLabel ?? ""}</span>
           <span>{question.settings?.maxLabel ?? ""}</span>
         </div>
+        {errorElement}
       </fieldset>
     );
   }
 
   if (question.type === "FILE_UPLOAD") {
     return (
-      <div className="question-field">
-        <label>{label}</label>
+      <div className="question-field" role="group" aria-labelledby={`${previewId}-legend`}>
+        <label id={`${previewId}-legend`}>{label}</label>
         {desc}
         <div className="upload-dropzone">
           <p style={{ margin: 0, color: "var(--qivo-text-secondary)", fontWeight: 600 }}>Click to upload (preview only)</p>
@@ -463,8 +538,8 @@ function PreviewQuestion({
   // preview submissions are never persisted.
   if (question.type === "SIGNATURE") {
     return (
-      <div className="question-field">
-        <label>{label}</label>
+      <div className="question-field" role="group" aria-labelledby={`${previewId}-legend`}>
+        <label id={`${previewId}-legend`}>{label}</label>
         {desc}
         <SignaturePad ariaLabel={resolvedLabel} />
       </div>
@@ -477,8 +552,8 @@ function PreviewQuestion({
       : [""];
 
     return (
-      <div className="question-field">
-        <label>{label}</label>
+      <div className="question-field" role="group" aria-labelledby={`${previewId}-legend`}>
+        <label id={`${previewId}-legend`} htmlFor={`${previewId}-0`}>{label}</label>
         {desc}
         <div style={{ display: "grid", gap: 8 }}>
           {entries.map((entry, idx) => (
@@ -487,6 +562,7 @@ function PreviewQuestion({
               style={{ display: "flex", gap: 8, alignItems: "center" }}
             >
               <input
+                id={idx === 0 ? `${previewId}-0` : undefined}
                 className="multi-entry-input"
                 type="text"
                 value={entry}
@@ -496,7 +572,8 @@ function PreviewQuestion({
                   onChange(question.id, next);
                 }}
                 placeholder={`Entry ${idx + 1}`}
-                aria-label={`${question.label} — entry ${idx + 1}`}
+                aria-label={`${resolvedLabel} — entry ${idx + 1}`}
+                aria-required={question.required && idx === 0 ? true : undefined}
               />
               {entries.length > 1 ? (
                 <button
@@ -518,6 +595,7 @@ function PreviewQuestion({
           type="button"
           className="multi-entry-add"
           onClick={() => onChange(question.id, [...entries, ""])}
+          aria-label="Add another entry"
         >
           + Add another
         </button>
@@ -537,8 +615,13 @@ function PreviewQuestion({
         value={typeof value === "string" || typeof value === "number" ? value : ""}
         onChange={(e) => onInputChange(question.id, e)}
         onBlur={onBlur}
+        aria-required={question.required ? true : undefined}
         aria-invalid={error ? true : undefined}
-        aria-describedby={error ? errorId : undefined}
+        aria-describedby={
+          [question.description ? descriptionId : null, error ? errorId : null]
+            .filter(Boolean)
+            .join(" ") || undefined
+        }
         placeholder={placeholder}
       />
       {errorElement}

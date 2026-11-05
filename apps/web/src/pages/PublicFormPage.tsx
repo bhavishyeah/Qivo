@@ -687,7 +687,7 @@ export default function PublicFormPage() {
     return (
       <main className="public-form-shell">
         <div className="public-status-card public-status-error">
-          <div className="public-status-icon">🔒</div>
+          <div className="public-status-icon" aria-hidden="true">🔒</div>
           <h1>Form not available</h1>
           <p>This form doesn't exist or hasn't been published yet.</p>
         </div>
@@ -699,7 +699,7 @@ export default function PublicFormPage() {
     return (
       <main className="public-form-shell">
         <div className="public-status-card public-status-error">
-          <div className="public-status-icon">⚠️</div>
+          <div className="public-status-icon" aria-hidden="true">⚠️</div>
           <h1>Something went wrong</h1>
           <p>{error || "Unable to load this form."}</p>
           <button
@@ -721,7 +721,7 @@ export default function PublicFormPage() {
     return (
       <main className="public-form-shell">
         <div className="public-status-card public-status-success">
-          <div className="public-status-icon">✅</div>
+          <div className="public-status-icon" aria-hidden="true">✅</div>
           <h1>Response submitted</h1>
           {quizScore && form.schema.settings.showScore ? (
             <div className="quiz-score-card">
@@ -837,7 +837,7 @@ export default function PublicFormPage() {
             <p className="public-form-description">{form.description}</p>
           ) : null}
           {isMultiSection ? (
-            <p className="public-section-counter">
+            <p className="public-section-counter" aria-live="polite">
               Section {currentSectionIndex + 1} of {totalSections}
               {currentSection?.title ? ` — ${currentSection.title}` : ""}
             </p>
@@ -852,7 +852,8 @@ export default function PublicFormPage() {
               <label htmlFor="respondent-email">
                 <span className="question-label">
                   Email address
-                  <span className="required-mark"> *</span>
+                  <span className="required-mark" aria-hidden="true"> *</span>
+                  <span className="required-text"> (required)</span>
                 </span>
               </label>
               <input
@@ -873,6 +874,7 @@ export default function PublicFormPage() {
                 }}
                 onBlur={handleEmailBlur}
                 required
+                aria-required="true"
                 autoComplete="email"
                 placeholder="you@example.com"
                 aria-invalid={fieldErrors["respondent-email"] ? true : undefined}
@@ -996,7 +998,7 @@ export default function PublicFormPage() {
 
 // ─── Question Field ───────────────────────────────────────────────────────────
 
-function QuestionField({
+export function QuestionField({
   question,
   value,
   slug,
@@ -1039,6 +1041,25 @@ function QuestionField({
   // Signature state (unconditional hooks; only used by the SIGNATURE branch)
   const sigRef = useRef<SignaturePadHandle>(null);
   const [sigEmpty, setSigEmpty] = useState(true);
+  // MULTI_ENTRY focus management (unconditional hooks; only used by that branch).
+  // entryRefs holds the current entry <input> elements by index; addButtonRef is
+  // the "+ Add another" button. pendingFocusRef records where focus should move
+  // after the next entries re-render (add -> new last input; remove -> neighbor).
+  const entryRefs = useRef<Array<HTMLInputElement | null>>([]);
+  const addButtonRef = useRef<HTMLButtonElement | null>(null);
+  const pendingFocusRef = useRef<number | "add" | null>(null);
+
+  // Move focus after an add/remove once the new entries have rendered.
+  useEffect(() => {
+    const target = pendingFocusRef.current;
+    if (target === null) return;
+    pendingFocusRef.current = null;
+    if (target === "add") {
+      addButtonRef.current?.focus();
+    } else {
+      entryRefs.current[target]?.focus();
+    }
+  });
 
   async function uploadFileToCloudinary(
     rawFile: File,
@@ -1075,7 +1096,12 @@ function QuestionField({
   const label = (
     <span className="question-label">
       {resolvedLabel}
-      {question.required ? <span className="required-mark"> *</span> : null}
+      {question.required ? (
+        <>
+          <span className="required-mark" aria-hidden="true"> *</span>
+          <span className="required-text"> (required)</span>
+        </>
+      ) : null}
     </span>
   );
 
@@ -1093,9 +1119,20 @@ function QuestionField({
 
     return (
       <fieldset className="question-field">
-        <legend>{label}</legend>
+        <legend id={`${inputId}-legend`}>{label}</legend>
         {descriptionElement}
-        <div className="choice-list">
+        <div
+          className="choice-list"
+          role="radiogroup"
+          aria-labelledby={`${inputId}-legend`}
+          aria-required={question.required ? true : undefined}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={
+            [description ? descriptionId : null, error ? errorId : null]
+              .filter(Boolean)
+              .join(" ") || undefined
+          }
+        >
           {options.map((option) => (
             <label className="choice-item" key={option.value}>
               <input
@@ -1109,6 +1146,7 @@ function QuestionField({
             </label>
           ))}
         </div>
+        {errorElement}
       </fieldset>
     );
   }
@@ -1125,9 +1163,20 @@ function QuestionField({
 
     return (
       <fieldset className="question-field">
-        <legend>{label}</legend>
+        <legend id={`${inputId}-legend`}>{label}</legend>
         {descriptionElement}
-        <div className="choice-list">
+        <div
+          className="choice-list"
+          role="group"
+          aria-labelledby={`${inputId}-legend`}
+          aria-required={question.required ? true : undefined}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={
+            [description ? descriptionId : null, error ? errorId : null]
+              .filter(Boolean)
+              .join(" ") || undefined
+          }
+        >
           {(question.options ?? []).map((option) => (
             <label className="choice-item" key={option.value}>
               <input
@@ -1140,6 +1189,7 @@ function QuestionField({
             </label>
           ))}
         </div>
+        {errorElement}
       </fieldset>
     );
   }
@@ -1152,9 +1202,20 @@ function QuestionField({
 
     return (
       <fieldset className="question-field">
-        <legend>{label}</legend>
+        <legend id={`${inputId}-legend`}>{label}</legend>
         {descriptionElement}
-        <div className="rating-list" role="radiogroup" aria-label={resolvedLabel}>
+        <div
+          className="rating-list"
+          role="radiogroup"
+          aria-labelledby={`${inputId}-legend`}
+          aria-required={question.required ? true : undefined}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={
+            [description ? descriptionId : null, error ? errorId : null]
+              .filter(Boolean)
+              .join(" ") || undefined
+          }
+        >
           {range.map((rating) => (
             <label className="rating-item" key={rating}>
               <input
@@ -1174,6 +1235,7 @@ function QuestionField({
             <span>High</span>
           </div>
         ) : null}
+        {errorElement}
       </fieldset>
     );
   }
@@ -1187,10 +1249,18 @@ function QuestionField({
           id={inputId}
           value={typeof value === "string" ? value : ""}
           onChange={(event) => onInputChange(question.id, event)}
-          aria-describedby={description ? descriptionId : undefined}
+          onBlur={onBlur}
+          aria-required={question.required ? true : undefined}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={
+            [description ? descriptionId : null, error ? errorId : null]
+              .filter(Boolean)
+              .join(" ") || undefined
+          }
           rows={5}
           placeholder="Your answer..."
         />
+        {errorElement}
       </div>
     );
   }
@@ -1206,9 +1276,20 @@ function QuestionField({
 
     return (
       <fieldset className="question-field">
-        <legend>{label}</legend>
+        <legend id={`${inputId}-legend`}>{label}</legend>
         {descriptionElement}
-        <div className="rating-list" role="radiogroup" aria-label={resolvedLabel}>
+        <div
+          className="rating-list"
+          role="radiogroup"
+          aria-labelledby={`${inputId}-legend`}
+          aria-required={question.required ? true : undefined}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={
+            [description ? descriptionId : null, error ? errorId : null]
+              .filter(Boolean)
+              .join(" ") || undefined
+          }
+        >
           {range.map((rating) => (
             <label className="rating-item" key={rating}>
               <input
@@ -1228,6 +1309,7 @@ function QuestionField({
             <span>{maxLabel}</span>
           </div>
         ) : null}
+        {errorElement}
       </fieldset>
     );
   }
@@ -1249,9 +1331,20 @@ function QuestionField({
             opacity: uploading ? 0.7 : 1,
           }}
           onClick={() => { if (!uploading) document.getElementById(inputId)?.click(); }}
-          onKeyDown={(e) => { if (e.key === "Enter" && !uploading) document.getElementById(inputId)?.click(); }}
+          onKeyDown={(e) => {
+            if ((e.key === "Enter" || e.key === " " || e.key === "Spacebar") && !uploading) {
+              e.preventDefault();
+              document.getElementById(inputId)?.click();
+            }
+          }}
           role="button"
           tabIndex={0}
+          aria-label={`Upload a file for: ${resolvedLabel}`}
+          aria-describedby={
+            [description ? descriptionId : null, error ? errorId : null]
+              .filter(Boolean)
+              .join(" ") || undefined
+          }
         >
           <input
             id={inputId}
@@ -1259,6 +1352,7 @@ function QuestionField({
             accept={buildAcceptString(allowedTypes)}
             style={{ display: "none" }}
             disabled={uploading}
+            aria-required={question.required ? true : undefined}
             onChange={(e) => {
               const file = e.target.files?.[0];
               if (!file) return;
@@ -1286,7 +1380,7 @@ function QuestionField({
               {isImageUrl(uploadedUrl) ? (
                 <img
                   src={uploadedUrl}
-                  alt="Uploaded preview"
+                  alt={`Uploaded file preview for: ${resolvedLabel}`}
                   style={{
                     maxWidth: "100%",
                     maxHeight: 180,
@@ -1327,6 +1421,7 @@ function QuestionField({
         {uploadError ? (
           <p className="submit-error" style={{ marginTop: 8 }}>{uploadError}</p>
         ) : null}
+        {errorElement}
       </div>
     );
   }
@@ -1337,8 +1432,10 @@ function QuestionField({
     const uploadedUrl = typeof value === "string" && value.startsWith("http") ? value : "";
 
     return (
-      <div className="question-field">
-        <label htmlFor={inputId}>{label}</label>
+      <div className="question-field" role="group" aria-labelledby={`${inputId}-legend`}>
+        {/* No native control owns the drawing surface, so the label is linked via
+            aria-labelledby on the group (and the canvas keeps its own aria-label). */}
+        <label id={`${inputId}-legend`}>{label}</label>
         {descriptionElement}
         {uploadedUrl ? (
           // Reuse the FILE_UPLOAD uploaded-state UI: thumbnail + view + re-sign.
@@ -1347,7 +1444,7 @@ function QuestionField({
               {isImageUrl(uploadedUrl) ? (
                 <img
                   src={uploadedUrl}
-                  alt="Signature preview"
+                  alt={`Saved signature for: ${resolvedLabel}`}
                   style={{
                     maxWidth: "100%",
                     maxHeight: 180,
@@ -1437,6 +1534,7 @@ function QuestionField({
         {uploadError ? (
           <p className="submit-error" style={{ marginTop: 8 }}>{uploadError}</p>
         ) : null}
+        {errorElement}
       </div>
     );
   }
@@ -1459,17 +1557,26 @@ function QuestionField({
 
     function addEntry() {
       if (entries.length >= MAX_MULTI_ENTRY_COUNT) return;
+      // Focus the newly added (now last) input after it renders.
+      pendingFocusRef.current = entries.length;
       onChange(question.id, [...entries, ""]);
     }
 
     function removeEntry(idx: number) {
       const next = entries.filter((_, i) => i !== idx);
+      // Move focus to a sensible neighbour: the previous entry, or the first if
+      // the first was removed; the add button when no entries would remain.
+      if (next.length === 0) {
+        pendingFocusRef.current = "add";
+      } else {
+        pendingFocusRef.current = Math.max(0, idx - 1);
+      }
       onChange(question.id, next.length > 0 ? next : [""]);
     }
 
     return (
-      <div className="question-field">
-        <label htmlFor={`${inputId}-0`}>{label}</label>
+      <div className="question-field" role="group" aria-labelledby={`${inputId}-legend`}>
+        <label id={`${inputId}-legend`} htmlFor={`${inputId}-0`}>{label}</label>
         {descriptionElement}
         <div style={{ display: "grid", gap: 8 }}>
           {entries.map((entry, idx) => (
@@ -1478,6 +1585,9 @@ function QuestionField({
               style={{ display: "flex", gap: 8, alignItems: "center" }}
             >
               <input
+                ref={(el) => {
+                  entryRefs.current[idx] = el;
+                }}
                 id={idx === 0 ? `${inputId}-0` : undefined}
                 className="multi-entry-input"
                 type="text"
@@ -1485,7 +1595,8 @@ function QuestionField({
                 onChange={(e) => updateEntry(idx, e.target.value)}
                 onBlur={idx === entries.length - 1 ? onBlur : undefined}
                 placeholder={`Entry ${idx + 1}`}
-                aria-label={`${question.label} — entry ${idx + 1}`}
+                aria-label={`${resolvedLabel} — entry ${idx + 1}`}
+                aria-required={question.required && idx === 0 ? true : undefined}
                 aria-invalid={error && idx === 0 ? true : undefined}
                 aria-describedby={
                   [
@@ -1514,7 +1625,13 @@ function QuestionField({
             Maximum {MAX_MULTI_ENTRY_COUNT} entries
           </p>
         ) : (
-          <button type="button" className="multi-entry-add" onClick={addEntry}>
+          <button
+            ref={addButtonRef}
+            type="button"
+            className="multi-entry-add"
+            onClick={addEntry}
+            aria-label="Add another entry"
+          >
             + Add another
           </button>
         )}
@@ -1549,6 +1666,7 @@ function QuestionField({
         value={typeof value === "string" || typeof value === "number" ? value : ""}
         onChange={(event) => onInputChange(question.id, event)}
         onBlur={onBlur}
+        aria-required={question.required ? true : undefined}
         aria-invalid={error ? true : undefined}
         aria-describedby={
           [description ? descriptionId : null, error ? errorId : null]

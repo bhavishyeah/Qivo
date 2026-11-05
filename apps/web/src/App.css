@@ -139,6 +139,21 @@ form {
   color: #dc2626;
 }
 
+/* Non-color-only required signal: the red '*' is aria-hidden; this text makes
+   the requirement available to assistive tech (and is clipped from view). */
+.required-text {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 .question-description {
   display: block;
   margin: -2px 0 10px;
@@ -216,6 +231,10 @@ form {
 .rating-item:has(input:checked) {
   border-color: var(--qivo-primary);
   background: var(--qivo-surface-2);
+  /* Non-color-only selected cue: a weightier ring so selection is distinguishable
+     without relying on the accent colour alone. */
+  box-shadow: inset 0 0 0 1px var(--qivo-primary);
+  font-weight: 650;
 }
 
 .choice-item input,
@@ -250,6 +269,20 @@ form {
 .submit-button:hover:not(:disabled) {
   background: #1d4ed8;
   transform: translateY(-1px);
+}
+
+/* Visible keyboard focus ring (a11y pass). Uses --qivo-focus-ring so it is
+   contrast-safe in both light and dark schemes, and does NOT remove the input
+   outline/box-shadow handled above. Applied to the public-form interactive
+   controls: submit/secondary buttons, choice/rating tiles, and links. */
+.public-form-shell .submit-button:focus-visible,
+.public-form-shell .secondary-button:focus-visible,
+.public-form-shell .choice-item:focus-within,
+.public-form-shell .rating-item:focus-within,
+.public-form-shell a:focus-visible {
+  outline: 2px solid var(--qivo-primary);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--qivo-focus-ring);
 }
 
 .submit-error {

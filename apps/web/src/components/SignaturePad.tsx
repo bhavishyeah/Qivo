@@ -8,6 +8,7 @@
 import {
   forwardRef,
   useEffect,
+  useId,
   useImperativeHandle,
   useRef,
 } from "react";
@@ -45,6 +46,8 @@ const SignaturePad = forwardRef<SignaturePadHandle, SignaturePadProps>(
   ) {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const padRef = useRef<SignaturePadLib | null>(null);
+    // Stable id so the "Sign above" instruction can describe the canvas.
+    const hintId = useId();
     // Keep the latest onChange in a ref so the mount effect's listeners never
     // need re-subscribing when the callback identity changes.
     const onChangeRef = useRef(onChange);
@@ -148,6 +151,7 @@ const SignaturePad = forwardRef<SignaturePadHandle, SignaturePadProps>(
           <canvas
             ref={canvasRef}
             aria-label={ariaLabel}
+            aria-describedby={hintId}
             style={{
               display: "block",
               width: "100%",
@@ -164,10 +168,11 @@ const SignaturePad = forwardRef<SignaturePadHandle, SignaturePadProps>(
             marginTop: 6,
           }}
         >
-          <span className="signature-hint">Sign above</span>
+          <span className="signature-hint" id={hintId}>Sign above</span>
           <button
             type="button"
             className="signature-clear"
+            aria-label="Clear signature"
             disabled={disabled}
             onClick={() => {
               padRef.current?.clear();
