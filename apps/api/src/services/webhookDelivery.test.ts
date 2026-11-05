@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
 import {
   computeSignature,
@@ -10,7 +10,17 @@ import {
   buildResponseCreatedPayload,
   buildFormEventPayload,
   webhookAcceptsEvent,
+  selectPinnedAddresses,
+  assertSafeWebhookUrl,
 } from "./webhookDelivery.js";
+
+// Mock DNS resolution so SSRF tests never touch the network.
+vi.mock("node:dns/promises", () => ({
+  lookup: vi.fn(),
+}));
+
+import { lookup } from "node:dns/promises";
+const mockedLookup = vi.mocked(lookup);
 
 describe("computeSignature", () => {
   it("matches a known HMAC-SHA256 fixture (AC7)", () => {
@@ -350,5 +360,69 @@ describe("webhookAcceptsEvent", () => {
     expect(webhookAcceptsEvent(null, "form.published")).toBe(false);
     expect(webhookAcceptsEvent(undefined, "form.published")).toBe(false);
     expect(webhookAcceptsEvent([], "form.published")).toBe(false);
+  });
+});
+
+describe("selectPinnedAddresses (SSRF pinning)", () => {
+  it("ok with all addresses when every address is public", () => {
+    const addresses = [
+      { address: "93.184.216.34", family: 4 },
+      { address: "2606:4700:4700::1111", family: 6 },
+    ];
+    const result = selectPinnedAddresses(addresses);
+    expect(result).toEqual({ ok: true, addresses });
+  });
+
+  it("ok:false when the list is empty", () => {
+    expect(selectPinnedAddresses([])).toEqual({ ok: false });
+  });
+
+  it("ok:false when ANY address is private", () => {
+    expect(
+      selectPinnedAddresses([
+        { address: "93.184.216.34", family: 4 },
+        { address: "10.0.0.1", family: 4 },
+      ]),
+    ).toEqual({ ok: false });
+  });
+
+  it("ok:false for loopback / link-local / metadata / unique-local", () => {
+    expect(selectPinnedAddresses([{ address: "127.0.0.1", family: 4 }])).toEqual({ ok: false });
+    expect(selectPinnedAddresses([{ address: "169.254.0.1", family: 4 }])).toEqual({ ok: false });
+    expect(selectPinnedAddresses([{ address: "169.254.169.254", family: 4 }])).toEqual({ ok: false });
+    expect(selectPinnedAddresses([{ address: "::1", family: 6 }])).toEqual({ ok: false });
+    expect(selectPinnedAddresses([{ address: "fc00::1", family: 6 }])).toEqual({ ok: false });
+  });
+
+  it("ok:false for an IPv4-mapped private IPv6 address", () => {
+    expect(selectPinnedAddresses([{ address: "::ffff:10.0.0.1", family: 6 }])).toEqual({ ok: false });
+  });
+});
+
+describe("assertSafeWebhookUrl (mocked DNS)", () => {
+  beforeEach(() => {
+    mockedLookup.mockReset();
+  });
+
+  it("allows a hostname resolving to a public IP", async () => {
+    mockedLookup.mockResolvedValue([{ address: "93.184.216.34", family: 4 }] as never);
+    await expect(assertSafeWebhookUrl("https://example.com/hook")).resolves.toBeUndefined();
+  });
+
+  it("rejects a hostname resolving to a private IP with WEBHOOK_URL_INVALID", async () => {
+    mockedLookup.mockResolvedValue([{ address: "10.0.0.5", family: 4 }] as never);
+    await expect(assertSafeWebhookUrl("https://internal.example.com/hook")).rejects.toMatchObject({
+      name: "WEBHOOK_URL_INVALID",
+    });
+  });
+
+  it("rejects when ANY resolved address is private", async () => {
+    mockedLookup.mockResolvedValue([
+      { address: "93.184.216.34", family: 4 },
+      { address: "192.168.1.1", family: 4 },
+    ] as never);
+    await expect(assertSafeWebhookUrl("https://mixed.example.com/hook")).rejects.toMatchObject({
+      name: "WEBHOOK_URL_INVALID",
+    });
   });
 });

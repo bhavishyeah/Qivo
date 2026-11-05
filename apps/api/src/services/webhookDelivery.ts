@@ -15,6 +15,7 @@
 
 import { createHmac } from "node:crypto";
 import { lookup } from "node:dns/promises";
+import { request as httpsRequest } from "node:https";
 import { isIP } from "node:net";
 
 import prisma from "../db/prisma.js";
@@ -317,15 +318,73 @@ function webhookUrlInvalidError(message: string): Error {
   return error;
 }
 
+/** A resolved DNS address paired with its IP family (4 or 6). */
+export type ResolvedAddress = { address: string; family: number };
+
+export type SelectPinnedResult =
+  | { ok: true; addresses: ResolvedAddress[] }
+  | { ok: false };
+
+/**
+ * Pure SSRF gate over a resolved address set. Returns ok:false if the list is
+ * empty or ANY address classifies as "blocked" (via classifyAddress); only an
+ * all-public list yields ok:true with every address preserved. This is the one
+ * source of truth both create-time validation and send-time pinning share.
+ */
+export function selectPinnedAddresses(
+  resolved: ResolvedAddress[],
+): SelectPinnedResult {
+  if (resolved.length === 0) return { ok: false };
+  for (const { address } of resolved) {
+    if (classifyAddress(address) === "blocked") return { ok: false };
+  }
+  return { ok: true, addresses: resolved };
+}
+
+/**
+ * Resolve `host` to the validated public address(es) to pin a connection to.
+ * A literal IP is classified directly and returned (or throws when blocked);
+ * otherwise DNS is resolved with {all:true}, run through selectPinnedAddresses,
+ * and the whole set is returned only when every address is public. Throws a
+ * WEBHOOK_URL_INVALID error (same message style as assertSafeWebhookUrl) on any
+ * blocked/empty result.
+ */
+export async function resolveAndPinHost(host: string): Promise<ResolvedAddress[]> {
+  const literal = isIP(host);
+  if (literal) {
+    if (classifyAddress(host) === "blocked") {
+      throw webhookUrlInvalidError("Webhook URL resolves to a disallowed address.");
+    }
+    return [{ address: host, family: literal }];
+  }
+
+  let addresses: ResolvedAddress[];
+  try {
+    addresses = await lookup(host, { all: true });
+  } catch {
+    throw webhookUrlInvalidError("Webhook URL host could not be resolved.");
+  }
+
+  if (addresses.length === 0) {
+    throw webhookUrlInvalidError("Webhook URL host could not be resolved.");
+  }
+
+  const selected = selectPinnedAddresses(addresses);
+  if (!selected.ok) {
+    throw webhookUrlInvalidError("Webhook URL resolves to a disallowed address.");
+  }
+  return selected.addresses;
+}
+
 /**
  * Validate a webhook target URL for SSRF safety: https-only, hostname not an
  * obvious internal name, and every resolved address public. Throws a
  * WEBHOOK_URL_INVALID error on any violation. Async because it resolves DNS.
  *
- * Note (v1, documented): this and the subsequent fetch() perform independent
- * DNS resolutions, so this does NOT defend against an active DNS-rebinding
- * attacker. It is one layer alongside https-only, redirect:"manual", and the
- * request timeout.
+ * Create-time validation. The send path (attemptDelivery) additionally pins the
+ * connection to a freshly-validated public IP via resolveAndPinHost, closing
+ * the DNS-rebinding window that a separate validate-then-connect flow leaves
+ * open.
  */
 export async function assertSafeWebhookUrl(url: string): Promise<void> {
   let parsed: URL;
@@ -352,7 +411,7 @@ export async function assertSafeWebhookUrl(url: string): Promise<void> {
     return;
   }
 
-  let addresses: Array<{ address: string }>;
+  let addresses: ResolvedAddress[];
   try {
     addresses = await lookup(host, { all: true });
   } catch {
@@ -363,10 +422,8 @@ export async function assertSafeWebhookUrl(url: string): Promise<void> {
     throw webhookUrlInvalidError("Webhook URL host could not be resolved.");
   }
 
-  for (const { address } of addresses) {
-    if (classifyAddress(address) === "blocked") {
-      throw webhookUrlInvalidError("Webhook URL resolves to a disallowed address.");
-    }
+  if (!selectPinnedAddresses(addresses).ok) {
+    throw webhookUrlInvalidError("Webhook URL resolves to a disallowed address.");
   }
 }
 
@@ -391,6 +448,83 @@ function logDelivery(fields: {
   if (fields.responseStatus != null) parts.push(`responseStatus=${fields.responseStatus}`);
   if (fields.lastError) parts.push(`lastError=${fields.lastError}`);
   console.log(`[webhook] ${parts.join(" ")}`);
+}
+
+/**
+ * POST `body` to the parsed webhook URL over node:https, pinning the connection
+ * to a pre-validated public IP via a custom `lookup` so an attacker cannot
+ * rebind DNS between validation and connect. TLS is verified normally against
+ * the original hostname: rejectUnauthorized stays true and servername defaults
+ * to parsed.hostname (neither is overridden). https.request does NOT follow
+ * redirects, so a 3xx surfaces as a non-2xx status, matching redirect:"manual".
+ * The body is never read (res.resume()). Resolves with the response status
+ * code; rejects with an AbortError-named error on the WEBHOOK_TIMEOUT_MS
+ * timeout, or the underlying socket error otherwise.
+ */
+function sendPinnedRequest(args: {
+  parsed: URL;
+  pinned: ResolvedAddress[];
+  headers: Record<string, string>;
+  body: string;
+}): Promise<number> {
+  const { parsed, pinned, headers, body } = args;
+  return new Promise<number>((resolve, reject) => {
+    let settled = false;
+    const finish = (fn: () => void): void => {
+      if (settled) return;
+      settled = true;
+      fn();
+    };
+
+    // Custom lookup returns ONLY the pinned validated IP(s). Supports both the
+    // single-address callback form and the {all:true} array form Node may use.
+    const pinnedLookup = (
+      _hostname: string,
+      options: unknown,
+      cb: (
+        err: NodeJS.ErrnoException | null,
+        address: string | Array<{ address: string; family: number }>,
+        family?: number,
+      ) => void,
+    ): void => {
+      const wantsAll =
+        typeof options === "object" && options !== null && (options as { all?: boolean }).all === true;
+      if (wantsAll) {
+        cb(null, pinned.map((a) => ({ address: a.address, family: a.family })));
+      } else {
+        const first = pinned[0]!;
+        cb(null, first.address, first.family);
+      }
+    };
+
+    const req = httpsRequest(
+      {
+        host: parsed.hostname,
+        port: parsed.port ? Number(parsed.port) : 443,
+        path: parsed.pathname + parsed.search,
+        method: "POST",
+        headers,
+        // Pin the connection; TLS still validates against the hostname.
+        lookup: pinnedLookup as never,
+      },
+      (res) => {
+        const status = res.statusCode ?? 0;
+        res.resume(); // drain + discard; never parse the body
+        res.on("end", () => finish(() => resolve(status)));
+        res.on("error", (err) => finish(() => reject(err)));
+      },
+    );
+
+    req.setTimeout(WEBHOOK_TIMEOUT_MS, () => {
+      const timeoutError = new Error("Webhook request timed out.");
+      timeoutError.name = "AbortError";
+      req.destroy(timeoutError);
+    });
+
+    req.on("error", (err) => finish(() => reject(err)));
+    req.write(body);
+    req.end();
+  });
 }
 
 /**
@@ -436,34 +570,33 @@ export async function attemptDelivery(deliveryId: string): Promise<void> {
     let lastError: string | null = null;
 
     try {
-      // Re-check SSRF at send time (narrows the window; not a rebinding guarantee).
-      await assertSafeWebhookUrl(webhook.url);
+      // Re-validate and resolve the target to a pinned public IP at send time.
+      const parsed = new URL(webhook.url);
+      if (parsed.protocol !== "https:") {
+        throw webhookUrlInvalidError("Webhook URL must use https.");
+      }
+      if (isBlockedHostname(parsed.hostname)) {
+        throw webhookUrlInvalidError("Webhook URL host is not allowed.");
+      }
+      const pinned = await resolveAndPinHost(parsed.hostname);
 
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
-      try {
-        const res = await fetch(webhook.url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Qivo-Event": delivery.event,
-            "X-Qivo-Timestamp": String(Math.floor(Date.now() / 1000)),
-            "X-Qivo-Signature": computeSignature(webhook.secret, raw),
-            "User-Agent": "Qivo-Webhooks/1",
-          },
-          body: raw,
-          signal: controller.signal,
-          redirect: "manual",
-        });
-        // Classify on status code only — the response body is never read.
-        responseStatus = res.status;
-        if (res.ok) {
-          ok = true;
-        } else {
-          lastError = `HTTP ${res.status}`;
-        }
-      } finally {
-        clearTimeout(timer);
+      // Classify on status code only — the response body is never read.
+      responseStatus = await sendPinnedRequest({
+        parsed,
+        pinned,
+        headers: {
+          "Content-Type": "application/json",
+          "X-Qivo-Event": delivery.event,
+          "X-Qivo-Timestamp": String(Math.floor(Date.now() / 1000)),
+          "X-Qivo-Signature": computeSignature(webhook.secret, raw),
+          "User-Agent": "Qivo-Webhooks/1",
+        },
+        body: raw,
+      });
+      if (responseStatus >= 200 && responseStatus < 300) {
+        ok = true;
+      } else {
+        lastError = `HTTP ${responseStatus}`;
       }
     } catch (err) {
       if (err instanceof Error && err.name === "WEBHOOK_URL_INVALID") {
