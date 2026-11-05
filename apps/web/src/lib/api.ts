@@ -164,10 +164,16 @@ export async function publicPost<T>(
 }
 
 // Create a Razorpay order for a payment-enabled form. No body is sent — the
-// amount is computed server-side from stored settings.
+// amount is computed server-side from stored settings. In respondent mode the
+// client sends `requestedAmount` (integer PAISE), which the server validates
+// against the form's bounds; it is ignored in fixed mode.
 export async function createPaymentOrder(
   slug: string,
-  body: { answers: Record<string, unknown>; email?: string },
+  body: {
+    answers: Record<string, unknown>;
+    email?: string;
+    requestedAmount?: number;
+  },
 ): Promise<{
   orderId: string;
   amount: number;

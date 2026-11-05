@@ -20,7 +20,11 @@ import {
   ApiRequestError,
 } from "../lib/api";
 import { evaluateConditions } from "../lib/conditions";
-import { isValidEmail, validateQuestionFormat } from "../lib/validation";
+import {
+  isValidEmail,
+  validateQuestionFormat,
+  validatePaymentAmountRupees,
+} from "../lib/validation";
 import { computeReachedSections, nextSectionAfter } from "../lib/sectionJumps";
 import { clampResumeSection } from "../lib/resumeSection";
 import { resolvePipedLabel } from "../lib/piping";
@@ -147,6 +151,9 @@ export default function PublicFormPage() {
   // question id). A field appears here only once it has been touched (blur) or a
   // submit/Next attempt surfaced it; clearing to "" removes the message.
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  // Respondent-entered payment amount (rupees, as typed). Only used when the
+  // form's payment mode is "respondent"; validated inline before Checkout.
+  const [respondentAmount, setRespondentAmount] = useState("");
   // True once the post-payment save failed, so the error banner can explain the
   // payment was received (distinct styling + copy).
   const [paymentSaveFailed, setPaymentSaveFailed] = useState(false);
@@ -685,12 +692,34 @@ export default function PublicFormPage() {
           }
         }
 
+        // Respondent mode: validate the entered amount inline BEFORE opening
+        // Checkout. On failure, surface the field error and stop (no order).
+        let requestedAmount: number | undefined;
+        if (form.payment.mode === "respondent") {
+          const amountCheck = validatePaymentAmountRupees(
+            respondentAmount,
+            form.payment.minAmount ?? 100,
+            form.payment.maxAmount ?? 15_000_000,
+          );
+          if (!amountCheck.ok) {
+            setFieldErrors((errs) => ({
+              ...errs,
+              "respondent-amount": amountCheck.message,
+            }));
+            setSubmitError("Please enter a valid amount to pay.");
+            setSubmitting(false);
+            return;
+          }
+          requestedAmount = amountCheck.paise;
+        }
+
         // Server-side pre-check: validate answers + email BEFORE an order
         // exists, so a payer is never charged for a submission the server would
         // reject. A 400 here surfaces the specific message and opens no Checkout.
         const order = await createPaymentOrder(slug, {
           answers,
           ...(collectEmail ? { email: normalizedEmail } : {}),
+          ...(requestedAmount !== undefined ? { requestedAmount } : {}),
         });
         await loadRazorpayCheckout();
         if (!order.keyId || !window.Razorpay) {
@@ -918,6 +947,20 @@ export default function PublicFormPage() {
   );
   ensureFontLoaded(form.schema.settings.theme?.fontFamily);
 
+  // Respondent-mode payment derivations (used by the amount input + button).
+  const isRespondentPayment =
+    form.payment?.required === true && form.payment.mode === "respondent";
+  const respondentMinPaise = form.payment?.minAmount ?? 100;
+  const respondentMaxPaise = form.payment?.maxAmount ?? 15_000_000;
+  // Validate the currently-typed amount (null when not in respondent mode).
+  const respondentAmountResult = isRespondentPayment
+    ? validatePaymentAmountRupees(
+        respondentAmount,
+        respondentMinPaise,
+        respondentMaxPaise,
+      )
+    : null;
+
   return (
     <main
       className="public-form-shell"
@@ -1082,6 +1125,88 @@ export default function PublicFormPage() {
             </div>
           ) : null}
 
+          {/* Respondent-entered payment amount — shown on the last section of a
+              respondent-mode form (not while editing a saved response). */}
+          {isRespondentPayment && isLastSection && !isEditing ? (
+            <div className="public-field">
+              <label htmlFor="respondent-amount">
+                Amount to pay (₹)
+                <span aria-hidden="true" className="required-mark"> *</span>
+              </label>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span aria-hidden="true" style={{ color: "#64748b" }}>₹</span>
+                <input
+                  id="respondent-amount"
+                  type="number"
+                  min={respondentMinPaise / 100}
+                  max={respondentMaxPaise / 100}
+                  step="0.01"
+                  inputMode="decimal"
+                  value={respondentAmount}
+                  required
+                  aria-required="true"
+                  onChange={(e) => {
+                    setRespondentAmount(e.target.value);
+                    // Clear the inline error once the value becomes valid.
+                    setFieldErrors((errs) => {
+                      if (!errs["respondent-amount"]) return errs;
+                      const check = validatePaymentAmountRupees(
+                        e.target.value,
+                        respondentMinPaise,
+                        respondentMaxPaise,
+                      );
+                      if (check.ok) {
+                        const { "respondent-amount": _r, ...rest } = errs;
+                        return rest;
+                      }
+                      return errs;
+                    });
+                  }}
+                  onBlur={() => {
+                    const check = validatePaymentAmountRupees(
+                      respondentAmount,
+                      respondentMinPaise,
+                      respondentMaxPaise,
+                    );
+                    setFieldErrors((errs) => {
+                      if (!check.ok) {
+                        return { ...errs, "respondent-amount": check.message };
+                      }
+                      if (!errs["respondent-amount"]) return errs;
+                      const { "respondent-amount": _r, ...rest } = errs;
+                      return rest;
+                    });
+                  }}
+                  aria-invalid={
+                    fieldErrors["respondent-amount"] ? true : undefined
+                  }
+                  aria-describedby="respondent-amount-help respondent-amount-error"
+                  style={{
+                    flex: 1,
+                    border: "1px solid #cbd5e1",
+                    borderRadius: 10,
+                    padding: "10px 12px",
+                  }}
+                />
+              </div>
+              <small className="muted" id="respondent-amount-help">
+                Enter an amount between ₹
+                {(respondentMinPaise / 100).toLocaleString("en-IN")} and ₹
+                {(respondentMaxPaise / 100).toLocaleString("en-IN")}.
+              </small>
+              {fieldErrors["respondent-amount"] ? (
+                <p
+                  className="field-error"
+                  id="respondent-amount-error"
+                  role="alert"
+                  aria-live="polite"
+                >
+                  {fieldErrors["respondent-amount"]}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
           {/* Error */}
           {submitError ? (
             <p
@@ -1120,7 +1245,14 @@ export default function PublicFormPage() {
                 className="submit-button"
                 type="submit"
                 style={{ flex: 1, maxWidth: 240, ...(resolved.accent ? { background: resolved.accent } : {}) }}
-                disabled={submitting || allQuestions.length === 0}
+                disabled={
+                  submitting ||
+                  allQuestions.length === 0 ||
+                  // Respondent mode: block until a valid amount is entered.
+                  (!isEditing &&
+                    isRespondentPayment &&
+                    !(respondentAmountResult?.ok ?? false))
+                }
               >
                 {submitting
                   ? isEditing
@@ -1128,11 +1260,15 @@ export default function PublicFormPage() {
                     : "Submitting..."
                   : isEditing
                     ? "Save changes"
-                    : !isEditing &&
-                        form.payment?.required &&
-                        typeof form.payment.amount === "number"
-                      ? `Pay ₹${form.payment.amount / 100} & Submit`
-                      : "Submit response"}
+                    : !isEditing && isRespondentPayment
+                      ? respondentAmountResult?.ok
+                        ? `Pay ₹${(respondentAmountResult.paise / 100).toLocaleString("en-IN")} & Submit`
+                        : "Enter amount to pay"
+                      : !isEditing &&
+                          form.payment?.required &&
+                          typeof form.payment.amount === "number"
+                        ? `Pay ₹${form.payment.amount / 100} & Submit`
+                        : "Submit response"}
               </button>
             )}
           </div>

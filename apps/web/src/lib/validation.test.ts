@@ -7,6 +7,7 @@ import {
   isValidNumber,
   isValidDate,
   validateQuestionFormat,
+  validatePaymentAmountRupees,
 } from "./validation";
 import type { Question } from "../types";
 
@@ -95,5 +96,63 @@ describe("validateQuestionFormat — per type", () => {
   it("SHORT_TEXT / choice types have no format error", () => {
     expect(validateQuestionFormat(q("SHORT_TEXT"), "anything")).toBeNull();
     expect(validateQuestionFormat(q("SINGLE_CHOICE"), "opt")).toBeNull();
+  });
+});
+
+describe("validatePaymentAmountRupees — respondent amount, mirrors rupeesToPaise", () => {
+  // Range: ₹100 (10000 paise) .. ₹5000 (500000 paise).
+  const MIN = 10000;
+  const MAX = 500000;
+
+  it("accepts a valid in-range amount and returns integer paise", () => {
+    expect(validatePaymentAmountRupees("250", MIN, MAX)).toEqual({
+      ok: true,
+      paise: 25000,
+    });
+    expect(validatePaymentAmountRupees("250.50", MIN, MAX)).toEqual({
+      ok: true,
+      paise: 25050,
+    });
+  });
+
+  it("accepts exactly the min and max bounds (inclusive)", () => {
+    expect(validatePaymentAmountRupees("100", MIN, MAX)).toEqual({
+      ok: true,
+      paise: 10000,
+    });
+    expect(validatePaymentAmountRupees("5000", MIN, MAX)).toEqual({
+      ok: true,
+      paise: 500000,
+    });
+  });
+
+  it("rejects non-numeric input", () => {
+    const r = validatePaymentAmountRupees("abc", MIN, MAX);
+    expect(r.ok).toBe(false);
+  });
+
+  it("rejects an empty string", () => {
+    expect(validatePaymentAmountRupees("   ", MIN, MAX).ok).toBe(false);
+  });
+
+  it("rejects below the minimum", () => {
+    const r = validatePaymentAmountRupees("99", MIN, MAX);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.message).toMatch(/between/i);
+  });
+
+  it("rejects above the maximum", () => {
+    const r = validatePaymentAmountRupees("5000.01", MIN, MAX);
+    expect(r.ok).toBe(false);
+  });
+
+  it("rejects more than 2 decimal places", () => {
+    const r = validatePaymentAmountRupees("250.555", MIN, MAX);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.message).toMatch(/2 decimal/i);
+  });
+
+  it("rejects a negative amount", () => {
+    expect(validatePaymentAmountRupees("-50", MIN, MAX).ok).toBe(false);
   });
 });

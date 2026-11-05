@@ -58,6 +58,46 @@ export function isValidDate(value: string): boolean {
 }
 
 /**
+ * Validate a respondent-entered payment amount (in rupees, as typed) against
+ * the form's bounds. Mirrors the server's `rupeesToPaise` discipline exactly:
+ * finite number, non-negative, at most 2 decimal places, and within the
+ * [minPaise, maxPaise] range (which the server resolves to concrete bounds).
+ * On success returns the integer paise to send as `requestedAmount`; on failure
+ * returns a friendly inline message. The caller blocks Checkout on failure.
+ */
+export function validatePaymentAmountRupees(
+  input: string,
+  minPaise: number,
+  maxPaise: number,
+): { ok: true; paise: number } | { ok: false; message: string } {
+  const trimmed = input.trim();
+  if (trimmed === "") {
+    return { ok: false, message: "Please enter an amount to pay." };
+  }
+  const rupees = Number(trimmed);
+  if (!Number.isFinite(rupees)) {
+    return { ok: false, message: "Please enter a valid amount." };
+  }
+  if (rupees < 0) {
+    return { ok: false, message: "Amount must not be negative." };
+  }
+  const paise = Math.round(rupees * 100);
+  // Reject >2-decimal inputs: the rounded paise must reproduce the rupee value.
+  if (Math.abs(paise / 100 - rupees) > 1e-9) {
+    return { ok: false, message: "Amount must have at most 2 decimal places." };
+  }
+  if (paise < minPaise || paise > maxPaise) {
+    const minRs = (minPaise / 100).toLocaleString("en-IN");
+    const maxRs = (maxPaise / 100).toLocaleString("en-IN");
+    return {
+      ok: false,
+      message: `Enter an amount between ₹${minRs} and ₹${maxRs}.`,
+    };
+  }
+  return { ok: true, paise };
+}
+
+/**
  * Validate a single question's VALUE for format (not required-ness). Returns a
  * friendly message, or null when the value is empty or valid. Only text-like
  * question types have a format to check; choice/upload types are validated by

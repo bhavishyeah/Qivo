@@ -140,8 +140,15 @@ export default function FormEditorPage() {
   const [responseEditing, setResponseEditing] = useState<"disabled" | "timed" | "until_close">("disabled");
   const [responseEditMinutes, setResponseEditMinutes] = useState(15);
   const [paymentEnabled, setPaymentEnabled] = useState(false);
-  // Rupee text input; converted to/from paise at load/save.
+  // "fixed" = owner sets one amount; "respondent" = payer enters the amount.
+  const [paymentMode, setPaymentMode] = useState<"fixed" | "respondent">(
+    "fixed",
+  );
+  // Rupee text inputs; converted to/from paise at load/save.
   const [paymentAmountRupees, setPaymentAmountRupees] = useState("");
+  // Respondent-mode optional bounds (rupees, as typed).
+  const [paymentMinRupees, setPaymentMinRupees] = useState("");
+  const [paymentMaxRupees, setPaymentMaxRupees] = useState("");
   const [paymentDescription, setPaymentDescription] = useState("");
   const [savingSettings, setSavingSettings] = useState(false);
 
@@ -212,9 +219,22 @@ export default function FormEditorPage() {
     setResponseEditMinutes(schema.settings?.responseEditMinutes ?? 15);
     const payment = schema.settings?.payment;
     setPaymentEnabled(payment?.enabled ?? false);
+    // Missing mode => fixed (back-compat).
+    const mode = payment?.mode ?? "fixed";
+    setPaymentMode(mode);
     setPaymentAmountRupees(
-      payment && typeof payment.amount === "number"
+      payment && "amount" in payment && typeof payment.amount === "number"
         ? String(payment.amount / 100)
+        : "",
+    );
+    setPaymentMinRupees(
+      payment && "minAmount" in payment && typeof payment.minAmount === "number"
+        ? String(payment.minAmount / 100)
+        : "",
+    );
+    setPaymentMaxRupees(
+      payment && "maxAmount" in payment && typeof payment.maxAmount === "number"
+        ? String(payment.maxAmount / 100)
         : "",
     );
     setPaymentDescription(payment?.description ?? "");
@@ -706,42 +726,99 @@ export default function FormEditorPage() {
     if (backgroundColor) theme.backgroundColor = backgroundColor;
     if (fontFamily) theme.fontFamily = fontFamily;
 
-    // Build the payment block. amount is required by the API schema even when
-    // disabled, so carry the current value (or the ₹1 floor) when off. When
-    // enabled, mirror the server floor exactly (≥ ₹1, integer paise in
-    // [100, 15_000_000], ≤ 2 decimals) so a sub-₹1 entry is caught here.
-    let payment: { enabled: boolean; amount: number; description?: string };
-    if (paymentEnabled) {
-      const rupees = Number(paymentAmountRupees);
-      const amountPaise = Math.round(rupees * 100);
-      if (
-        !Number.isFinite(rupees) ||
-        rupees < 1 ||
-        Math.abs(amountPaise / 100 - rupees) > 1e-9 ||
-        amountPaise < 100 ||
-        amountPaise > 15_000_000
-      ) {
+    // Build the payment block per the selected mode. `mode` is ALWAYS sent
+    // (regardless of `enabled`) so disabling payment never loses the mode or
+    // its bounds. Fixed carries a bounded `amount`; respondent carries optional
+    // min/max (never `amount`). All ₹↔paise conversion mirrors the server
+    // discipline (integer paise in [100, 15_000_000], ≤ 2 decimals).
+    //
+    // Parse a rupee string to integer paise within [100, 15_000_000]; returns
+    // null on anything the server would reject (non-finite, >2 decimals,
+    // out-of-range).
+    const toBoundedPaise = (raw: string): number | null => {
+      const rupees = Number(raw);
+      if (!Number.isFinite(rupees) || rupees < 0) return null;
+      const paise = Math.round(rupees * 100);
+      if (Math.abs(paise / 100 - rupees) > 1e-9) return null;
+      if (paise < 100 || paise > 15_000_000) return null;
+      return paise;
+    };
+
+    type FixedPayment = {
+      enabled: boolean;
+      mode: "fixed";
+      amount: number;
+      description?: string;
+    };
+    type RespondentPayment = {
+      enabled: boolean;
+      mode: "respondent";
+      minAmount?: number;
+      maxAmount?: number;
+      description?: string;
+    };
+    let payment: FixedPayment | RespondentPayment;
+    const desc = paymentDescription.trim();
+
+    if (paymentMode === "respondent") {
+      // Bounds are optional. Validate each present bound and min <= max.
+      let minAmount: number | undefined;
+      let maxAmount: number | undefined;
+      if (paymentMinRupees.trim() !== "") {
+        const p = toBoundedPaise(paymentMinRupees);
+        if (p == null) {
+          setSavingSettings(false);
+          setError(
+            "Minimum must be at least ₹1 (up to ₹1,50,000, max 2 decimals).",
+          );
+          return;
+        }
+        minAmount = p;
+      }
+      if (paymentMaxRupees.trim() !== "") {
+        const p = toBoundedPaise(paymentMaxRupees);
+        if (p == null) {
+          setSavingSettings(false);
+          setError(
+            "Maximum must be at least ₹1 (up to ₹1,50,000, max 2 decimals).",
+          );
+          return;
+        }
+        maxAmount = p;
+      }
+      if (minAmount != null && maxAmount != null && minAmount > maxAmount) {
         setSavingSettings(false);
-        setError(
-          "Enter a payment amount of at least ₹1 (up to ₹1,50,000, max 2 decimals).",
-        );
+        setError("Minimum amount must not exceed the maximum.");
         return;
       }
-      payment = { enabled: true, amount: amountPaise };
-      const desc = paymentDescription.trim();
+      payment = { enabled: paymentEnabled, mode: "respondent" };
+      if (minAmount != null) payment.minAmount = minAmount;
+      if (maxAmount != null) payment.maxAmount = maxAmount;
       if (desc) payment.description = desc;
     } else {
-      const currentRupees = Number(paymentAmountRupees);
-      const currentPaise = Math.round(currentRupees * 100);
-      payment = {
-        enabled: false,
-        amount:
-          Number.isFinite(currentRupees) &&
-          currentPaise >= 100 &&
-          currentPaise <= 15_000_000
-            ? currentPaise
-            : 100,
-      };
+      // Fixed: `amount` is required by the API schema in every case. When
+      // enabled, validate the owner's entry; when disabled, carry the current
+      // value (or the ₹1 floor) so turning payment back on preserves it.
+      if (paymentEnabled) {
+        const amountPaise = toBoundedPaise(paymentAmountRupees);
+        if (amountPaise == null || amountPaise < 100) {
+          setSavingSettings(false);
+          setError(
+            "Enter a payment amount of at least ₹1 (up to ₹1,50,000, max 2 decimals).",
+          );
+          return;
+        }
+        payment = { enabled: true, mode: "fixed", amount: amountPaise };
+        if (desc) payment.description = desc;
+      } else {
+        const currentPaise = toBoundedPaise(paymentAmountRupees);
+        payment = {
+          enabled: false,
+          mode: "fixed",
+          amount: currentPaise ?? 100,
+        };
+        if (desc) payment.description = desc;
+      }
     }
 
     try {
@@ -1252,18 +1329,47 @@ export default function FormEditorPage() {
             <SettingsGroup title="Presentation" description="What respondents see after submitting" summary={confirmationMessage ? "Custom message set" : "Default message"}>
               <div className="question-field"><label htmlFor="s-confirm">Confirmation message</label><textarea id="s-confirm" rows={3} value={confirmationMessage} onChange={(e) => setConfirmationMessage(e.target.value)} placeholder="Thanks for your response." /><small className="muted">Shown to respondents after they submit.</small></div>
             </SettingsGroup>
-            <SettingsGroup title="Payments" description="Require a payment before respondents can submit" summary={paymentEnabled ? `Required · ₹${paymentAmountRupees || "0"}` : "Off"}>
+            <SettingsGroup title="Payments" description="Require a payment before respondents can submit" summary={paymentEnabled ? (paymentMode === "respondent" ? "Required · payer enters amount" : `Required · ₹${paymentAmountRupees || "0"}`) : "Off"}>
               <label className="settings-toggle"><input type="checkbox" checked={paymentEnabled} onChange={(e) => setPaymentEnabled(e.target.checked)} /><span><strong>Require payment to submit</strong><small>Respondents pay with Razorpay before their response is saved.</small></span></label>
               {paymentEnabled ? (
                 <>
                   <div className="question-field">
-                    <label htmlFor="s-payment-amount">Amount (₹)</label>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span aria-hidden="true" style={{ color: "#64748b" }}>₹</span>
-                      <input id="s-payment-amount" type="number" min={1} max={150000} step="0.01" inputMode="decimal" value={paymentAmountRupees} onChange={(e) => setPaymentAmountRupees(e.target.value)} placeholder="100" style={{ flex: 1, border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }} />
-                    </div>
-                    <small className="muted">Fixed amount per response. Minimum ₹1 (up to ₹1,50,000).</small>
+                    <label htmlFor="s-payment-mode">Payment amount</label>
+                    <select id="s-payment-mode" value={paymentMode} onChange={(e) => setPaymentMode(e.target.value as "fixed" | "respondent")} style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }}>
+                      <option value="fixed">Fixed amount</option>
+                      <option value="respondent">Respondent enters amount</option>
+                    </select>
+                    <small className="muted">{paymentMode === "respondent" ? "The respondent types the amount they pay (donations / pay-what-you-want)." : "Every respondent pays the same amount you set."}</small>
                   </div>
+                  {paymentMode === "fixed" ? (
+                    <div className="question-field">
+                      <label htmlFor="s-payment-amount">Amount (₹)</label>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span aria-hidden="true" style={{ color: "#64748b" }}>₹</span>
+                        <input id="s-payment-amount" type="number" min={1} max={150000} step="0.01" inputMode="decimal" value={paymentAmountRupees} onChange={(e) => setPaymentAmountRupees(e.target.value)} placeholder="100" style={{ flex: 1, border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }} />
+                      </div>
+                      <small className="muted">Fixed amount per response. Minimum ₹1 (up to ₹1,50,000).</small>
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+                      <div className="question-field" style={{ flex: 1, minWidth: 160 }}>
+                        <label htmlFor="s-payment-min">Minimum (₹, optional)</label>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span aria-hidden="true" style={{ color: "#64748b" }}>₹</span>
+                          <input id="s-payment-min" type="number" min={1} max={150000} step="0.01" inputMode="decimal" value={paymentMinRupees} onChange={(e) => setPaymentMinRupees(e.target.value)} placeholder="1" style={{ flex: 1, border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }} />
+                        </div>
+                        <small className="muted">Lowest allowed. Defaults to ₹1 if blank.</small>
+                      </div>
+                      <div className="question-field" style={{ flex: 1, minWidth: 160 }}>
+                        <label htmlFor="s-payment-max">Maximum (₹, optional)</label>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span aria-hidden="true" style={{ color: "#64748b" }}>₹</span>
+                          <input id="s-payment-max" type="number" min={1} max={150000} step="0.01" inputMode="decimal" value={paymentMaxRupees} onChange={(e) => setPaymentMaxRupees(e.target.value)} placeholder="1,50,000" style={{ flex: 1, border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }} />
+                        </div>
+                        <small className="muted">Highest allowed. Defaults to ₹1,50,000 if blank.</small>
+                      </div>
+                    </div>
+                  )}
                   <div className="question-field">
                     <label htmlFor="s-payment-description">Payment description (optional)</label>
                     <textarea id="s-payment-description" rows={2} maxLength={300} value={paymentDescription} onChange={(e) => setPaymentDescription(e.target.value)} placeholder="Shown to the respondent in Checkout." />
