@@ -11,6 +11,25 @@
     />
     <meta name="theme-color" content="#2563eb" />
     <title>Qivo Forms</title>
+    <script>
+      // Set the color scheme synchronously before paint to avoid a flash of the
+      // wrong theme (FEAT-001). Stored manual choice wins; else OS preference.
+      (function () {
+        try {
+          var s = localStorage.getItem("qivo-color-scheme");
+          if (s !== "light" && s !== "dark") {
+            s =
+              window.matchMedia &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches
+                ? "dark"
+                : "light";
+          }
+          document.documentElement.dataset.colorScheme = s;
+        } catch (e) {
+          document.documentElement.dataset.colorScheme = "light";
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

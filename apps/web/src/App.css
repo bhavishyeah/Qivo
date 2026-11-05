@@ -126,7 +126,7 @@ form {
 .question-field > legend {
   display: block;
   margin-bottom: 9px;
-  color: #1e293b;
+  color: var(--qivo-text);
   font-size: 1rem;
   font-weight: 750;
 }
@@ -142,7 +142,7 @@ form {
 .question-description {
   display: block;
   margin: -2px 0 10px;
-  color: #64748b;
+  color: var(--qivo-text-secondary);
   font-size: 0.9rem;
   line-height: 1.5;
 }
@@ -156,15 +156,20 @@ form {
 .question-field textarea {
   display: block;
   width: 100%;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--qivo-input-border);
   border-radius: 12px;
   padding: 13px 14px;
-  color: #172033;
-  background: #ffffff;
+  color: var(--qivo-text);
+  background: var(--qivo-input-bg);
   outline: none;
   transition:
     border-color 160ms ease,
     box-shadow 160ms ease;
+}
+
+.question-field input::placeholder,
+.question-field textarea::placeholder {
+  color: var(--qivo-placeholder);
 }
 
 .question-field textarea {
@@ -173,8 +178,8 @@ form {
 
 .question-field input:focus,
 .question-field textarea:focus {
-  border-color: #2563eb;
-  box-shadow: 0 0 0 4px rgb(37 99 235 / 14%);
+  border-color: var(--qivo-primary);
+  box-shadow: 0 0 0 4px var(--qivo-focus-ring);
 }
 
 .choice-list,
@@ -190,11 +195,11 @@ form {
   align-items: center;
   gap: 9px;
   min-height: 44px;
-  border: 1px solid #dbe3ee;
+  border: 1px solid var(--qivo-border-strong);
   border-radius: 12px;
   padding: 10px 13px;
-  color: #334155;
-  background: #f8fafc;
+  color: var(--qivo-text);
+  background: var(--qivo-surface);
   cursor: pointer;
   transition:
     border-color 160ms ease,
@@ -203,13 +208,19 @@ form {
 
 .choice-item:hover,
 .rating-item:hover {
-  border-color: #93c5fd;
-  background: #eff6ff;
+  border-color: var(--qivo-primary);
+  background: var(--qivo-surface-2);
+}
+
+.choice-item:has(input:checked),
+.rating-item:has(input:checked) {
+  border-color: var(--qivo-primary);
+  background: var(--qivo-surface-2);
 }
 
 .choice-item input,
 .rating-item input {
-  accent-color: #2563eb;
+  accent-color: var(--qivo-primary);
 }
 
 .rating-list {
@@ -249,6 +260,11 @@ form {
   background: #fef2f2;
 }
 
+[data-color-scheme="dark"] .submit-error {
+  color: var(--qivo-error-text);
+  background: rgb(127 29 29 / 25%);
+}
+
 /* Prominent "payment received but save failed" notice — the last-resort net. */
 .submit-error.payment-warning {
   color: #92400e;
@@ -257,10 +273,18 @@ form {
   font-weight: 600;
 }
 
+/* Keep the amber payment-warning legible in dark mode (and not clobbered by
+   the generic dark .submit-error rule above). */
+[data-color-scheme="dark"] .submit-error.payment-warning {
+  color: #fbbf24;
+  background: rgb(120 53 15 / 35%);
+  border-color: #b45309;
+}
+
 /* Inline per-field validation message, shown under the offending input. */
 .field-error {
   margin: 6px 0 0;
-  color: #b91c1c;
+  color: var(--qivo-error-text);
   font-size: 0.85rem;
   line-height: 1.3;
 }
@@ -406,6 +430,18 @@ form {
 .secondary-button.compact {
   padding: 9px 12px;
   font-size: 0.88rem;
+}
+
+/* Scoped to the public/preview shell so the dashboard's secondary buttons are
+   untouched even if the OS requests dark globally. */
+[data-color-scheme="dark"] .public-form-shell .secondary-button {
+  color: #bfdbfe;
+  background: rgb(30 58 138 / 35%);
+  border-color: var(--qivo-border-strong);
+}
+
+[data-color-scheme="dark"] .public-form-shell .secondary-button:hover {
+  background: rgb(30 58 138 / 55%);
 }
 
 .forms-grid {
@@ -1406,14 +1442,30 @@ form {
 
 .public-form-shell {
   min-height: 100vh;
-  background:
-    radial-gradient(circle at top left, #dbeafe, transparent 40%),
-    radial-gradient(circle at bottom right, #f0fdf4, transparent 40%),
-    #f4f7fb;
+  /* --qivo-form-bg is set inline by the page in LIGHT mode to the per-form
+     custom backgroundColor; it falls back to the themed page background, which
+     the dark override replaces so a custom light bg is not shown in dark. */
+  background: var(--qivo-form-bg, var(--qivo-page-bg));
   display: flex;
   align-items: flex-start;
   justify-content: center;
   padding: 40px 16px 80px;
+}
+
+/* Default (light) page background: the decorative gradient over the page bg.
+   Kept here so an un-themed form stays visually identical to today. Applied
+   only when no per-form --qivo-form-bg override is inline. */
+.public-form-shell:not([style*="--qivo-form-bg"]) {
+  background:
+    radial-gradient(circle at top left, #dbeafe, transparent 40%),
+    radial-gradient(circle at bottom right, #f0fdf4, transparent 40%),
+    var(--qivo-page-bg);
+}
+
+/* In dark mode the decorative light gradient is dropped for a flat dark page. */
+[data-color-scheme="dark"] .public-form-shell,
+[data-color-scheme="dark"] .public-form-shell:not([style*="--qivo-form-bg"]) {
+  background: var(--qivo-page-bg);
 }
 
 .public-form-wrap {
@@ -1422,7 +1474,7 @@ form {
 
 .public-form-loading {
   width: min(100%, 680px);
-  background: #ffffff;
+  background: var(--qivo-card-bg);
   border-radius: 20px;
   padding: 40px;
   box-shadow: 0 16px 60px rgb(30 64 175 / 8%);
@@ -1431,7 +1483,7 @@ form {
 /* Progress bar */
 .public-progress-bar {
   height: 6px;
-  background: #e2e8f0;
+  background: var(--qivo-border);
   border-radius: 999px;
   margin-bottom: 28px;
   overflow: hidden;
@@ -1439,7 +1491,7 @@ form {
 
 .public-progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #2563eb, #3b82f6);
+  background: linear-gradient(90deg, var(--qivo-primary), #3b82f6);
   border-radius: 999px;
   transition: width 400ms ease;
 }
@@ -1451,21 +1503,21 @@ form {
 
 .public-form-title {
   margin: 8px 0 12px;
-  color: #111827;
+  color: var(--qivo-text);
   font-size: clamp(1.6rem, 5vw, 2.5rem);
   letter-spacing: -0.04em;
   line-height: 1.1;
 }
 
 .public-form-description {
-  color: #64748b;
+  color: var(--qivo-text-secondary);
   font-size: 1rem;
   line-height: 1.65;
   margin: 0 0 8px;
 }
 
 .public-section-counter {
-  color: #2563eb;
+  color: var(--qivo-primary);
   font-size: 0.82rem;
   font-weight: 700;
   margin: 0 0 20px;
@@ -1473,8 +1525,8 @@ form {
 
 /* Form body */
 .public-form-body {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
+  background: var(--qivo-card-bg);
+  border: 1px solid var(--qivo-border);
   border-radius: 20px;
   padding: 32px;
   box-shadow: 0 16px 60px rgb(30 64 175 / 8%);
@@ -1499,11 +1551,11 @@ form {
 .public-status-card {
   width: min(100%, 520px);
   margin: 80px auto;
-  background: #ffffff;
+  background: var(--qivo-card-bg);
   border-radius: 24px;
   padding: 48px 40px;
   box-shadow: 0 24px 80px rgb(30 64 175 / 10%);
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--qivo-border);
   text-align: center;
 }
 
@@ -1515,13 +1567,13 @@ form {
 
 .public-status-card h1 {
   margin: 0 0 12px;
-  color: #111827;
+  color: var(--qivo-text);
   font-size: clamp(1.6rem, 4vw, 2.2rem);
   letter-spacing: -0.04em;
 }
 
 .public-status-card p {
-  color: #64748b;
+  color: var(--qivo-text-secondary);
   line-height: 1.65;
   margin: 0 0 8px;
 }
@@ -1536,7 +1588,7 @@ form {
 
 .public-status-brand,
 .public-form-brand {
-  color: #cbd5e1;
+  color: var(--qivo-text-muted);
   font-size: 0.75rem;
   text-align: center;
   margin: 0;
@@ -1547,7 +1599,7 @@ form {
   display: flex;
   justify-content: space-between;
   margin-top: 8px;
-  color: #94a3b8;
+  color: var(--qivo-text-muted);
   font-size: 0.75rem;
 }
 
@@ -1572,6 +1624,177 @@ form {
     flex-direction: row;
     gap: 10px;
   }
+}
+
+
+/* ── Public-form inline-hex surfaces moved to variable-driven classes (FEAT-001) ──
+   These replace hard-coded inline style hex in PublicFormPage.tsx and
+   SignaturePad.tsx so dark mode flips them via the shared tokens. */
+
+.upload-dropzone {
+  border: 2px dashed var(--qivo-border-strong);
+  border-radius: 12px;
+  padding: 24px 16px;
+  text-align: center;
+  background: var(--qivo-surface);
+}
+
+.upload-hint {
+  color: var(--qivo-text-muted);
+  font-size: 0.82rem;
+}
+
+.upload-progress-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--qivo-border);
+  overflow: hidden;
+}
+
+.upload-progress-fill {
+  height: 100%;
+  background: var(--qivo-primary);
+  border-radius: 999px;
+  transition: width 0.2s ease;
+}
+
+.multi-entry-input {
+  flex: 1;
+  border: 1px solid var(--qivo-input-border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: inherit;
+  color: var(--qivo-text);
+  background: var(--qivo-input-bg);
+}
+
+.multi-entry-input::placeholder {
+  color: var(--qivo-placeholder);
+}
+
+.multi-entry-remove {
+  border: none;
+  background: none;
+  color: var(--qivo-text-muted);
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  line-height: 1;
+}
+
+.multi-entry-add {
+  margin-top: 8px;
+  background: none;
+  border: none;
+  color: var(--qivo-primary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.signature-hint {
+  font-size: 12px;
+  color: var(--qivo-text-muted);
+}
+
+.signature-clear {
+  font-size: 12px;
+  color: var(--qivo-text-secondary);
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+.quiz-score-card {
+  margin: 20px 0;
+  padding: 20px;
+  background: #f0fdf4;
+  border-radius: 14px;
+  border: 1px solid #bbf7d0;
+}
+
+.quiz-score-card .quiz-score-label {
+  margin: 0 0 8px;
+  color: #166534;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.quiz-score-card .quiz-score-value {
+  margin: 0;
+  font-size: 2.5rem;
+  font-weight: 900;
+  color: var(--qivo-text);
+}
+
+.quiz-score-card .quiz-score-percent {
+  margin: 4px 0 0;
+  color: var(--qivo-text-secondary);
+  font-size: 0.9rem;
+}
+
+[data-color-scheme="dark"] .quiz-score-card {
+  background: rgb(20 83 45 / 30%);
+  border-color: #166534;
+}
+
+[data-color-scheme="dark"] .quiz-score-card .quiz-score-label {
+  color: #86efac;
+}
+
+/* Theme toggle button (sun/moon). Variable-driven so it reads in both schemes
+   with a visible focus ring. */
+.color-scheme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 1px solid var(--qivo-border-strong);
+  background: var(--qivo-card-bg);
+  color: var(--qivo-text);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease;
+}
+
+.color-scheme-toggle:hover {
+  background: var(--qivo-surface);
+}
+
+.color-scheme-toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--qivo-focus-ring);
+  border-color: var(--qivo-primary);
+}
+
+/* Visually-hidden text for the toggle's accessible label (icon is aria-hidden). */
+.color-scheme-toggle .visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Header becomes a positioning context so the toggle can sit top-right. */
+.public-form-header {
+  position: relative;
+}
+
+.public-form-header .color-scheme-toggle {
+  position: absolute;
+  top: 0;
+  right: 0;
 }
 
 
@@ -2401,6 +2624,52 @@ form {
   --qivo-font-label: 1rem;
   --qivo-font-helper: 0.875rem;
   --qivo-font-micro: 0.75rem;
+
+  /* ── Public-form semantic surface tokens (light = today's hex) ──
+     Dark mode (FEAT-001) flips ONLY these in the
+     [data-color-scheme="dark"] block below. Per-form accent
+     (--qivo-primary / inline accent) is never redefined there. */
+  --qivo-page-bg: #f4f7fb;
+  --qivo-card-bg: #ffffff;
+  --qivo-surface: #f8fafc;
+  --qivo-surface-2: #eff6ff;
+  --qivo-text: #1e293b;
+  --qivo-text-secondary: #64748b;
+  --qivo-text-muted: #94a3b8;
+  --qivo-border: #e2e8f0;
+  --qivo-border-strong: #cbd5e1;
+  --qivo-input-bg: #ffffff;
+  --qivo-input-border: #cbd5e1;
+  --qivo-placeholder: #94a3b8;
+  --qivo-error-text: #b91c1c;
+  --qivo-focus-ring: rgb(37 99 235 / 14%);
+}
+
+/* ── Dark mode (FEAT-001) ──────────────────────────────────────────
+   Driven by document.documentElement[data-color-scheme="dark"]
+   (set synchronously by the inline script in index.html, then by the
+   ColorSchemeToggle). Redefines ONLY neutrals/surfaces/text/borders to
+   WCAG-AA dark values. Per-form accentColor still wins via inline style
+   and --qivo-primary is intentionally untouched. */
+[data-color-scheme="dark"] {
+  --qivo-page-bg: #0f172a;
+  --qivo-card-bg: #1e293b;
+  --qivo-surface: #1e293b;
+  --qivo-surface-2: #111827;
+  --qivo-text: #f1f5f9;
+  --qivo-text-secondary: #cbd5e1;
+  --qivo-text-muted: #94a3b8;
+  --qivo-border: #334155;
+  --qivo-border-strong: #475569;
+  --qivo-input-bg: #111827;
+  --qivo-input-border: #475569;
+  --qivo-placeholder: #94a3b8;
+  --qivo-error-text: #fca5a5;
+  --qivo-focus-ring: rgb(56 189 248 / 45%);
+  /* A per-form custom light backgroundColor is not shown in dark mode:
+     the shell reads --qivo-form-bg (set inline by the pages) but dark
+     overrides it with the dark page background so text stays readable. */
+  --qivo-form-bg: var(--qivo-page-bg);
 }
 
 /* Apply design tokens to existing components */

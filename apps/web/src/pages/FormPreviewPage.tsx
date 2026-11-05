@@ -1,5 +1,12 @@
-import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type ChangeEvent,
+  type CSSProperties,
+} from "react";
 import { Link, useParams } from "react-router-dom";
+import ColorSchemeToggle from "../components/ColorSchemeToggle";
 import { api, ApiRequestError } from "../lib/api";
 import { evaluateConditions } from "../lib/conditions";
 import { validateQuestionFormat } from "../lib/validation";
@@ -160,8 +167,12 @@ export default function FormPreviewPage() {
   return (
     <main
       className="public-form-shell"
+      // Per-form custom background is passed as --qivo-form-bg so dark mode can
+      // override it (shown in light mode only); cover/accent apply in both.
       style={{
-        ...(resolved.background ? { background: resolved.background } : {}),
+        ...(resolved.background
+          ? ({ "--qivo-form-bg": resolved.background } as CSSProperties)
+          : {}),
         ...(resolved.fontFamily ? { fontFamily: resolved.fontFamily } : {}),
       }}
     >
@@ -216,6 +227,7 @@ export default function FormPreviewPage() {
 
         {/* Header */}
         <header className="public-form-header">
+          <ColorSchemeToggle />
           <p className="eyebrow" style={{ color: previewAccent }}>Qivo Form (Preview)</p>
           <h1 className="public-form-title">{form.title}</h1>
           {form.description ? <p className="public-form-description">{form.description}</p> : null}
@@ -439,9 +451,9 @@ function PreviewQuestion({
       <div className="question-field">
         <label>{label}</label>
         {desc}
-        <div style={{ border: "2px dashed #cbd5e1", borderRadius: 12, padding: "24px 16px", textAlign: "center", background: "#f8fafc" }}>
-          <p style={{ margin: 0, color: "#475569", fontWeight: 600 }}>Click to upload (preview only)</p>
-          <p style={{ margin: "4px 0 0", color: "#94a3b8", fontSize: "0.82rem" }}>Max {question.settings?.maxFileSizeMB ?? 5}MB</p>
+        <div className="upload-dropzone">
+          <p style={{ margin: 0, color: "var(--qivo-text-secondary)", fontWeight: 600 }}>Click to upload (preview only)</p>
+          <p className="upload-hint" style={{ margin: "4px 0 0" }}>Max {question.settings?.maxFileSizeMB ?? 5}MB</p>
         </div>
       </div>
     );
@@ -475,6 +487,7 @@ function PreviewQuestion({
               style={{ display: "flex", gap: 8, alignItems: "center" }}
             >
               <input
+                className="multi-entry-input"
                 type="text"
                 value={entry}
                 onChange={(e) => {
@@ -484,32 +497,16 @@ function PreviewQuestion({
                 }}
                 placeholder={`Entry ${idx + 1}`}
                 aria-label={`${question.label} — entry ${idx + 1}`}
-                style={{
-                  flex: 1,
-                  border: "1px solid #cbd5e1",
-                  borderRadius: 10,
-                  padding: "10px 12px",
-                  fontSize: "inherit",
-                }}
               />
               {entries.length > 1 ? (
                 <button
                   type="button"
+                  className="multi-entry-remove"
                   onClick={() => {
                     const next = entries.filter((_, i) => i !== idx);
                     onChange(question.id, next.length > 0 ? next : [""]);
                   }}
                   aria-label={`Remove entry ${idx + 1}`}
-                  style={{
-                    border: "none",
-                    background: "none",
-                    color: "#94a3b8",
-                    fontSize: "1.2rem",
-                    cursor: "pointer",
-                    padding: "4px 8px",
-                    borderRadius: 6,
-                    lineHeight: 1,
-                  }}
                 >
                   ×
                 </button>
@@ -519,17 +516,8 @@ function PreviewQuestion({
         </div>
         <button
           type="button"
+          className="multi-entry-add"
           onClick={() => onChange(question.id, [...entries, ""])}
-          style={{
-            marginTop: 8,
-            background: "none",
-            border: "none",
-            color: "#2563eb",
-            fontSize: "0.85rem",
-            fontWeight: 600,
-            cursor: "pointer",
-            padding: "4px 0",
-          }}
         >
           + Add another
         </button>

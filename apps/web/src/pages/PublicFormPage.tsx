@@ -4,6 +4,7 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type CSSProperties,
   type FormEvent,
 } from "react";
 import { useParams } from "react-router-dom";
@@ -20,6 +21,7 @@ import { computeReachedSections, nextSectionAfter } from "../lib/sectionJumps";
 import { resolvePipedLabel } from "../lib/piping";
 import { isImageUrl, uploadToCloudinary } from "../lib/upload";
 import SignaturePad, { type SignaturePadHandle } from "../components/SignaturePad";
+import ColorSchemeToggle from "../components/ColorSchemeToggle";
 import { ensureFontLoaded, resolveTheme } from "../lib/theme";
 import type { AnswerValue, PublicForm, Question, Section } from "../types";
 
@@ -722,12 +724,12 @@ export default function PublicFormPage() {
           <div className="public-status-icon">✅</div>
           <h1>Response submitted</h1>
           {quizScore && form.schema.settings.showScore ? (
-            <div style={{ margin: "20px 0", padding: "20px", background: "#f0fdf4", borderRadius: 14, border: "1px solid #bbf7d0" }}>
-              <p style={{ margin: "0 0 8px", color: "#166534", fontWeight: 700, fontSize: "0.9rem" }}>Your score</p>
-              <p style={{ margin: 0, fontSize: "2.5rem", fontWeight: 900, color: "#111827" }}>
+            <div className="quiz-score-card">
+              <p className="quiz-score-label">Your score</p>
+              <p className="quiz-score-value">
                 {quizScore.earned}/{quizScore.total}
               </p>
-              <p style={{ margin: "4px 0 0", color: "#64748b", fontSize: "0.9rem" }}>
+              <p className="quiz-score-percent">
                 {quizScore.percentage}% correct
               </p>
             </div>
@@ -781,8 +783,14 @@ export default function PublicFormPage() {
   return (
     <main
       className="public-form-shell"
+      // A per-form custom background is passed as --qivo-form-bg (not `background`)
+      // so the [data-color-scheme="dark"] block can override it with the dark page
+      // background — the owner's light bg is shown in light mode only. The cover
+      // image and accent apply in both schemes.
       style={{
-        ...(resolved.background ? { background: resolved.background } : {}),
+        ...(resolved.background
+          ? ({ "--qivo-form-bg": resolved.background } as CSSProperties)
+          : {}),
         ...(resolved.fontFamily ? { fontFamily: resolved.fontFamily } : {}),
       }}
     >
@@ -813,6 +821,7 @@ export default function PublicFormPage() {
 
         {/* Header */}
         <header className="public-form-header">
+          <ColorSchemeToggle />
           {form.branding?.logoUrl ? (
             <img
               src={form.branding.logoUrl}
@@ -1234,12 +1243,8 @@ function QuestionField({
         <label htmlFor={inputId}>{label}</label>
         {descriptionElement}
         <div
+          className="upload-dropzone"
           style={{
-            border: "2px dashed #cbd5e1",
-            borderRadius: 12,
-            padding: "24px 16px",
-            textAlign: "center",
-            background: "#f8fafc",
             cursor: uploading ? "default" : "pointer",
             opacity: uploading ? 0.7 : 1,
           }}
@@ -1266,25 +1271,13 @@ function QuestionField({
           />
           {uploading ? (
             <div>
-              <p style={{ margin: "0 0 10px", color: "#475569", fontWeight: 600 }}>
+              <p style={{ margin: "0 0 10px", color: "var(--qivo-text-secondary)", fontWeight: 600 }}>
                 Uploading… {uploadProgress > 0 ? `${uploadProgress}%` : ""}
               </p>
-              <div
-                style={{
-                  height: 8,
-                  borderRadius: 999,
-                  background: "#e2e8f0",
-                  overflow: "hidden",
-                }}
-              >
+              <div className="upload-progress-track">
                 <div
-                  style={{
-                    height: "100%",
-                    width: `${uploadProgress}%`,
-                    background: "#2563eb",
-                    borderRadius: 999,
-                    transition: "width 0.2s ease",
-                  }}
+                  className="upload-progress-fill"
+                  style={{ width: `${uploadProgress}%` }}
                 />
               </div>
             </div>
@@ -1310,21 +1303,21 @@ function QuestionField({
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={(e) => e.stopPropagation()}
-                  style={{ color: "#2563eb", textDecoration: "underline" }}
+                  style={{ color: "var(--qivo-primary)", textDecoration: "underline" }}
                 >
                   view
                 </a>
-                <span style={{ display: "block", fontSize: "0.8rem", color: "#94a3b8", marginTop: 4 }}>
+                <span className="upload-hint" style={{ display: "block", marginTop: 4 }}>
                   Click to replace
                 </span>
               </p>
             </div>
           ) : (
             <>
-              <p style={{ margin: "0 0 4px", color: "#475569", fontWeight: 600 }}>
+              <p style={{ margin: "0 0 4px", color: "var(--qivo-text-secondary)", fontWeight: 600 }}>
                 Click to upload a file
               </p>
-              <p style={{ margin: 0, color: "#94a3b8", fontSize: "0.82rem" }}>
+              <p className="upload-hint" style={{ margin: 0 }}>
                 Max {maxSize}MB
                 {allowedTypes.length > 0 ? ` · ${friendlyFileTypes(allowedTypes)}` : ""}
               </p>
@@ -1349,15 +1342,7 @@ function QuestionField({
         {descriptionElement}
         {uploadedUrl ? (
           // Reuse the FILE_UPLOAD uploaded-state UI: thumbnail + view + re-sign.
-          <div
-            style={{
-              border: "2px dashed #cbd5e1",
-              borderRadius: 12,
-              padding: "24px 16px",
-              textAlign: "center",
-              background: "#f8fafc",
-            }}
-          >
+          <div className="upload-dropzone">
             <div style={{ color: "#16a34a", fontWeight: 600 }}>
               {isImageUrl(uploadedUrl) ? (
                 <img
@@ -1378,7 +1363,7 @@ function QuestionField({
                   href={uploadedUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  style={{ color: "#2563eb", textDecoration: "underline" }}
+                  style={{ color: "var(--qivo-primary)", textDecoration: "underline" }}
                 >
                   view
                 </a>
@@ -1393,7 +1378,7 @@ function QuestionField({
                 style={{
                   marginTop: 8,
                   fontSize: "0.85rem",
-                  color: "#2563eb",
+                  color: "var(--qivo-primary)",
                   background: "transparent",
                   border: "none",
                   cursor: "pointer",
@@ -1414,25 +1399,13 @@ function QuestionField({
             />
             {uploading ? (
               <div style={{ marginTop: 10 }}>
-                <p style={{ margin: "0 0 10px", color: "#475569", fontWeight: 600 }}>
+                <p style={{ margin: "0 0 10px", color: "var(--qivo-text-secondary)", fontWeight: 600 }}>
                   Uploading… {uploadProgress > 0 ? `${uploadProgress}%` : ""}
                 </p>
-                <div
-                  style={{
-                    height: 8,
-                    borderRadius: 999,
-                    background: "#e2e8f0",
-                    overflow: "hidden",
-                  }}
-                >
+                <div className="upload-progress-track">
                   <div
-                    style={{
-                      height: "100%",
-                      width: `${uploadProgress}%`,
-                      background: "#2563eb",
-                      borderRadius: 999,
-                      transition: "width 0.2s ease",
-                    }}
+                    className="upload-progress-fill"
+                    style={{ width: `${uploadProgress}%` }}
                   />
                 </div>
               </div>
@@ -1449,9 +1422,9 @@ function QuestionField({
                   marginTop: 10,
                   padding: "8px 16px",
                   borderRadius: 10,
-                  border: "1px solid #cbd5e1",
-                  background: sigEmpty ? "#f1f5f9" : "#2563eb",
-                  color: sigEmpty ? "#94a3b8" : "#fff",
+                  border: "1px solid var(--qivo-input-border)",
+                  background: sigEmpty ? "var(--qivo-surface)" : "var(--qivo-primary)",
+                  color: sigEmpty ? "var(--qivo-text-muted)" : "#fff",
                   fontWeight: 600,
                   cursor: sigEmpty || uploading ? "default" : "pointer",
                 }}
@@ -1506,6 +1479,7 @@ function QuestionField({
             >
               <input
                 id={idx === 0 ? `${inputId}-0` : undefined}
+                className="multi-entry-input"
                 type="text"
                 value={entry}
                 onChange={(e) => updateEntry(idx, e.target.value)}
@@ -1521,29 +1495,13 @@ function QuestionField({
                     .filter(Boolean)
                     .join(" ") || undefined
                 }
-                style={{
-                  flex: 1,
-                  border: "1px solid #cbd5e1",
-                  borderRadius: 10,
-                  padding: "10px 12px",
-                  fontSize: "inherit",
-                }}
               />
               {entries.length > 1 ? (
                 <button
                   type="button"
+                  className="multi-entry-remove"
                   onClick={() => removeEntry(idx)}
                   aria-label={`Remove entry ${idx + 1}`}
-                  style={{
-                    border: "none",
-                    background: "none",
-                    color: "#94a3b8",
-                    fontSize: "1.2rem",
-                    cursor: "pointer",
-                    padding: "4px 8px",
-                    borderRadius: 6,
-                    lineHeight: 1,
-                  }}
                 >
                   ×
                 </button>
@@ -1552,30 +1510,11 @@ function QuestionField({
           ))}
         </div>
         {atCap ? (
-          <p
-            style={{
-              marginTop: 8,
-              color: "#94a3b8",
-              fontSize: "0.8rem",
-            }}
-          >
+          <p className="upload-hint" style={{ marginTop: 8 }}>
             Maximum {MAX_MULTI_ENTRY_COUNT} entries
           </p>
         ) : (
-          <button
-            type="button"
-            onClick={addEntry}
-            style={{
-              marginTop: 8,
-              background: "none",
-              border: "none",
-              color: "#2563eb",
-              fontSize: "0.85rem",
-              fontWeight: 600,
-              cursor: "pointer",
-              padding: "4px 0",
-            }}
-          >
+          <button type="button" className="multi-entry-add" onClick={addEntry}>
             + Add another
           </button>
         )}

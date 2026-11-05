@@ -134,13 +134,13 @@ const SignaturePad = forwardRef<SignaturePadHandle, SignaturePadProps>(
     return (
       <div>
         <div
+          className="upload-dropzone"
           style={{
-            // Always a 2px dashed border (NIT #4 — do not switch to solid).
-            border: "2px dashed #cbd5e1",
-            borderRadius: 12,
-            background: "#f8fafc",
+            // Theme-driven dashed border/background via .upload-dropzone; keep
+            // overflow + the transient disable (CSS gate only, never a library
+            // call) inline.
+            padding: 0,
             overflow: "hidden",
-            // Transient disable: CSS gate only, never a library call.
             pointerEvents: disabled ? "none" : "auto",
             opacity: disabled ? 0.6 : 1,
           }}
@@ -164,22 +164,16 @@ const SignaturePad = forwardRef<SignaturePadHandle, SignaturePadProps>(
             marginTop: 6,
           }}
         >
-          <span style={{ fontSize: 12, color: "#94a3b8" }}>Sign above</span>
+          <span className="signature-hint">Sign above</span>
           <button
             type="button"
+            className="signature-clear"
             disabled={disabled}
             onClick={() => {
               padRef.current?.clear();
               onChangeRef.current?.(true);
             }}
-            style={{
-              fontSize: 12,
-              color: "#475569",
-              background: "transparent",
-              border: "none",
-              cursor: disabled ? "default" : "pointer",
-              padding: 0,
-            }}
+            style={{ cursor: disabled ? "default" : "pointer" }}
           >
             Clear
           </button>
