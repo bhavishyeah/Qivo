@@ -2845,6 +2845,18 @@ form {
   max-width: 980px;
   margin: 0 auto 24px;
   border-bottom: 2px solid #e2e8f0;
+  /* Swipe the ribbon left/right when the tabs don't fit (e.g. on mobile)
+     instead of wrapping or clipping them. */
+  overflow-x: auto;
+  flex-wrap: nowrap;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; /* Firefox */
+}
+
+/* Hide the scrollbar (Chrome/Safari/Edge) — the ribbon still scrolls by
+   swipe/trackpad; the active-tab underline signals position. */
+.editor-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .editor-tab {
@@ -2857,6 +2869,8 @@ form {
   cursor: pointer;
   border-bottom: 2px solid transparent;
   margin-bottom: -2px;
+  white-space: nowrap;
+  flex: 0 0 auto; /* don't shrink or wrap tab labels */
   transition: color var(--qivo-transition), border-color var(--qivo-transition);
 }
 
