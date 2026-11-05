@@ -96,6 +96,96 @@ describe("updateFormSettingsSchema allowPartialSave", () => {
   });
 });
 
+describe("updateFormSettingsSchema capacity", () => {
+  it("accepts a valid capacity block (enabled + limit)", () => {
+    expect(
+      updateFormSettingsSchema.safeParse({
+        ...baseSettings,
+        capacity: { enabled: true, limit: 120 },
+      }).success,
+    ).toBe(true);
+  });
+
+  it("accepts the lower bound (limit 1) and upper bound (1,000,000)", () => {
+    expect(
+      updateFormSettingsSchema.safeParse({
+        ...baseSettings,
+        capacity: { enabled: true, limit: 1 },
+      }).success,
+    ).toBe(true);
+    expect(
+      updateFormSettingsSchema.safeParse({
+        ...baseSettings,
+        capacity: { enabled: false, limit: 1_000_000 },
+      }).success,
+    ).toBe(true);
+  });
+
+  it("accepts settings with no capacity key (optional)", () => {
+    expect(updateFormSettingsSchema.safeParse(baseSettings).success).toBe(true);
+  });
+
+  it("rejects a non-integer limit", () => {
+    expect(
+      updateFormSettingsSchema.safeParse({
+        ...baseSettings,
+        capacity: { enabled: true, limit: 12.5 },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects a zero or negative limit", () => {
+    expect(
+      updateFormSettingsSchema.safeParse({
+        ...baseSettings,
+        capacity: { enabled: true, limit: 0 },
+      }).success,
+    ).toBe(false);
+    expect(
+      updateFormSettingsSchema.safeParse({
+        ...baseSettings,
+        capacity: { enabled: true, limit: -5 },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects a limit above 1,000,000", () => {
+    expect(
+      updateFormSettingsSchema.safeParse({
+        ...baseSettings,
+        capacity: { enabled: true, limit: 1_000_001 },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects a non-boolean enabled", () => {
+    expect(
+      updateFormSettingsSchema.safeParse({
+        ...baseSettings,
+        capacity: { enabled: "yes", limit: 10 },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects unknown keys in the capacity object", () => {
+    expect(
+      updateFormSettingsSchema.safeParse({
+        ...baseSettings,
+        capacity: { enabled: true, limit: 10, evil: "payload" },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects a capacity object missing limit", () => {
+    expect(
+      updateFormSettingsSchema.safeParse({
+        ...baseSettings,
+        capacity: { enabled: true },
+      }).success,
+    ).toBe(false);
+  });
+});
+
 describe("saveDraftSchema", () => {
   it("accepts a minimal body (answers only)", () => {
     expect(saveDraftSchema.safeParse({ answers: {} }).success).toBe(true);

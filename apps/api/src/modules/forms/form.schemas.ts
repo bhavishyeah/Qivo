@@ -100,6 +100,17 @@ export const updateFormSettingsSchema = z.object({
       ]),
     )
     .optional(),
+  // Response capacity ("seats left"). Off by default (absent = unlimited). When
+  // enabled, the form stops accepting SUBMITTED responses once `limit` is
+  // reached. `limit` is a plain integer count (not paise). strictObject rejects
+  // unknown keys. The enforcement is atomic at submit (see form.service.ts);
+  // this schema only validates the owner's setting on PATCH /:formId/settings.
+  capacity: z
+    .strictObject({
+      enabled: z.boolean(),
+      limit: z.number().int().min(1).max(1_000_000),
+    })
+    .optional(),
 });
 
 export type UpdateFormSettingsInput = z.infer<

@@ -1,5 +1,7 @@
 import { randomBytes } from "node:crypto";
 
+import { customAlphabet } from "nanoid";
+
 import { Prisma } from "../../generated/prisma/client.js";
 import prisma from "../../db/prisma.js";
 import { logAction } from "../audit/audit.service.js";
@@ -275,6 +277,13 @@ type FormSchema = {
           maxAmount?: number; // PAISE
           description?: string;
         };
+    // Response capacity ("seats left"). Absent = unlimited (off by default). When
+    // enabled, the form stops accepting SUBMITTED responses once `limit` is hit.
+    // `limit` is a plain integer count (1..1_000_000), not paise.
+    capacity?: {
+      enabled: boolean;
+      limit: number;
+    };
   };
   confirmationMessage?: string;
 };
@@ -374,6 +383,32 @@ function getFormSchema(value: unknown): FormSchema {
               : {}),
           } as NonNullable<FormSchema["settings"]["payment"]>,
         };
+      })(),
+      // Carry capacity through only when present and well-formed (same
+      // defensive, default-omitted posture as `theme`/`payment`). A corrupt or
+      // partial block degrades to "no capacity" (unlimited) rather than
+      // throwing. Absent = unlimited, so existing forms are unchanged.
+      ...(() => {
+        const cap = candidate?.settings?.capacity as
+          | { enabled?: unknown; limit?: unknown }
+          | null
+          | undefined;
+        const capOk =
+          cap != null &&
+          typeof cap === "object" &&
+          typeof cap.enabled === "boolean" &&
+          typeof cap.limit === "number" &&
+          Number.isInteger(cap.limit) &&
+          cap.limit >= 1 &&
+          cap.limit <= 1_000_000;
+        return capOk
+          ? {
+              capacity: {
+                enabled: cap.enabled as boolean,
+                limit: cap.limit as number,
+              },
+            }
+          : {};
       })(),
     },
     ...(candidate?.confirmationMessage !== undefined
@@ -859,6 +894,9 @@ export async function updateFormSettings(
                       : {}),
                   },
           }
+        : {}),
+      ...(input.capacity !== undefined
+        ? { capacity: input.capacity }
         : {}),
     },
     ...(input.confirmationMessage !== undefined
@@ -1531,11 +1569,21 @@ export async function getPublicForm(
     responseNotification,
     sendConfirmationEmail,
     payment,
+    capacity,
     ...publicSettings
   } = schema.settings;
   void responseNotification;
   void sendConfirmationEmail;
   void payment;
+  void capacity;
+
+  // Count submitted responses ONLY when capacity is enabled (zero cost for the
+  // overwhelming majority of forms, which have no capacity block). Drafts live
+  // in a separate table (FormDraft) so they are structurally excluded — only
+  // submitted FormResponse rows count toward a seat.
+  const submitted = capacity?.enabled
+    ? await prisma.formResponse.count({ where: { formId: form.id } })
+    : 0;
 
   return {
     id: form.id,
@@ -1581,6 +1629,20 @@ export async function getPublicForm(
         description: payment.description ?? null,
         keyId: getPublicKeyId(),
         configured: isRazorpayConfigured(),
+      };
+    })(),
+    // Derived capacity block, sibling of `schema` (matches PublicForm.capacity).
+    // Exposes only respondent-relevant data (limit, submitted, seatsLeft); the
+    // raw owner setting is stripped above. seatsLeft is clamped at 0 so a stale
+    // or over-count can never display a negative number.
+    capacity: (() => {
+      if (!capacity?.enabled) return { enabled: false as const };
+      const seatsLeft = Math.max(0, capacity.limit - submitted);
+      return {
+        enabled: true as const,
+        limit: capacity.limit,
+        submitted,
+        seatsLeft,
       };
     })(),
     schema: {
@@ -1655,6 +1717,23 @@ export async function createPaymentOrder(
     const error = new Error("You have already submitted a response.");
     error.name = "DUPLICATE_RESPONSE";
     throw error;
+  }
+
+  // Capacity pre-order re-check: if the form is already full, reject BEFORE any
+  // Razorpay order or Payment row is created, so a payer is never charged for a
+  // seat that no longer exists. The authoritative atomic gate still runs at
+  // verified-submit (see submitFormResponse); this is a courtesy pre-check.
+  if (schema.settings.capacity?.enabled) {
+    const submitted = await prisma.formResponse.count({
+      where: { formId: form.id },
+    });
+    if (submitted >= schema.settings.capacity.limit) {
+      const error = new Error(
+        "This form is fully booked — no more responses are being accepted.",
+      );
+      error.name = "FORM_FULL";
+      throw error;
+    }
   }
 
   // Resolve the authoritative amount server-side. The client proposal
@@ -2588,6 +2667,94 @@ export async function getUploadSignatureForForm(
   return signUpload(`qivo/forms/${form.id}`);
 }
 
+// Collision-free id generator for the raw capacity insert. `FormResponse.id` is
+// `@default(cuid())`, applied by Prisma IN THE CLIENT, not the DB — a raw INSERT
+// must supply the id itself. There is no cuid generator exported from the
+// generated client, so we mint a 24-char lowercase-alnum nanoid prefixed with
+// "c" (keeps a leading letter, cuid-shaped). Documented divergence from cuid for
+// this one column; ids are opaque and never parsed. 36^24 keyspace is ample.
+const newResponseId = customAlphabet(
+  "0123456789abcdefghijklmnopqrstuvwxyz",
+  24,
+);
+
+// Atomic capacity-guarded insert. Replaces `formResponse.create` on both the
+// free and paid paths when capacity is enabled, so concurrent submits can never
+// oversell the cap. Mechanism (design §2):
+//  1. pg_advisory_xact_lock(hashtext(formId)) serializes all capacity inserts
+//     for THIS form (different forms rarely contend; a hashtext collision only
+//     adds extra serialization, never incorrectness). Released at tx end.
+//  2. A guarded INSERT ... SELECT ... WHERE (count < limit) ... ON CONFLICT DO
+//     NOTHING RETURNING * performs the count-and-insert as one statement inside
+//     the lock, so count(*) is authoritative.
+//  3. 0 rows returned ⇒ disambiguate by re-reading the count: count >= limit is
+//     FORM_FULL; otherwise the ON CONFLICT (formId, respondentEmail) fired and
+//     it is a DUPLICATE_RESPONSE (preserving today's duplicate mapping without
+//     relying on P2002/meta.target from raw SQL).
+// MUST be called inside a `prisma.$transaction` so the advisory lock is held
+// for the insert. Returns the created FormResponse row (RETURNING *).
+type FormResponseRow = Awaited<
+  ReturnType<typeof prisma.formResponse.create>
+>;
+
+async function insertResponseWithCapacity(
+  tx: Prisma.TransactionClient,
+  form: { id: string },
+  data: {
+    formId: string;
+    respondentId?: string;
+    respondentEmail: string | null;
+    answers: Prisma.InputJsonValue;
+    metadata: Prisma.InputJsonValue;
+  },
+  limit: number,
+): Promise<FormResponseRow> {
+  // (1) Per-form advisory lock for the duration of this transaction.
+  await tx.$executeRaw(
+    Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${form.id}))`,
+  );
+
+  const id = `c${newResponseId()}`;
+  const respondentId = data.respondentId ?? null;
+  const answersJson = JSON.stringify(data.answers);
+  const metadataJson = JSON.stringify(data.metadata);
+
+  // (2) Guarded conditional insert. seatsLeft is evaluated as count(*) < limit
+  // inside the locked tx, so no concurrent submit can slip between the count and
+  // the insert for this form.
+  const rows = await tx.$queryRaw<FormResponseRow[]>(
+    Prisma.sql`
+      INSERT INTO "FormResponse" ("id", "formId", "respondentId", "respondentEmail", "answers", "metadata", "submittedAt")
+      SELECT ${id}, ${data.formId}, ${respondentId}, ${data.respondentEmail}, ${answersJson}::jsonb, ${metadataJson}::jsonb, now()
+      WHERE (SELECT count(*) FROM "FormResponse" WHERE "formId" = ${form.id}) < ${limit}
+      ON CONFLICT ("formId", "respondentEmail") DO NOTHING
+      RETURNING *
+    `,
+  );
+
+  if (rows.length === 0) {
+    // (3) Disambiguate full vs. duplicate. Re-read the count under the same lock.
+    const countRows = await tx.$queryRaw<Array<{ count: bigint }>>(
+      Prisma.sql`SELECT count(*)::bigint AS count FROM "FormResponse" WHERE "formId" = ${form.id}`,
+    );
+    const current = Number(countRows[0]?.count ?? 0n);
+    if (current >= limit) {
+      const error = new Error(
+        "This form is fully booked — no more responses are being accepted.",
+      );
+      error.name = "FORM_FULL";
+      throw error;
+    }
+    // The seat was available, so the 0-row result must be the ON CONFLICT
+    // (formId, respondentEmail) firing → duplicate submission.
+    const error = new Error("You have already submitted a response.");
+    error.name = "DUPLICATE_RESPONSE";
+    throw error;
+  }
+
+  return rows[0]!;
+}
+
 export async function submitFormResponse(
   slug: string,
   input: {
@@ -2876,39 +3043,65 @@ if (paidPayment) {
       throw error;
     }
 
-    // (b) Create the response.
-    let created;
-    try {
-      created = await tx.formResponse.create({ data: responseCreateData });
-    } catch (err) {
-      if (
-        err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === "P2002"
-      ) {
-        const target = err.meta?.target;
-        const targetStr = Array.isArray(target)
-          ? target.join(",")
-          : String(target ?? "");
-        if (targetStr.includes("respondentEmail")) {
-          throw duplicateResponseError();
+    // (b) Create the response. When capacity is enabled, use the atomic
+    // guarded insert (advisory lock + conditional insert) so the capacity gate
+    // and the payment claim/link are ONE atomic unit — a FORM_FULL here rolls
+    // back the whole tx, leaving the payment unlinked and NOT visibly verified.
+    let created: FormResponseRow;
+    if (schema.settings.capacity?.enabled) {
+      const capacityLimit = schema.settings.capacity.limit;
+      try {
+        created = await insertResponseWithCapacity(
+          tx,
+          form,
+          responseCreateData,
+          capacityLimit,
+        );
+      } catch (err) {
+        if (err instanceof Error && err.name === "FORM_FULL") {
+          // Rare: payer passed the pre-order check but lost the last seat at
+          // verified-submit. The tx rolls back (payment stays unlinked); the
+          // client surfaces the existing "payment received but we couldn't save
+          // your response" message. Log for operator follow-up.
+          console.warn(
+            `[capacity] FORM_FULL after verified payment slug=${slug} order=${razorpayOrderId} payment=${razorpayPaymentId}`,
+          );
         }
+        throw err;
+      }
+    } else {
+      try {
+        created = await tx.formResponse.create({ data: responseCreateData });
+      } catch (err) {
         if (
-          targetStr.includes("razorpayPaymentId") ||
-          targetStr.includes("responseId")
+          err instanceof Prisma.PrismaClientKnownRequestError &&
+          err.code === "P2002"
         ) {
-          // A concurrent verified submit linked first — return its response.
-          const other = await tx.payment.findUnique({
-            where: { razorpayPaymentId },
-          });
-          if (other?.responseId) {
-            const linked = await tx.formResponse.findUnique({
-              where: { id: other.responseId },
+          const target = err.meta?.target;
+          const targetStr = Array.isArray(target)
+            ? target.join(",")
+            : String(target ?? "");
+          if (targetStr.includes("respondentEmail")) {
+            throw duplicateResponseError();
+          }
+          if (
+            targetStr.includes("razorpayPaymentId") ||
+            targetStr.includes("responseId")
+          ) {
+            // A concurrent verified submit linked first — return its response.
+            const other = await tx.payment.findUnique({
+              where: { razorpayPaymentId },
             });
-            if (linked) return linked;
+            if (other?.responseId) {
+              const linked = await tx.formResponse.findUnique({
+                where: { id: other.responseId },
+              });
+              if (linked) return linked;
+            }
           }
         }
+        throw err;
       }
-      throw err;
     }
 
     // (c) Link the payment to the created response (status already verified).
@@ -2919,8 +3112,17 @@ if (paidPayment) {
 
     return created;
   });
+} else if (schema.settings.capacity?.enabled) {
+  // Free path with capacity: route the insert through the atomic guarded insert
+  // inside a transaction (advisory lock + conditional insert). 0-rows → FORM_FULL
+  // or DUPLICATE_RESPONSE (disambiguated in the helper). The schedule-close check
+  // above already ran, so FORM_CLOSED keeps precedence over FORM_FULL.
+  const capacityLimit = schema.settings.capacity.limit;
+  response = await prisma.$transaction((tx) =>
+    insertResponseWithCapacity(tx, form, responseCreateData, capacityLimit),
+  );
 } else {
-  // Free path: unchanged, non-transactional create.
+  // Free path (capacity off): unchanged, non-transactional create.
   try {
     response = await prisma.formResponse.create({ data: responseCreateData });
   } catch (err) {

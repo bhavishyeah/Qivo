@@ -506,6 +506,20 @@ const errorHandler: ErrorRequestHandler = (
       });
       return;
 
+    // Capacity reached ("fully booked"). 409 Conflict: the request is well-formed
+    // and authorized but conflicts with the resource's current state (no seats).
+    // Deliberately distinct from FORM_CLOSED (410): fully-booked is a reopenable
+    // soft state (raise the limit) and the client must tell them apart.
+    case "FORM_FULL":
+      res.status(409).json({
+        success: false,
+        error: {
+          code: "FORM_FULL",
+          message: error.message,
+        },
+      });
+      return;
+
     case "EVENT_NOT_FOUND":
       res.status(404).json({
         success: false,
