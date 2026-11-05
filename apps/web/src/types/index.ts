@@ -84,6 +84,7 @@ export type FormSchema = {
   settings: {
     collectEmail: boolean;
     allowMultipleResponses: boolean;
+    allowPartialSave?: boolean;
     scheduledPublishAt?: string | null;
     scheduledCloseAt?: string | null;
     quizMode?: boolean;

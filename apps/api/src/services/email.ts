@@ -337,3 +337,30 @@ export async function sendResponseConfirmationEmail(
     text: `Thanks for your response to "${opts.formTitle}".${answersText}\n\nOpen form: ${link}`,
   });
 }
+
+/**
+ * Resume-link email for the partial-save ("resume later") flow. Best-effort:
+ * sendEmail never throws and console-logs when RESEND_API_KEY is unset, so this
+ * no-ops gracefully. The resume link is ALWAYS also shown on-screen by the
+ * public form — email is purely additive (Resend only delivers to the account
+ * owner until a domain is verified).
+ */
+export async function sendResumeLinkEmail(
+  to: string,
+  opts: { formTitle: string; slug: string; token: string },
+): Promise<void> {
+  const webUrl = getWebUrl();
+  const link = `${webUrl}/f/${opts.slug}?resume=${encodeURIComponent(opts.token)}`;
+
+  await sendEmail({
+    to,
+    subject: `Resume your response to "${opts.formTitle}"`,
+    html: layout(
+      "Pick up where you left off",
+      `<p style="color:#475569;font-size:15px;line-height:1.6;">You saved your progress on <strong>${opts.formTitle}</strong>. Use the link below to continue where you left off. It works for 30 days.</p>
+       ${button(link, "Resume form")}
+       <p style="color:#94a3b8;font-size:13px;line-height:1.5;">Or copy this link: ${link}</p>`,
+    ),
+    text: `Resume your response to "${opts.formTitle}": ${link}\n\nThis link works for 30 days.`,
+  });
+}

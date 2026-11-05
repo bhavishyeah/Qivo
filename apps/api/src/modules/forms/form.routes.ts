@@ -25,6 +25,10 @@ import {
   reportQuerySchema,
   trackEventSchema,
   responseCheckSchema,
+  saveDraftSchema,
+  loadDraftQuerySchema,
+  deleteDraftBodySchema,
+  emailDraftSchema,
 } from "./form.schemas.js";
 
 import { TEMPLATES } from "./templates.js";
@@ -86,7 +90,12 @@ import {
   createPaymentOrder,
   checkAlreadyResponded,
   handleRazorpayWebhook,
+  saveDraft,
+  loadDraft,
+  deleteDraftByToken,
 } from "./form.service.js";
+
+import { sendResumeLinkEmail } from "../../services/email.js";
 
 const formRouter: ExpressRouter = Router();
 
@@ -1437,6 +1446,121 @@ formRouter.post(
 
       trackEventSchema.parse(req.body);
       await recordFormStart(slug);
+      res.status(204).end();
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Partial save / resume later — draft endpoints.
+//
+// All CSRF-exempt via the /public/ path convention and covered by
+// publicFormLimiter. Each shares the literal `public` segment + a distinct
+// trailing literal (`/draft`, `/draft/email`), so none shadows the other public
+// routes. The service re-reads the live form and gates on PUBLISHED +
+// allowPartialSave; "no form", "feature off", and "unknown/expired token" all
+// collapse to a generic 404 in the error handler.
+// ---------------------------------------------------------------------------
+
+// Save a draft. No token → create (returns a fresh token); valid token → update.
+formRouter.post(
+  "/public/:slug/draft",
+  async (req, res, next) => {
+    try {
+      const slug = req.params.slug;
+      if (typeof slug !== "string") {
+        res.status(400).json({
+          success: false,
+          error: { code: "INVALID_FORM_SLUG", message: "A valid form slug is required." },
+        });
+        return;
+      }
+      const input = saveDraftSchema.parse(req.body);
+      const data = await saveDraft(slug, input);
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+      res.status(201).json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+// Load a draft by token (query param — a resume link is the respondent's own
+// bookmarkable URL). Unknown/expired/wrong-form → 404.
+formRouter.get(
+  "/public/:slug/draft",
+  async (req, res, next) => {
+    try {
+      const slug = req.params.slug;
+      if (typeof slug !== "string") {
+        res.status(400).json({
+          success: false,
+          error: { code: "INVALID_FORM_SLUG", message: "A valid form slug is required." },
+        });
+        return;
+      }
+      const { token } = loadDraftQuerySchema.parse(req.query);
+      const data = await loadDraft(slug, token);
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+      res.json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+// Delete a draft by token (fired best-effort by the client after a successful
+// submit so a resume link can't resurrect a submitted draft). Idempotent 204.
+formRouter.delete(
+  "/public/:slug/draft",
+  async (req, res, next) => {
+    try {
+      const slug = req.params.slug;
+      if (typeof slug !== "string") {
+        res.status(400).json({
+          success: false,
+          error: { code: "INVALID_FORM_SLUG", message: "A valid form slug is required." },
+        });
+        return;
+      }
+      const { token } = deleteDraftBodySchema.parse(req.body);
+      await deleteDraftByToken(slug, token);
+      res.status(204).end();
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+// Optionally email the resume link. Best-effort: verifies the token belongs to
+// the form and is unexpired (404 otherwise) via loadDraft, then fire-and-forget
+// sendResumeLinkEmail and 204 regardless of delivery outcome (never leak whether
+// the address received it). The link is ALWAYS also shown on-screen.
+formRouter.post(
+  "/public/:slug/draft/email",
+  async (req, res, next) => {
+    try {
+      const slug = req.params.slug;
+      if (typeof slug !== "string") {
+        res.status(400).json({
+          success: false,
+          error: { code: "INVALID_FORM_SLUG", message: "A valid form slug is required." },
+        });
+        return;
+      }
+      const input = emailDraftSchema.parse(req.body);
+      // Confirms the token is valid + unexpired for this published, opted-in
+      // form (throws DRAFT_NOT_FOUND → 404 otherwise). We only need the form's
+      // title for the email body.
+      await loadDraft(slug, input.token);
+      const form = await getPublicForm(slug);
+      void sendResumeLinkEmail(input.email, {
+        formTitle: form.title,
+        slug,
+        token: input.token,
+      }).catch(() => {});
       res.status(204).end();
     } catch (error) {
       next(error);

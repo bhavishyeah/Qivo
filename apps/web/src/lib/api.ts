@@ -185,3 +185,60 @@ export async function checkResponseExists(
 ): Promise<{ alreadyResponded: boolean }> {
   return publicPost(`/api/forms/public/${slug}/response-check`, { email });
 }
+
+// ---------------------------------------------------------------------------
+// Partial save / resume later — draft helpers.
+// ---------------------------------------------------------------------------
+
+// Save (create or update) a draft of the in-progress answers. No token → the
+// server creates a new draft and returns a fresh token; a valid token → update.
+export async function saveDraft(
+  slug: string,
+  body: {
+    answers: Record<string, unknown>;
+    email?: string;
+    currentSection?: number;
+    token?: string;
+  },
+): Promise<{ token: string; expiresAt: string }> {
+  return publicPost(`/api/forms/public/${slug}/draft`, body);
+}
+
+// Load a saved draft by token. Rejects (ApiRequestError) on an unknown/expired
+// token so the caller can show a friendly "start fresh" notice.
+export async function loadDraft(
+  slug: string,
+  token: string,
+): Promise<{
+  answers: Record<string, unknown>;
+  email: string | null;
+  currentSection: number | null;
+}> {
+  return publicGet(
+    `/api/forms/public/${slug}/draft?token=${encodeURIComponent(token)}`,
+  );
+}
+
+// Best-effort delete of a draft after a successful submit. Uses a raw fetch
+// because publicPost is POST-only and the endpoint expects DELETE + a body.
+// Swallows all errors — a failed prune just leaves the row for the 30-day sweep.
+export async function deleteDraft(slug: string, token: string): Promise<void> {
+  await fetch(`${API_BASE_URL}/api/forms/public/${slug}/draft`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token }),
+  }).catch(() => {});
+}
+
+// Best-effort "email me the resume link". The link is always shown on-screen too,
+// so any failure here is swallowed.
+export async function emailResumeLink(
+  slug: string,
+  token: string,
+  email: string,
+): Promise<void> {
+  await publicPost(`/api/forms/public/${slug}/draft/email`, {
+    token,
+    email,
+  }).catch(() => {});
+}

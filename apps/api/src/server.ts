@@ -14,7 +14,7 @@ if (!process.env.DATABASE_URL) {
 }
 
 import app from "./app.js";
-import { publishDueForms, closeDueForms, sendResponseDigests } from "./modules/forms/form.service.js";
+import { publishDueForms, closeDueForms, sendResponseDigests, deleteExpiredDrafts } from "./modules/forms/form.service.js";
 import { deliverDueWebhooks } from "./services/webhookDelivery.js";
 
 const port = Number(process.env.PORT ?? 3000);
@@ -41,6 +41,8 @@ async function runPublishSweep() {
     if (digests > 0) console.log(`[scheduler] sent ${digests} response digest(s)`);
     const delivered = await deliverDueWebhooks();
     if (delivered > 0) console.log(`[scheduler] delivered/retried ${delivered} webhook(s)`);
+    const prunedDrafts = await deleteExpiredDrafts();
+    if (prunedDrafts > 0) console.log(`[scheduler] pruned ${prunedDrafts} expired draft(s)`);
   } catch (err) {
     console.error("[scheduler] publish/close sweep failed:", err);
   }

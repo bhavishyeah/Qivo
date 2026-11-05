@@ -42,6 +42,7 @@ export const updateFormSettingsSchema = z.object({
   scheduledCloseAt: z.string().datetime().nullable().optional(),
   quizMode: z.boolean().optional(),
   showScore: z.boolean().optional(),
+  allowPartialSave: z.boolean().optional(),
   responseNotification: z.enum(["off", "immediate", "daily"]).optional(),
   sendConfirmationEmail: z.boolean().optional(),
   theme: themeSchema,
@@ -205,6 +206,42 @@ export const trackEventSchema = z.object({
 });
 
 export type TrackEventInput = z.infer<typeof trackEventSchema>;
+
+// Partial-save ("resume later") draft schemas. A draft is pre-submission
+// scratch data; it is validated for shape and size only — the full submit
+// validation (validateSubmission) is intentionally NOT run, because a draft is
+// incomplete by definition. The global 1 MB JSON body cap is the hard ceiling;
+// this is an explicit soft cap on the serialized answers so an abusive but
+// under-1 MB payload is rejected cleanly as a 400 rather than silently stored.
+// Named CHARS because it bounds String.length of the JSON, not bytes.
+const MAX_DRAFT_ANSWERS_CHARS = 512_000;
+
+export const saveDraftSchema = z
+  .object({
+    answers: z.record(z.string(), z.unknown()),
+    email: z.email().optional(),
+    currentSection: z.number().int().min(0).max(1000).optional(),
+    token: z.string().min(1).max(200).optional(),
+  })
+  .refine((b) => JSON.stringify(b.answers).length <= MAX_DRAFT_ANSWERS_CHARS, {
+    message: "Draft is too large to save.",
+    path: ["answers"],
+  });
+
+export type SaveDraftInput = z.infer<typeof saveDraftSchema>;
+
+export const loadDraftQuerySchema = z.object({
+  token: z.string().min(1).max(200),
+});
+
+export const deleteDraftBodySchema = z.object({
+  token: z.string().min(1).max(200),
+});
+
+export const emailDraftSchema = z.object({
+  token: z.string().min(1).max(200),
+  email: z.email(),
+});
 
 // Query contract for GET /:formId/report. All params optional (bare endpoint ==
 // today's behavior). `value` is bounded to match jumpRuleSchema's max(10_000).

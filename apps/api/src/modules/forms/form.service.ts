@@ -35,6 +35,7 @@ import { stripPipingTokens } from "../../utils/pipingTokens.js";
 import { TEMPLATES } from "./templates.js";
 import type {
   UpdateFormSettingsInput,
+  SaveDraftInput,
 } from "./form.schemas.js";
 
 export type QuestionType =
@@ -247,6 +248,7 @@ type FormSchema = {
   settings: {
     collectEmail: boolean;
     allowMultipleResponses: boolean;
+    allowPartialSave: boolean;
     scheduledPublishAt?: string | null;
     scheduledCloseAt?: string | null;
     quizMode?: boolean;
@@ -284,6 +286,8 @@ function getFormSchema(value: unknown): FormSchema {
         candidate?.settings?.collectEmail ?? false,
       allowMultipleResponses:
         candidate?.settings?.allowMultipleResponses ?? true,
+      allowPartialSave:
+        candidate?.settings?.allowPartialSave ?? false,
       ...(candidate?.settings?.scheduledPublishAt !== undefined
         ? { scheduledPublishAt: candidate.settings.scheduledPublishAt }
         : {}),
@@ -751,6 +755,9 @@ export async function updateFormSettings(
             allowMultipleResponses:
               input.allowMultipleResponses,
           }
+        : {}),
+      ...(input.allowPartialSave !== undefined
+        ? { allowPartialSave: input.allowPartialSave }
         : {}),
       ...(input.scheduledPublishAt !== undefined
         ? { scheduledPublishAt: input.scheduledPublishAt }
@@ -4300,4 +4307,169 @@ export async function recordFormStart(slug: string): Promise<void> {
   void prisma.formAnalytics
     .create({ data: { formId: form.id, event: "start" } })
     .catch((err) => console.error("formAnalytics start tracking failed:", err));
+}
+
+// ---------------------------------------------------------------------------
+// Partial save / resume later — drafts
+//
+// A FormDraft is pre-submission scratch data: a snapshot of the respondent's
+// in-progress answers (plus the entered email + the current section index),
+// keyed by an unguessable random token. Drafts never create a payment, never
+// participate in the duplicate-email guard, and are deliberately separate from
+// FormResponse. They expire after 30 days and are swept by the scheduler.
+// ---------------------------------------------------------------------------
+
+const DRAFT_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+// Resolve a slug to a PUBLISHED, non-deleted form that has allowPartialSave on.
+// Collapses "no such form" and "feature off" into the same PUBLIC_FORM_NOT_FOUND
+// / PARTIAL_SAVE_DISABLED pair — both map to a generic 404 so an anonymous
+// caller can't probe which forms exist or which have the feature enabled.
+async function getPartialSaveForm(slug: string): Promise<{ id: string }> {
+  const form = await prisma.form.findFirst({
+    where: { slug, deletedAt: null, status: "PUBLISHED" },
+    select: { id: true, schema: true },
+  });
+
+  if (!form) {
+    const error = new Error("Published form not found.");
+    error.name = "PUBLIC_FORM_NOT_FOUND";
+    throw error;
+  }
+
+  const schema = getFormSchema(form.schema);
+  if (!schema.settings.allowPartialSave) {
+    const error = new Error("Partial save is not enabled for this form.");
+    error.name = "PARTIAL_SAVE_DISABLED";
+    throw error;
+  }
+
+  return { id: form.id };
+}
+
+/**
+ * Create or update a draft. With no token (or a stale/foreign/expired token) a
+ * fresh draft is created and a new token returned; with a valid token for this
+ * form the existing row is updated (answers/email/currentSection overwritten,
+ * expiresAt extended). Only on a PUBLISHED form with allowPartialSave on.
+ */
+export async function saveDraft(
+  slug: string,
+  input: SaveDraftInput,
+): Promise<{ token: string; expiresAt: Date }> {
+  const form = await getPartialSaveForm(slug);
+
+  const answers = JSON.parse(
+    JSON.stringify(input.answers),
+  ) as Prisma.InputJsonValue;
+  const email = input.email ?? null;
+  const currentSection = input.currentSection ?? null;
+  const now = Date.now();
+  const expiresAt = new Date(now + DRAFT_TTL_MS);
+
+  if (input.token) {
+    const existing = await prisma.formDraft.findUnique({
+      where: { token: input.token },
+    });
+    if (
+      existing &&
+      existing.formId === form.id &&
+      existing.expiresAt.getTime() > now
+    ) {
+      const updated = await prisma.formDraft.update({
+        where: { token: input.token },
+        data: { answers, email, currentSection, expiresAt },
+      });
+      return { token: updated.token, expiresAt: updated.expiresAt };
+    }
+    // found-but-expired → prune it; then fall through to create a fresh draft.
+    if (existing && existing.formId === form.id) {
+      await prisma.formDraft
+        .deleteMany({ where: { token: input.token } })
+        .catch(() => {});
+    }
+  }
+
+  const token = randomBytes(32).toString("base64url");
+  const created = await prisma.formDraft.create({
+    data: {
+      formId: form.id,
+      token,
+      answers,
+      email,
+      currentSection,
+      expiresAt,
+    },
+  });
+  return { token: created.token, expiresAt: created.expiresAt };
+}
+
+/**
+ * Load a draft for a valid, unexpired token belonging to the given published
+ * opted-in form. Unknown / wrong-form / expired tokens all throw DRAFT_NOT_FOUND
+ * (→ 404); an expired row is deleted on read. Returns only the respondent-facing
+ * snapshot.
+ */
+export async function loadDraft(
+  slug: string,
+  token: string,
+): Promise<{
+  answers: unknown;
+  email: string | null;
+  currentSection: number | null;
+}> {
+  const form = await getPartialSaveForm(slug);
+
+  const draft = await prisma.formDraft.findUnique({ where: { token } });
+  if (!draft || draft.formId !== form.id) {
+    const error = new Error("Draft not found.");
+    error.name = "DRAFT_NOT_FOUND";
+    throw error;
+  }
+  if (draft.expiresAt.getTime() <= Date.now()) {
+    await prisma.formDraft
+      .deleteMany({ where: { token } })
+      .catch(() => {});
+    const error = new Error("Draft not found.");
+    error.name = "DRAFT_NOT_FOUND";
+    throw error;
+  }
+
+  return {
+    answers: draft.answers,
+    email: draft.email,
+    currentSection: draft.currentSection,
+  };
+}
+
+/**
+ * Best-effort delete of a draft by token, scoped to the form. Uses deleteMany so
+ * a missing row is a no-op (never a P2025 throw) — the delete-on-submit path is
+ * idempotent. Throws PUBLIC_FORM_NOT_FOUND only when the form itself is gone.
+ */
+export async function deleteDraftByToken(
+  slug: string,
+  token: string,
+): Promise<void> {
+  const form = await prisma.form.findFirst({
+    where: { slug, deletedAt: null, status: "PUBLISHED" },
+    select: { id: true },
+  });
+  if (!form) {
+    const error = new Error("Published form not found.");
+    error.name = "PUBLIC_FORM_NOT_FOUND";
+    throw error;
+  }
+  await prisma.formDraft.deleteMany({ where: { token, formId: form.id } });
+}
+
+/**
+ * Delete every expired draft. Wired into the scheduler sweep in server.ts; its
+ * failure there is logged and never fatal. Returns the number of rows removed.
+ */
+export async function deleteExpiredDrafts(): Promise<number> {
+  const { count } = await prisma.formDraft.deleteMany({
+    where: { expiresAt: { lte: new Date() } },
+  });
+  return count;
 }

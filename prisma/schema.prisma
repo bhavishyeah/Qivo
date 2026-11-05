@@ -158,6 +158,7 @@ model Form {
   shares    FormShare[]
   webhooks  Webhook[]
   payments  Payment[]
+  drafts    FormDraft[]
 
   @@index([workspaceId])
   @@index([folderId])
@@ -165,6 +166,23 @@ model Form {
   @@index([ownerId])
   @@index([status])
   @@index([deletedAt])
+}
+
+model FormDraft {
+  id             String   @id @default(cuid())
+  formId         String
+  token          String   @unique
+  answers        Json
+  email          String?
+  currentSection Int?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  expiresAt      DateTime
+
+  form Form @relation(fields: [formId], references: [id], onDelete: Cascade)
+
+  @@index([formId])
+  @@index([expiresAt])
 }
 
 model FormTemplate {

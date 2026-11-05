@@ -13,11 +13,16 @@ import {
   publicPost,
   createPaymentOrder,
   checkResponseExists,
+  saveDraft,
+  loadDraft,
+  deleteDraft,
+  emailResumeLink,
   ApiRequestError,
 } from "../lib/api";
 import { evaluateConditions } from "../lib/conditions";
 import { isValidEmail, validateQuestionFormat } from "../lib/validation";
 import { computeReachedSections, nextSectionAfter } from "../lib/sectionJumps";
+import { clampResumeSection } from "../lib/resumeSection";
 import { resolvePipedLabel } from "../lib/piping";
 import { isImageUrl, uploadToCloudinary } from "../lib/upload";
 import SignaturePad, { type SignaturePadHandle } from "../components/SignaturePad";
@@ -168,6 +173,24 @@ export default function PublicFormPage() {
   // once the window passes. UX only — the server re-check is the real guard.
   const [now, setNow] = useState(() => Date.now());
 
+  // ── Partial save / resume later ──
+  // The active draft token (from a save response OR the ?resume= param). Held in
+  // a ref too so the submit path can read the latest token without re-rendering.
+  const [resumeToken, setResumeToken] = useState<string | null>(null);
+  const resumeTokenRef = useRef<string | null>(null);
+  const [resumeLink, setResumeLink] = useState<string | null>(null);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [draftError, setDraftError] = useState("");
+  const [resumeNotice, setResumeNotice] = useState("");
+  const [copiedResumeLink, setCopiedResumeLink] = useState(false);
+  const [emailedResumeLink, setEmailedResumeLink] = useState(false);
+  // Guards the resume-on-load effect so it runs at most once per form load.
+  const resumeAttemptedRef = useRef(false);
+
+  useEffect(() => {
+    resumeTokenRef.current = resumeToken;
+  }, [resumeToken]);
+
   useEffect(() => {
     if (!editToken || editWindowExpiresAt === null) return;
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -216,6 +239,59 @@ export default function PublicFormPage() {
 
   // Questions in current section
   const currentQuestions = currentSection?.questions ?? [];
+
+  const allowPartialSave = form?.schema.settings.allowPartialSave === true;
+
+  // ── Resume-on-load ──
+  // Once the form (and its sections) are available, if the URL carries a
+  // ?resume=<token> and partial save is on, fetch the draft and pre-fill the
+  // form: answers, email, and the saved section (clamped to a reachable one).
+  // Runs at most once per load. An unknown/expired token shows a friendly notice
+  // and starts fresh, never crashing.
+  useEffect(() => {
+    if (!form || !slug) return;
+    if (resumeAttemptedRef.current) return;
+    if (!allowPartialSave) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("resume");
+    if (!token) return;
+
+    resumeAttemptedRef.current = true;
+
+    void (async () => {
+      try {
+        const draft = await loadDraft(slug, token);
+        // Restore directly (NOT via updateAnswer) so the 'start' analytics event
+        // doesn't fire from a programmatic restore.
+        setAnswers(
+          (draft.answers ?? {}) as Record<string, AnswerValue>,
+        );
+        setEmail(draft.email ?? "");
+        setResumeToken(token);
+        const { history: restoredHistory } = clampResumeSection(
+          form.schema.sections,
+          (draft.answers ?? {}) as Record<string, AnswerValue>,
+          draft.currentSection,
+        );
+        setHistory(restoredHistory);
+        setResumeNotice("We restored your progress.");
+      } catch {
+        // Unknown / expired / wrong-form token: clear the param so a reload is
+        // clean, tell the respondent, and render an empty form.
+        params.delete("resume");
+        const cleanSearch = params.toString();
+        window.history.replaceState(
+          null,
+          "",
+          `${window.location.pathname}${cleanSearch ? `?${cleanSearch}` : ""}`,
+        );
+        setResumeNotice(
+          "That resume link is no longer valid — starting fresh.",
+        );
+      }
+    })();
+  }, [form, slug, allowPartialSave]);
 
   // Progress: base the numerator on how many sections have actually been
   // visited (stack depth) so it advances monotonically and never divides by a
@@ -413,6 +489,60 @@ export default function PublicFormPage() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  // ── Save & resume later ──
+  // Snapshots the current answers (+ email + section) as a draft and shows a
+  // resume link. Deliberately does NOT run validateAll/collectFormatErrors — a
+  // draft is intentionally incomplete.
+  async function handleSaveDraft() {
+    if (!slug) return;
+    setDraftError("");
+    setSavingDraft(true);
+    const collectEmail = Boolean(form?.schema.settings.collectEmail);
+    const trimmedEmail = email.trim().toLowerCase();
+    try {
+      const result = await saveDraft(slug, {
+        answers,
+        ...(collectEmail && trimmedEmail ? { email: trimmedEmail } : {}),
+        currentSection: currentSectionIndex,
+        ...(resumeToken ? { token: resumeToken } : {}),
+      });
+      setResumeToken(result.token);
+      setResumeLink(
+        `${window.location.origin}/f/${slug}?resume=${result.token}`,
+      );
+      setCopiedResumeLink(false);
+      setEmailedResumeLink(false);
+    } catch {
+      setDraftError(
+        "We couldn't save your progress just now. Please try again.",
+      );
+    } finally {
+      setSavingDraft(false);
+    }
+  }
+
+  async function handleCopyResumeLink() {
+    if (!resumeLink) return;
+    try {
+      await navigator.clipboard.writeText(resumeLink);
+      setCopiedResumeLink(true);
+      window.setTimeout(() => setCopiedResumeLink(false), 2500);
+    } catch {
+      // Clipboard denied (e.g. insecure context): the link is still on-screen
+      // for the respondent to copy manually.
+      setCopiedResumeLink(false);
+    }
+  }
+
+  async function handleEmailResumeLink() {
+    if (!slug || !resumeToken) return;
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) return;
+    // Best-effort: the link is always on-screen regardless of delivery outcome.
+    await emailResumeLink(slug, resumeToken, trimmedEmail);
+    setEmailedResumeLink(true);
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await doSubmit();
@@ -524,6 +654,14 @@ export default function PublicFormPage() {
 
         setSubmitted(true);
         window.scrollTo({ top: 0, behavior: "smooth" });
+
+        // Best-effort: delete the backing draft so a resume link can't resurrect
+        // a submitted draft. Never blocks the already-rendered success. Reads the
+        // ref so the latest token (set on save or resume) is used.
+        const tokenToPrune = resumeTokenRef.current;
+        if (slug && tokenToPrune) {
+          void deleteDraft(slug, tokenToPrune);
+        }
       };
 
       // ── Paid flow: new responses on payment-required forms only ──
@@ -844,6 +982,25 @@ export default function PublicFormPage() {
           ) : null}
         </header>
 
+        {/* Resume notice (draft restored / invalid link) */}
+        {resumeNotice ? (
+          <p
+            className="public-resume-notice"
+            role="status"
+            aria-live="polite"
+            style={{
+              margin: "0 0 16px",
+              padding: "10px 14px",
+              borderRadius: 10,
+              background: "var(--qivo-surface, #f1f5f9)",
+              color: "var(--qivo-text-secondary, #475569)",
+              fontSize: "0.9rem",
+            }}
+          >
+            {resumeNotice}
+          </p>
+        ) : null}
+
         {/* Form body */}
         <form onSubmit={handleSubmit} noValidate className="public-form-body">
           {/* Email field — only on first section */}
@@ -987,6 +1144,109 @@ export default function PublicFormPage() {
               A payment of ₹{form.payment.amount / 100} is required to submit
               this form.
             </p>
+          ) : null}
+
+          {/* Save & resume later (owner opt-in). Shown on every section while
+              not editing a submitted response. A saved draft never charges and
+              never submits. */}
+          {allowPartialSave && !isEditing ? (
+            <div className="public-resume-save" style={{ marginTop: 16 }}>
+              <div style={{ textAlign: "center" }}>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => void handleSaveDraft()}
+                  disabled={savingDraft}
+                >
+                  {savingDraft ? "Saving…" : "Save & resume later"}
+                </button>
+              </div>
+              {draftError ? (
+                <p
+                  className="submit-error"
+                  role="alert"
+                  aria-live="polite"
+                  style={{ marginTop: 10, textAlign: "center" }}
+                >
+                  {draftError}
+                </p>
+              ) : null}
+
+              {resumeLink ? (
+                <div
+                  className="public-resume-panel"
+                  role="status"
+                  aria-live="polite"
+                  style={{
+                    marginTop: 14,
+                    padding: 16,
+                    borderRadius: 12,
+                    border: "1px solid var(--qivo-input-border, #e2e8f0)",
+                    background: "var(--qivo-surface, #f8fafc)",
+                  }}
+                >
+                  <p style={{ margin: "0 0 10px", fontWeight: 600 }}>
+                    Your progress is saved. Use this link to come back and
+                    finish:
+                  </p>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 8,
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <input
+                      type="text"
+                      readOnly
+                      value={resumeLink}
+                      aria-label="Your resume link"
+                      onFocus={(e) => e.currentTarget.select()}
+                      style={{ flex: 1, minWidth: 220 }}
+                    />
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => void handleCopyResumeLink()}
+                    >
+                      {copiedResumeLink ? "Copied" : "Copy link"}
+                    </button>
+                  </div>
+                  <p
+                    className="muted"
+                    style={{ margin: "10px 0 0", fontSize: "0.85rem" }}
+                  >
+                    This link works for 30 days. Keep it safe — anyone with it
+                    can continue your response.
+                  </p>
+
+                  {form.schema.settings.collectEmail && email.trim() ? (
+                    <div style={{ marginTop: 10 }}>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() => void handleEmailResumeLink()}
+                        disabled={emailedResumeLink}
+                      >
+                        {emailedResumeLink
+                          ? "Link sent"
+                          : "Email me this link"}
+                      </button>
+                      {emailedResumeLink ? (
+                        <p
+                          className="muted"
+                          style={{ margin: "8px 0 0", fontSize: "0.85rem" }}
+                        >
+                          If that address can receive our mail, the link is on
+                          its way — and it's also right here.
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
           ) : null}
         </form>
 

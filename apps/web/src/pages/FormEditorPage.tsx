@@ -129,6 +129,7 @@ export default function FormEditorPage() {
   // Settings
   const [collectEmail, setCollectEmail] = useState(false);
   const [allowMultipleResponses, setAllowMultipleResponses] = useState(true);
+  const [allowPartialSave, setAllowPartialSave] = useState(false);
   const [confirmationMessage, setConfirmationMessage] = useState("");
   const [scheduledPublishAt, setScheduledPublishAt] = useState("");
   const [scheduledCloseAt, setScheduledCloseAt] = useState("");
@@ -199,6 +200,7 @@ export default function FormEditorPage() {
     );
     setCollectEmail(schema.settings?.collectEmail ?? false);
     setAllowMultipleResponses(schema.settings?.allowMultipleResponses ?? true);
+    setAllowPartialSave(schema.settings?.allowPartialSave ?? false);
     setConfirmationMessage(schema.confirmationMessage ?? "");
     setScheduledPublishAt(toDatetimeLocal(schema.settings?.scheduledPublishAt));
     setScheduledCloseAt(toDatetimeLocal(schema.settings?.scheduledCloseAt));
@@ -748,6 +750,7 @@ export default function FormEditorPage() {
         {
           collectEmail,
           allowMultipleResponses,
+          allowPartialSave,
           confirmationMessage,
           scheduledPublishAt: toIsoInstant(scheduledPublishAt),
           scheduledCloseAt: toIsoInstant(scheduledCloseAt),
@@ -1232,6 +1235,7 @@ export default function FormEditorPage() {
             <SettingsGroup title="Collection" description="How responses are collected" summary={`${collectEmail ? "Email required" : "Anonymous"} · ${allowMultipleResponses ? "Multiple allowed" : "One per person"}`}>
               <label className="settings-toggle"><input type="checkbox" checked={collectEmail} onChange={(e) => setCollectEmail(e.target.checked)} /><span><strong>Collect email addresses</strong><small>Ask respondents to provide their email.</small></span></label>
               <label className="settings-toggle"><input type="checkbox" checked={allowMultipleResponses} onChange={(e) => setAllowMultipleResponses(e.target.checked)} /><span><strong>Allow multiple responses</strong><small>Let the same person submit more than once.</small></span></label>
+              <label className="settings-toggle"><input type="checkbox" checked={allowPartialSave} onChange={(e) => setAllowPartialSave(e.target.checked)} /><span><strong>Let respondents save and resume later</strong><small>They get a link to come back and finish.</small></span></label>
               <label className="settings-toggle"><input type="checkbox" checked={quizMode} onChange={(e) => setQuizMode(e.target.checked)} /><span><strong>Quiz mode</strong><small>Enable scoring — set correct answers per question.</small></span></label>
               {quizMode ? (<label className="settings-toggle"><input type="checkbox" checked={showScore} onChange={(e) => setShowScore(e.target.checked)} /><span><strong>Show score after submission</strong><small>Respondent sees their score.</small></span></label>) : null}
               <div className="question-field"><label htmlFor="s-response-notification">Email me about new responses</label><select id="s-response-notification" value={responseNotification} onChange={(e) => setResponseNotification(e.target.value as "off" | "immediate" | "daily")} style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }}><option value="off">Off</option><option value="immediate">Immediately</option><option value="daily">Daily digest</option></select><small className="muted">Get notified by email when this form receives responses.</small></div>

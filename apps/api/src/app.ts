@@ -352,6 +352,20 @@ const errorHandler: ErrorRequestHandler = (
       });
       return;
 
+    // Partial-save draft "not allowed / not found" cases collapse to the same
+    // generic 404 as a missing form, so an anonymous caller cannot distinguish
+    // "no such form" from "feature off" from "unknown/expired/wrong-form token".
+    case "PARTIAL_SAVE_DISABLED":
+    case "DRAFT_NOT_FOUND":
+      res.status(404).json({
+        success: false,
+        error: {
+          code: "PUBLIC_FORM_NOT_FOUND",
+          message: "Published form not found.",
+        },
+      });
+      return;
+
     case "INVALID_RESPONSE":
       res.status(400).json({
         success: false,

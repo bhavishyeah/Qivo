@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { FONT_ALLOW_LIST, updateFormSettingsSchema } from "./form.schemas.js";
+import {
+  FONT_ALLOW_LIST,
+  updateFormSettingsSchema,
+  saveDraftSchema,
+  loadDraftQuerySchema,
+  deleteDraftBodySchema,
+  emailDraftSchema,
+} from "./form.schemas.js";
 
 const baseSettings = {
   collectEmail: false,
@@ -64,6 +71,78 @@ describe("updateFormSettingsSchema theme", () => {
       theme: { evil: "payload" },
     });
     expect(result.success).toBe(false);
+  });
+});
+
+describe("updateFormSettingsSchema allowPartialSave", () => {
+  it("accepts allowPartialSave as an optional boolean", () => {
+    expect(
+      updateFormSettingsSchema.safeParse({
+        ...baseSettings,
+        allowPartialSave: true,
+      }).success,
+    ).toBe(true);
+    // Omitting it is still valid (optional).
+    expect(updateFormSettingsSchema.safeParse(baseSettings).success).toBe(true);
+  });
+
+  it("rejects a non-boolean allowPartialSave", () => {
+    expect(
+      updateFormSettingsSchema.safeParse({
+        ...baseSettings,
+        allowPartialSave: "yes",
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("saveDraftSchema", () => {
+  it("accepts a minimal body (answers only)", () => {
+    expect(saveDraftSchema.safeParse({ answers: {} }).success).toBe(true);
+  });
+
+  it("accepts answers + email + currentSection + token", () => {
+    expect(
+      saveDraftSchema.safeParse({
+        answers: { q1: "a" },
+        email: "a@example.com",
+        currentSection: 2,
+        token: "abc",
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects answers serialized over the ~500 KB cap with a 400-shaped error", () => {
+    const big = "x".repeat(520_000);
+    const result = saveDraftSchema.safeParse({ answers: { blob: big } });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a negative currentSection", () => {
+    expect(
+      saveDraftSchema.safeParse({ answers: {}, currentSection: -1 }).success,
+    ).toBe(false);
+  });
+});
+
+describe("loadDraftQuerySchema / deleteDraftBodySchema / emailDraftSchema", () => {
+  it("loadDraftQuerySchema requires a token", () => {
+    expect(loadDraftQuerySchema.safeParse({ token: "t" }).success).toBe(true);
+    expect(loadDraftQuerySchema.safeParse({}).success).toBe(false);
+  });
+
+  it("deleteDraftBodySchema requires a token", () => {
+    expect(deleteDraftBodySchema.safeParse({ token: "t" }).success).toBe(true);
+    expect(deleteDraftBodySchema.safeParse({}).success).toBe(false);
+  });
+
+  it("emailDraftSchema requires a token and a valid email", () => {
+    expect(
+      emailDraftSchema.safeParse({ token: "t", email: "a@example.com" }).success,
+    ).toBe(true);
+    expect(
+      emailDraftSchema.safeParse({ token: "t", email: "nope" }).success,
+    ).toBe(false);
   });
 });
 
