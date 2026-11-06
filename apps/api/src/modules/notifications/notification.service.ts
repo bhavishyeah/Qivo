@@ -1,4 +1,5 @@
 import prisma from "../../db/prisma.js";
+import { Prisma } from "../../generated/prisma/client.js";
 
 type NotificationType =
   | "FORM_SUBMITTED_FOR_REVIEW"
@@ -9,7 +10,8 @@ type NotificationType =
   | "MEMBER_INVITED"
   | "MEMBER_REMOVED"
   | "RESPONSE_MILESTONE"
-  | "FORM_SHARED";
+  | "FORM_SHARED"
+  | "FORM_CLOSED";
 
 export async function createNotification(input: {
   userId: string;
@@ -25,7 +27,7 @@ export async function createNotification(input: {
       title: input.title,
       message: input.message,
       ...(input.metadata !== undefined
-        ? { metadata: input.metadata as any }
+        ? { metadata: input.metadata as Prisma.InputJsonValue }
         : {}),
     },
   });
@@ -95,6 +97,7 @@ export async function notifyFormEvent(input: {
     MEMBER_REMOVED: `You were removed from the workspace.`,
     RESPONSE_MILESTONE: `"${input.formTitle}" reached a response milestone.`,
     FORM_SHARED: `A form was shared with you.`,
+    FORM_CLOSED: `"${input.formTitle}" has been closed.`,
   };
 
   const titles: Record<NotificationType, string> = {
@@ -107,6 +110,7 @@ export async function notifyFormEvent(input: {
     MEMBER_REMOVED: "Removed from team",
     RESPONSE_MILESTONE: "Response milestone",
     FORM_SHARED: "Form shared with you",
+    FORM_CLOSED: "Form closed",
   };
 
   // Don't notify the actor themselves

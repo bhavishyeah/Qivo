@@ -114,6 +114,12 @@ export default function AppLayout({
               Folders
             </Link>
             <Link
+              to="/shared"
+              className={`app-nav-link ${isActive("/shared") ? "active" : ""}`}
+            >
+              Shared with me
+            </Link>
+            <Link
               to="/team"
               className={`app-nav-link ${isActive("/team") ? "active" : ""}`}
             >

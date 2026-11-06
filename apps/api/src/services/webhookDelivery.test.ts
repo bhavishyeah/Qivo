@@ -1,9 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+// ── DB mock for sendWebhooksForResponse fan-out tests ─────────────────────────
+// Must be declared before the module import so vi.mock hoisting works.
+const prismaMock = vi.hoisted(() => ({
+  webhook: { findMany: vi.fn() },
+  webhookDelivery: { create: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
+}));
+vi.mock("../db/prisma.js", () => ({ default: prismaMock }));
+
 import {
   computeSignature,
   backoffMs,
   MAX_ATTEMPTS,
+  MAX_WEBHOOKS_PER_FORM,
   isDeliveryDue,
   classifyAddress,
   isBlockedHostname,
@@ -12,6 +21,7 @@ import {
   webhookAcceptsEvent,
   selectPinnedAddresses,
   assertSafeWebhookUrl,
+  sendWebhooksForResponse,
 } from "./webhookDelivery.js";
 
 // Mock DNS resolution so SSRF tests never touch the network.
@@ -424,5 +434,71 @@ describe("assertSafeWebhookUrl (mocked DNS)", () => {
     await expect(assertSafeWebhookUrl("https://mixed.example.com/hook")).rejects.toMatchObject({
       name: "WEBHOOK_URL_INVALID",
     });
+  });
+});
+
+// ── HIGH-2: sendWebhooksForResponse MAX_WEBHOOKS_PER_FORM cap ─────────────────
+
+describe("sendWebhooksForResponse — MAX_WEBHOOKS_PER_FORM cap (HIGH-2)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it(`only creates delivery rows for the first ${MAX_WEBHOOKS_PER_FORM} webhooks when a form has more`, async () => {
+    // Build 12 enabled webhooks that all subscribe to response.created.
+    const webhooks = Array.from({ length: 12 }, (_, i) => ({
+      id: `webhook_${i}`,
+      formId: "form_1",
+      url: `https://example.com/hook${i}`,
+      secret: "sec",
+      enabled: true,
+      events: ["response.created"],
+    }));
+
+    prismaMock.webhook.findMany.mockResolvedValue(webhooks);
+    // create returns a minimal delivery row so attemptDelivery (which is also
+    // mocked-away by the prisma mock) does not error; we only count the calls.
+    prismaMock.webhookDelivery.create.mockResolvedValue({ id: "del_x" });
+
+    const payload = buildResponseCreatedPayload({
+      formId: "form_1",
+      formTitle: "Test Form",
+      responseId: "resp_1",
+      submittedAt: new Date(),
+      answers: {},
+      questions: [],
+    });
+
+    await sendWebhooksForResponse("form_1", payload);
+
+    // Exactly MAX_WEBHOOKS_PER_FORM (10) delivery rows should be created.
+    expect(prismaMock.webhookDelivery.create).toHaveBeenCalledTimes(MAX_WEBHOOKS_PER_FORM);
+  });
+
+  it("creates all delivery rows when webhook count is at or below the cap", async () => {
+    const webhooks = Array.from({ length: 5 }, (_, i) => ({
+      id: `webhook_${i}`,
+      formId: "form_1",
+      url: `https://example.com/hook${i}`,
+      secret: "sec",
+      enabled: true,
+      events: ["response.created"],
+    }));
+
+    prismaMock.webhook.findMany.mockResolvedValue(webhooks);
+    prismaMock.webhookDelivery.create.mockResolvedValue({ id: "del_x" });
+
+    const payload = buildResponseCreatedPayload({
+      formId: "form_1",
+      formTitle: "Test Form",
+      responseId: "resp_2",
+      submittedAt: new Date(),
+      answers: {},
+      questions: [],
+    });
+
+    await sendWebhooksForResponse("form_1", payload);
+
+    expect(prismaMock.webhookDelivery.create).toHaveBeenCalledTimes(5);
   });
 });

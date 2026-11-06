@@ -2493,7 +2493,7 @@ export async function publishDueForms(now: Date = new Date()): Promise<number> {
       deletedAt: null,
       status: { in: ["DRAFT", "APPROVED", "CHANGES_REQUESTED"] },
     },
-    select: { id: true, schema: true },
+    select: { id: true, schema: true, title: true, description: true, version: true },
   });
 
   const dueIds = candidates
@@ -2507,11 +2507,37 @@ export async function publishDueForms(now: Date = new Date()): Promise<number> {
 
   if (dueIds.length === 0) return 0;
 
-  const result = await prisma.form.updateMany({
-    where: { id: { in: dueIds } },
-    data: { status: "PUBLISHED" },
-  });
-  return result.count;
+  let count = 0;
+  for (const form of dueIds.map((id) => candidates.find((c) => c.id === id)!)) {
+    try {
+      await prisma.$transaction(async (tx) => {
+        const current = await tx.form.findUnique({
+          where: { id: form.id },
+          select: { version: true },
+        });
+        const nextVersion = (current?.version ?? form.version) + 1;
+        await tx.formVersion.create({
+          data: {
+            formId: form.id,
+            versionNumber: nextVersion,
+            schema: toPrismaJson(getFormSchema(form.schema)),
+            title: form.title,
+            description: form.description,
+            createdBy: "system",
+            publishedAt: new Date(),
+          },
+        });
+        await tx.form.update({
+          where: { id: form.id },
+          data: { status: "PUBLISHED", version: nextVersion },
+        });
+      });
+      count++;
+    } catch (err) {
+      console.error(`[publishDueForms] failed for form ${form.id}:`, err);
+    }
+  }
+  return count;
 }
 
 /**
@@ -2560,6 +2586,31 @@ export async function closeDueForms(now: Date = new Date()): Promise<number> {
       ),
     );
   })().catch((err) => console.error("form.closed sweep webhook trigger failed:", err));
+
+  // In-app FORM_CLOSED notifications to workspace managers. Fire-and-forget.
+  void (async () => {
+    const closedForms = await prisma.form.findMany({
+      where: { id: { in: dueIds } },
+      select: { id: true, title: true, workspaceId: true },
+    });
+    for (const f of closedForms) {
+      const managers = await prisma.workspaceMember.findMany({
+        where: {
+          workspaceId: f.workspaceId,
+          role: { in: ["OWNER", "ADMIN"] },
+        },
+        select: { userId: true },
+      });
+      await notifyFormEvent({
+        formId: f.id,
+        formTitle: f.title,
+        actorId: "system",
+        actorName: "Qivo",
+        type: "FORM_CLOSED",
+        targetUserIds: managers.map((m) => m.userId),
+      });
+    }
+  })().catch((err) => console.error("FORM_CLOSED sweep notification failed:", err));
 
   return result.count;
 }
@@ -3964,8 +4015,8 @@ export async function deleteFormResponse(
   responseId: string,
   userId: string,
 ) {
-  // Only admins/owners/editors can delete responses
-  const form = await prisma.form.findFirst({
+  // 1) Workspace path: a NON-VIEWER member may delete responses.
+  let form = await prisma.form.findFirst({
     where: {
       id: formId,
       deletedAt: null,
@@ -3977,10 +4028,27 @@ export async function deleteFormResponse(
     },
   });
 
+  // 2) Per-form EDITOR share fallback (mirrors updateForm / getFormForResponseAccess).
+  if (!form && (await hasEditorShare(formId, userId))) {
+    form = await prisma.form.findFirst({
+      where: { id: formId, deletedAt: null },
+    });
+  }
+
   if (!form) {
-    const error = new Error("Form not found.");
-    error.name = "FORM_NOT_FOUND";
-    throw error;
+    // Distinguish "VIEWER member" (403) from "not a member at all" (404).
+    const isMember = await prisma.form.findFirst({
+      where: {
+        id: formId,
+        deletedAt: null,
+        workspace: { members: { some: { userId } } },
+      },
+      select: { id: true },
+    });
+    if (isMember) {
+      throw forbiddenError("You do not have permission to delete responses.");
+    }
+    throw formNotFoundError();
   }
 
   const response = await prisma.formResponse.findFirst({

@@ -547,9 +547,11 @@ function PreviewQuestion({
   }
 
   if (question.type === "MULTI_ENTRY") {
+    const MAX_MULTI_ENTRY_COUNT = 50;
     const entries: string[] = Array.isArray(value)
       ? (value as string[])
       : [""];
+    const atCap = entries.length >= MAX_MULTI_ENTRY_COUNT;
 
     return (
       <div className="question-field" role="group" aria-labelledby={`${previewId}-legend`}>
@@ -594,11 +596,13 @@ function PreviewQuestion({
         <button
           type="button"
           className="multi-entry-add"
-          onClick={() => onChange(question.id, [...entries, ""])}
+          onClick={() => { if (!atCap) onChange(question.id, [...entries, ""]); }}
+          disabled={atCap}
           aria-label="Add another entry"
         >
           + Add another
         </button>
+        {atCap ? <p style={{color: '#6b7280', fontSize: '0.875rem', margin: '4px 0 0 0'}}>Maximum 50 entries</p> : null}
       </div>
     );
   }

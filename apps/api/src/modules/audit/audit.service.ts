@@ -1,4 +1,5 @@
 import prisma from "../../db/prisma.js";
+import { Prisma } from "../../generated/prisma/client.js";
 
 export async function logAction(input: {
   workspaceId: string;
@@ -16,7 +17,7 @@ export async function logAction(input: {
       entityType: input.entityType,
       entityId: input.entityId ?? null,
       ...(input.metadata !== undefined
-        ? { metadata: input.metadata as any }
+        ? { metadata: input.metadata as Prisma.InputJsonValue }
         : {}),
     },
   });

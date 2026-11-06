@@ -12,6 +12,7 @@ import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import VerifyEmailPage from "./pages/VerifyEmailPage";
 import DashboardPage from "./pages/DashboardPage";
+import SharedWithMePage from "./pages/SharedWithMePage";
 import CreateFormPage from "./pages/CreateFormPage";
 import FormEditorPage from "./pages/FormEditorPage";
 import FormSharePage from "./pages/FormSharePage";
@@ -102,6 +103,7 @@ function App() {
         <Route path="/audit" element={<Protected>{() => <AuditLogPage />}</Protected>} />
         <Route path="/events" element={<Protected>{() => <EventsPage />}</Protected>} />
         <Route path="/admin" element={<Protected>{() => <AdminPanelPage />}</Protected>} />
+        <Route path="/shared" element={<Protected>{() => <SharedWithMePage />}</Protected>} />
 
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />

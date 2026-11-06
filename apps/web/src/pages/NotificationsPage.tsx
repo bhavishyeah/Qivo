@@ -21,6 +21,7 @@ const TYPE_ICONS: Record<string, string> = {
   MEMBER_INVITED: "👋",
   MEMBER_REMOVED: "👤",
   RESPONSE_MILESTONE: "🎉",
+  FORM_SHARED: "🔗",
 };
 
 function groupByDate(notifications: NotificationRecord[]) {

@@ -675,7 +675,9 @@ export async function sendWebhooksForResponse(
       await prisma.webhook.findMany({
         where: { formId, enabled: true },
       })
-    ).filter((w) => webhookAcceptsEvent(w.events, payload.event));
+    )
+      .filter((w) => webhookAcceptsEvent(w.events, payload.event))
+      .slice(0, MAX_WEBHOOKS_PER_FORM);
     if (webhooks.length === 0) return;
 
     const deliveryIds: string[] = [];
