@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "Qivo Forms",
   "short_name": "Qivo",
   "start_url": "/",
@@ -6,5 +6,30 @@
   "background_color": "#f4f7fb",
   "theme_color": "#2563eb",
   "description": "Create, publish, and manage Qivo forms.",
-  "icons": []
+  "icons": [
+    {
+      "src": "/icons/maskable_icon_x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/maskable_icon_x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/maskable_icon_x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/maskable_icon_x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
 }
