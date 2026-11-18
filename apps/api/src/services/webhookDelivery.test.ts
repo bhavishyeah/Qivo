@@ -502,3 +502,35 @@ describe("sendWebhooksForResponse — MAX_WEBHOOKS_PER_FORM cap (HIGH-2)", () =>
     expect(prismaMock.webhookDelivery.create).toHaveBeenCalledTimes(5);
   });
 });
+
+describe("buildResponseCreatedPayload manualPayment", () => {
+  const base = {
+    formId: "f1",
+    formTitle: "T",
+    responseId: "r1",
+    submittedAt: new Date("2025-01-01T00:00:00.000Z"),
+    answers: {},
+    questions: [],
+  };
+
+  it("includes manualPayment only when passed", () => {
+    const withMp = buildResponseCreatedPayload({
+      ...base,
+      manualPayment: { utr: "ABC12345678", status: "pending" },
+    });
+    expect(withMp.manualPayment).toEqual({ utr: "ABC12345678", status: "pending" });
+    const without = buildResponseCreatedPayload(base);
+    expect(without).not.toHaveProperty("manualPayment");
+  });
+
+  it("signature verifies over the serialized body with manualPayment", () => {
+    const payload = buildResponseCreatedPayload({
+      ...base,
+      manualPayment: { utr: "ABC12345678", proofUrl: "https://res.cloudinary.com/x/image/upload/a.jpg", status: "pending" },
+    });
+    const body = JSON.stringify(payload);
+    const sig = computeSignature("secret", body);
+    expect(computeSignature("secret", body)).toBe(sig);
+    expect(computeSignature("secret", body + " ")).not.toBe(sig);
+  });
+});

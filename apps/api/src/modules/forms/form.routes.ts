@@ -15,6 +15,7 @@ import {
   updateSectionSchema,
   reorderQuestionsSchema,
   responseListQuerySchema,
+  manualPaymentStatusSchema,
   submitResponseSchema,
   paymentOrderSchema,
   editResponseSchema,
@@ -57,6 +58,8 @@ import {
   deleteSection,
   deleteForm,
   deleteFormResponse,
+  setManualPaymentStatus,
+  getManualPaymentSummary,
   deleteQuestion,
   duplicateForm,
   getForm,
@@ -1024,6 +1027,9 @@ formRouter.get(
           ...(input.cursor !== undefined
             ? { cursor: input.cursor }
             : {}),
+          ...(input.manualStatus !== undefined
+            ? { manualStatus: input.manualStatus }
+            : {}),
         },
       );
 
@@ -1075,6 +1081,56 @@ formRouter.delete(
       }
       await deleteFormResponse(formId, responseId, req.user.id);
       res.json({ success: true, data: { message: "Response deleted." } });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+formRouter.patch(
+  "/:formId/responses/:responseId/manual-payment",
+  requireAuth,
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: { code: "UNAUTHENTICATED", message: "Authentication is required." } });
+        return;
+      }
+      const { formId, responseId } = req.params;
+      if (typeof formId !== "string" || typeof responseId !== "string") {
+        res.status(400).json({ success: false, error: { code: "INVALID_RESPONSE_ID", message: "Valid form and response IDs are required." } });
+        return;
+      }
+      const input = manualPaymentStatusSchema.parse(req.body);
+      const response = await setManualPaymentStatus(
+        formId,
+        responseId,
+        req.user.id,
+        input.status,
+      );
+      res.json({ success: true, data: { response } });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+formRouter.get(
+  "/:formId/manual-payment-summary",
+  requireAuth,
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: { code: "UNAUTHENTICATED", message: "Authentication is required." } });
+        return;
+      }
+      const formId = req.params.formId;
+      if (typeof formId !== "string") {
+        res.status(400).json({ success: false, error: { code: "INVALID_FORM_ID", message: "A valid form ID is required." } });
+        return;
+      }
+      const data = await getManualPaymentSummary(formId, req.user.id);
+      res.json({ success: true, data });
     } catch (error) {
       next(error);
     }
@@ -1689,6 +1745,9 @@ formRouter.post(
       : {}),
     ...(input.payment !== undefined
       ? { payment: input.payment }
+      : {}),
+    ...(input.manualPayment !== undefined
+      ? { manualPayment: input.manualPayment }
       : {}),
   },
 );

@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   FONT_ALLOW_LIST,
   updateFormSettingsSchema,
+  submitResponseSchema,
+  editResponseSchema,
+  manualPaymentStatusSchema,
+  responseListQuerySchema,
   saveDraftSchema,
   loadDraftQuerySchema,
   deleteDraftBodySchema,
@@ -248,5 +252,57 @@ describe("FONT_ALLOW_LIST", () => {
       "Playfair Display",
       "Source Sans 3",
     ]);
+  });
+});
+
+describe("manual UPI schemas", () => {
+  const base = { collectEmail: false, allowMultipleResponses: true, confirmationMessage: "" };
+
+  it("accepts a valid enabled manualUpi block and defaults requireScreenshot", () => {
+    const r = updateFormSettingsSchema.safeParse({
+      ...base,
+      manualUpi: { enabled: true, upiId: "name@okicici", payeeName: "Asha", amount: 5000 },
+    });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.manualUpi?.requireScreenshot).toBe(true);
+  });
+
+  it("requires upiId and payeeName when enabled", () => {
+    const r = updateFormSettingsSchema.safeParse({ ...base, manualUpi: { enabled: true } });
+    expect(r.success).toBe(false);
+    expect(updateFormSettingsSchema.safeParse({ ...base, manualUpi: { enabled: false } }).success).toBe(true);
+  });
+
+  it("rejects bad upiId, unknown keys and out-of-range amount", () => {
+    const ok = { enabled: true, upiId: "a@ybl", payeeName: "A" };
+    expect(updateFormSettingsSchema.safeParse({ ...base, manualUpi: { ...ok, upiId: "bad id@ybl" } }).success).toBe(false);
+    expect(updateFormSettingsSchema.safeParse({ ...base, manualUpi: { ...ok, extra: 1 } }).success).toBe(false);
+    expect(updateFormSettingsSchema.safeParse({ ...base, manualUpi: { ...ok, amount: 50 } }).success).toBe(false);
+    expect(updateFormSettingsSchema.safeParse({ ...base, manualUpi: { ...ok, amount: 15_000_001 } }).success).toBe(false);
+  });
+
+  it("manualPayment is strict and validates the UTR", () => {
+    const body = { answers: {} };
+    expect(submitResponseSchema.safeParse({ ...body, manualPayment: { utr: "ABC12345678" } }).success).toBe(true);
+    expect(submitResponseSchema.safeParse({ ...body, manualPayment: { utr: "ABC12345678", amount: 1 } }).success).toBe(false);
+    expect(submitResponseSchema.safeParse({ ...body, manualPayment: { utr: "ABC12345678", status: "verified" } }).success).toBe(false);
+    expect(submitResponseSchema.safeParse({ ...body, manualPayment: { utr: "short" } }).success).toBe(false);
+  });
+
+  it("editResponseSchema strips manualPayment", () => {
+    const r = editResponseSchema.parse({
+      answers: {},
+      editToken: "t",
+      manualPayment: { utr: "ABC12345678" },
+    });
+    expect(r).not.toHaveProperty("manualPayment");
+  });
+
+  it("validates review status and manualStatus query", () => {
+    expect(manualPaymentStatusSchema.safeParse({ status: "verified" }).success).toBe(true);
+    expect(manualPaymentStatusSchema.safeParse({ status: "paid" }).success).toBe(false);
+    expect(manualPaymentStatusSchema.safeParse({ status: "pending", x: 1 }).success).toBe(false);
+    expect(responseListQuerySchema.safeParse({ manualStatus: "rejected" }).success).toBe(true);
+    expect(responseListQuerySchema.safeParse({ manualStatus: "nope" }).success).toBe(false);
   });
 });

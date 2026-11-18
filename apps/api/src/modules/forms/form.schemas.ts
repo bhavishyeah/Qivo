@@ -1,5 +1,12 @@
 import { z } from "zod";
 
+import {
+  isValidInstructions,
+  isValidPayeeName,
+  isValidUpiId,
+  isValidUtr,
+} from "./manualPayment.js";
+
 // Curated Google Fonts allow-list. This is the AUTHORITATIVE copy; it is
 // enforced server-side via z.enum below (the only injection surface, since
 // fontFamily flows into a stylesheet href). Mirror lives in
@@ -35,6 +42,69 @@ const themeSchema = z
     fontFamily: z.enum(FONT_ALLOW_LIST).optional(),
   })
   .optional();
+
+// Manual UPI settings. Keep in sync with manualPayment.ts and
+// apps/web/src/lib/manualUpi.ts.
+const manualUpiSchema = z
+  .strictObject({
+    enabled: z.boolean(),
+    upiId: z
+      .string()
+      .trim()
+      .max(100)
+      .refine(isValidUpiId, "Enter a valid UPI ID like name@bank.")
+      .optional(),
+    payeeName: z
+      .string()
+      .trim()
+      .min(1)
+      .max(60)
+      .refine(isValidPayeeName, "Payee name cannot contain control characters.")
+      .optional(),
+    amount: PAISE.optional(),
+    instructions: z
+      .string()
+      .trim()
+      .max(300)
+      .refine(
+        isValidInstructions,
+        "Instructions cannot contain control characters.",
+      )
+      .optional(),
+    requireScreenshot: z.boolean().default(true),
+  })
+  .superRefine((v, ctx) => {
+    if (!v.enabled) return;
+    if (!v.upiId) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["upiId"],
+        message: "Enter the UPI ID to receive payments.",
+      });
+    }
+    if (!v.payeeName) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["payeeName"],
+        message: "Enter the payee name respondents will see.",
+      });
+    }
+  });
+
+export const manualPaymentInputSchema = z.strictObject({
+  utr: z
+    .string()
+    .trim()
+    .refine(
+      isValidUtr,
+      "Enter the UTR from your payment app (8-35 letters or digits).",
+    ),
+  proofUrl: z.string().trim().url().max(2000).optional(),
+});
+
+export const manualPaymentStatusSchema = z.strictObject({
+  status: z.enum(["pending", "verified", "rejected"]),
+});
 
 export const updateFormSettingsSchema = z.object({
   collectEmail: z.boolean(),
@@ -111,6 +181,7 @@ export const updateFormSettingsSchema = z.object({
       limit: z.number().int().min(1).max(1_000_000),
     })
     .optional(),
+  manualUpi: manualUpiSchema.optional(),
 });
 
 export type UpdateFormSettingsInput = z.infer<
@@ -219,6 +290,8 @@ export const submitResponseSchema = z.object({
       razorpaySignature: z.string().min(1).max(500),
     })
     .optional(),
+  // Manual UPI proof. No amount/status field: the server derives both.
+  manualPayment: manualPaymentInputSchema.optional(),
 });
 
 // Body for POST /public/:slug/payment/order. The respondent's answers + email
@@ -242,13 +315,16 @@ export const responseCheckSchema = z.object({
 
 export type ResponseCheckInput = z.infer<typeof responseCheckSchema>;
 
-export const editResponseSchema = submitResponseSchema.extend({
+export const editResponseSchema = submitResponseSchema
+  .omit({ manualPayment: true })
+  .extend({
   editToken: z.string().min(1).max(2000),
 });
 
 export const responseListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
   cursor: z.string().min(1).optional(),
+  manualStatus: z.enum(["pending", "verified", "rejected"]).optional(),
 });
 
 // Public "track" endpoint (POST /public/:slug/track) accepts ONLY a start

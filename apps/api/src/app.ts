@@ -1,4 +1,4 @@
-ï»¿import compression from "compression";
+import compression from "compression";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import express, {
@@ -78,7 +78,7 @@ const allowedOrigins = (process.env.WEB_URL || "http://localhost:5173")
 app.use(
   cors({
     origin(origin, callback) {
-      // Non-browser clients (curl, health checks) send no Origin â€” allow them.
+      // Non-browser clients (curl, health checks) send no Origin — allow them.
       if (!origin) {
         callback(null, true);
         return;
@@ -108,7 +108,7 @@ app.use(morgan("dev"));
 
 // Higher limit for public form endpoints (events with many attendees).
 // This MUST be mounted before the global /api limiter, and the global limiter
-// skips /api/forms/public â€” otherwise the stricter 100/15min bucket would
+// skips /api/forms/public — otherwise the stricter 100/15min bucket would
 // reject public submissions long before this 500 limit is reached.
 const publicFormLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -146,7 +146,7 @@ app.use("/api/auth", authRouter);
 app.use("/api/workspaces", workspaceRouter);
 
 app.get("/api/health", (_req, res) => {
-  // Never cache this endpoint â€” it reflects live runtime state.
+  // Never cache this endpoint — it reflects live runtime state.
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
   res.setHeader("Pragma", "no-cache");
   res.json({
@@ -577,6 +577,76 @@ const errorHandler: ErrorRequestHandler = (
         success: false,
         error: {
           code: "WEBHOOK_URL_INVALID",
+          message: error.message,
+        },
+      });
+      return;
+
+    case "PAYMENT_METHODS_CONFLICT":
+      res.status(400).json({
+        success: false,
+        error: {
+          code: "PAYMENT_METHODS_CONFLICT",
+          message: error.message,
+        },
+      });
+      return;
+
+    case "MANUAL_PAYMENT_REQUIRED":
+      res.status(400).json({
+        success: false,
+        error: {
+          code: "MANUAL_PAYMENT_REQUIRED",
+          message: error.message,
+        },
+      });
+      return;
+
+    case "MANUAL_PAYMENT_INVALID":
+      res.status(400).json({
+        success: false,
+        error: {
+          code: "MANUAL_PAYMENT_INVALID",
+          message: error.message,
+        },
+      });
+      return;
+
+    case "MANUAL_PAYMENT_NOT_ENABLED":
+      res.status(400).json({
+        success: false,
+        error: {
+          code: "MANUAL_PAYMENT_NOT_ENABLED",
+          message: error.message,
+        },
+      });
+      return;
+
+    case "MANUAL_PAYMENT_DUPLICATE_UTR":
+      res.status(409).json({
+        success: false,
+        error: {
+          code: "MANUAL_PAYMENT_DUPLICATE_UTR",
+          message: error.message,
+        },
+      });
+      return;
+
+    case "MANUAL_PAYMENT_UNAVAILABLE":
+      res.status(503).json({
+        success: false,
+        error: {
+          code: "MANUAL_PAYMENT_UNAVAILABLE",
+          message: error.message,
+        },
+      });
+      return;
+
+    case "MANUAL_PAYMENT_NOT_FOUND":
+      res.status(404).json({
+        success: false,
+        error: {
+          code: "MANUAL_PAYMENT_NOT_FOUND",
           message: error.message,
         },
       });

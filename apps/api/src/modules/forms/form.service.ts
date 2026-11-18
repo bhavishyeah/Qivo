@@ -41,6 +41,21 @@ import {
   sendFormEventWebhooks,
 } from "../../services/webhookDelivery.js";
 import { stripPipingTokens } from "../../utils/pipingTokens.js";
+import {
+  buildManualPaymentRecord,
+  getActiveManualUpi,
+  isValidInstructions,
+  isValidManualAmountPaise,
+  isValidPayeeName,
+  isValidUpiId,
+  isValidUtr,
+  normalizeManualUpiInput,
+  normalizeUtr,
+  readManualPayment,
+  stripReservedMetadata,
+  type ManualPaymentRecord,
+  type ManualPaymentStatus,
+} from "./manualPayment.js";
 import { TEMPLATES } from "./templates.js";
 import type {
   UpdateFormSettingsInput,
@@ -288,6 +303,15 @@ type FormSchema = {
       enabled: boolean;
       limit: number;
     };
+    // Manual UPI (owner-collected payments). Absent = off. See manualPayment.ts.
+    manualUpi?: {
+      enabled: boolean;
+      upiId?: string;
+      payeeName?: string;
+      amount?: number; // PAISE
+      instructions?: string;
+      requireScreenshot: boolean;
+    };
   };
   confirmationMessage?: string;
 };
@@ -413,6 +437,46 @@ function getFormSchema(value: unknown): FormSchema {
               },
             }
           : {};
+      })(),
+      // Carry manualUpi through only when well-formed; each optional field is
+      // spread only when it passes its validator, so a corrupt block degrades
+      // (getActiveManualUpi then returns null) rather than throwing.
+      ...(() => {
+        const m = candidate?.settings?.manualUpi as
+          | {
+              enabled?: unknown;
+              upiId?: unknown;
+              payeeName?: unknown;
+              amount?: unknown;
+              instructions?: unknown;
+              requireScreenshot?: unknown;
+            }
+          | null
+          | undefined;
+        if (m == null || typeof m !== "object" || typeof m.enabled !== "boolean") {
+          return {};
+        }
+        return {
+          manualUpi: {
+            enabled: m.enabled,
+            requireScreenshot:
+              typeof m.requireScreenshot === "boolean"
+                ? m.requireScreenshot
+                : true,
+            ...(typeof m.upiId === "string" && isValidUpiId(m.upiId)
+              ? { upiId: m.upiId }
+              : {}),
+            ...(typeof m.payeeName === "string" && isValidPayeeName(m.payeeName)
+              ? { payeeName: m.payeeName }
+              : {}),
+            ...(isValidManualAmountPaise(m.amount) ? { amount: m.amount } : {}),
+            ...(typeof m.instructions === "string" &&
+            m.instructions.length > 0 &&
+            isValidInstructions(m.instructions)
+              ? { instructions: m.instructions }
+              : {}),
+          },
+        };
       })(),
     },
     ...(candidate?.confirmationMessage !== undefined
@@ -851,6 +915,22 @@ export async function updateFormSettings(
 
   const schema = getFormSchema(form.schema);
 
+  // A form can use only one payment method. Compute the resulting state from
+  // the input + stored settings (only the service sees stored settings).
+  const nextPaymentEnabled = input.payment
+    ? input.payment.enabled
+    : schema.settings.payment?.enabled === true;
+  const nextManualEnabled = input.manualUpi
+    ? input.manualUpi.enabled
+    : schema.settings.manualUpi?.enabled === true;
+  if (nextPaymentEnabled && nextManualEnabled) {
+    const error = new Error(
+      "Turn off online payments before enabling manual UPI (or the other way round). A form can use only one payment method.",
+    );
+    error.name = "PAYMENT_METHODS_CONFLICT";
+    throw error;
+  }
+
   const updatedSchema: FormSchema = {
     ...schema,
     settings: {
@@ -931,6 +1011,9 @@ export async function updateFormSettings(
         : {}),
       ...(input.capacity !== undefined
         ? { capacity: input.capacity }
+        : {}),
+      ...(input.manualUpi !== undefined
+        ? { manualUpi: normalizeManualUpiInput(input.manualUpi) }
         : {}),
     },
     ...(input.confirmationMessage !== undefined
@@ -1604,12 +1687,15 @@ export async function getPublicForm(
     sendConfirmationEmail,
     payment,
     capacity,
+    manualUpi,
     ...publicSettings
   } = schema.settings;
   void responseNotification;
   void sendConfirmationEmail;
   void payment;
   void capacity;
+  void manualUpi;
+  const activeManualUpi = getActiveManualUpi(schema.settings);
 
   // Count submitted responses ONLY when capacity is enabled (zero cost for the
   // overwhelming majority of forms, which have no capacity block). Drafts live
@@ -1687,6 +1773,22 @@ export async function getPublicForm(
         seatsLeft,
       };
     })(),
+    // Derived manual-UPI block (explicit field picking, never a spread of the
+    // stored setting). Raw `manualUpi` is stripped from schema.settings above.
+    manualUpi: activeManualUpi
+      ? {
+          enabled: true as const,
+          upiId: activeManualUpi.upiId,
+          payeeName: activeManualUpi.payeeName,
+          requireScreenshot: activeManualUpi.requireScreenshot,
+          ...(activeManualUpi.amount !== undefined
+            ? { amount: activeManualUpi.amount }
+            : {}),
+          ...(activeManualUpi.instructions
+            ? { instructions: activeManualUpi.instructions }
+            : {}),
+        }
+      : { enabled: false as const },
     schema: {
       version: schema.version,
       // Strip answer-key fields (correctAnswer/points) from every question so
@@ -2123,6 +2225,31 @@ export function isAllowedUploadUrl(
 
   // Unknown (extensionless) → accept via fallback; known-but-not-allowed → reject.
   if (ext !== "" && !allowedExts.has(ext)) return "file type not allowed";
+  return null;
+}
+
+/**
+ * Validate a manual-UPI payment screenshot URL. Returns a user-facing reason,
+ * or null when acceptable. Wraps isAllowedUploadUrl (https + Cloudinary host +
+ * image extension) and tightens the extensionless fallback: the path must be an
+ * image upload and, when CLOUDINARY_CLOUD_NAME is set, belong to this app's cloud.
+ */
+export function validateProofUrl(url: string): string | null {
+  const reason = isAllowedUploadUrl(url, {
+    kind: "file",
+    allowedTypes: ["image/*"],
+  });
+  if (reason) {
+    return "The screenshot must be an image uploaded through this form.";
+  }
+  const { pathname } = new URL(url);
+  if (!pathname.includes("/image/upload/")) {
+    return "The screenshot must be an image uploaded through this form.";
+  }
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+  if (cloudName && !pathname.startsWith(`/${cloudName}/`)) {
+    return "The screenshot must be an image uploaded through this form.";
+  }
   return null;
 }
 
@@ -2798,6 +2925,34 @@ type FormResponseRow = Awaited<
   ReturnType<typeof prisma.formResponse.create>
 >;
 
+/**
+ * Duplicate-UTR guard for manual UPI. MUST run inside the per-form advisory-lock
+ * transaction so concurrent submits of the same UTR serialize. Rejected
+ * responses do not block reuse. Application-level only (no DB unique index).
+ */
+async function assertUtrUnique(
+  tx: Prisma.TransactionClient,
+  formId: string,
+  utr: string,
+): Promise<void> {
+  const hits = await tx.$queryRaw<Array<{ hit: number }>>(
+    Prisma.sql`
+      SELECT 1 AS hit FROM "FormResponse"
+      WHERE "formId" = ${formId}
+        AND "metadata"->'manualPayment'->>'utr' = ${utr}
+        AND COALESCE("metadata"->'manualPayment'->>'status', 'pending') <> 'rejected'
+      LIMIT 1
+    `,
+  );
+  if (hits.length > 0) {
+    const error = new Error(
+      "This UTR has already been used on this form. Check the reference number from your payment app.",
+    );
+    error.name = "MANUAL_PAYMENT_DUPLICATE_UTR";
+    throw error;
+  }
+}
+
 async function insertResponseWithCapacity(
   tx: Prisma.TransactionClient,
   form: { id: string },
@@ -2809,11 +2964,17 @@ async function insertResponseWithCapacity(
     metadata: Prisma.InputJsonValue;
   },
   limit: number,
+  opts?: { manualUtr?: string },
 ): Promise<FormResponseRow> {
   // (1) Per-form advisory lock for the duration of this transaction.
   await tx.$executeRaw(
     Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${form.id}))`,
   );
+
+  // Manual UPI: duplicate-UTR check under the same lock, before the insert.
+  if (opts?.manualUtr) {
+    await assertUtrUnique(tx, form.id, opts.manualUtr);
+  }
 
   const id = `c${newResponseId()}`;
   const respondentId = data.respondentId ?? null;
@@ -2870,6 +3031,9 @@ export async function submitFormResponse(
           razorpayPaymentId: string;
           razorpaySignature: string;
         }
+      | undefined;
+    manualPayment?:
+      | { utr: string; proofUrl?: string | undefined }
       | undefined;
   },
   respondentId?: string,
@@ -3014,6 +3178,74 @@ export async function submitFormResponse(
   }
   // If payment is NOT enabled but input.payment is present, it is ignored.
 
+  // -- Manual UPI gate --
+  // Client metadata can never carry `manualPayment` (stripped on every form);
+  // the only stored record is the server-built one below, status "pending".
+  const clientMeta = stripReservedMetadata(input.metadata);
+  if (clientMeta.stripped) {
+    console.warn(`[manualUpi] ignored client metadata.manualPayment slug=${slug}`);
+  }
+
+  const rawManual = schema.settings.manualUpi;
+  const activeManual = getActiveManualUpi(schema.settings);
+  let manualRecord: ManualPaymentRecord | undefined;
+
+  if (rawManual?.enabled === true && !paymentEnabled && !activeManual) {
+    console.error(`[manualUpi] enabled but invalid settings formId=${form.id}`);
+    const error = new Error(
+      "Payment details for this form aren't available right now. Please contact the organiser.",
+    );
+    error.name = "MANUAL_PAYMENT_UNAVAILABLE";
+    throw error;
+  }
+
+  const manualError = (name: string, message: string) => {
+    const error = new Error(message);
+    error.name = name;
+    return error;
+  };
+
+  if (!activeManual) {
+    if (input.manualPayment) {
+      console.warn(`[manualUpi] manualPayment sent to non-manual form slug=${slug}`);
+      throw manualError(
+        "MANUAL_PAYMENT_NOT_ENABLED",
+        "This form doesn't accept UPI payment details.",
+      );
+    }
+  } else {
+    if (!input.manualPayment) {
+      throw manualError(
+        "MANUAL_PAYMENT_REQUIRED",
+        "Enter the UTR of your UPI payment to submit this form.",
+      );
+    }
+    const utr = normalizeUtr(input.manualPayment.utr);
+    if (!isValidUtr(utr)) {
+      throw manualError(
+        "MANUAL_PAYMENT_INVALID",
+        "Enter the UTR from your payment app (8-35 letters or digits).",
+      );
+    }
+    const proofUrl = input.manualPayment.proofUrl;
+    if (activeManual.requireScreenshot && !proofUrl) {
+      throw manualError(
+        "MANUAL_PAYMENT_INVALID",
+        "Upload a screenshot of your payment.",
+      );
+    }
+    if (proofUrl) {
+      const reason = validateProofUrl(proofUrl);
+      if (reason) throw manualError("MANUAL_PAYMENT_INVALID", reason);
+    }
+    manualRecord = buildManualPaymentRecord({
+      utr,
+      ...(proofUrl ? { proofUrl } : {}),
+      config: activeManual,
+      now: new Date(),
+    });
+  }
+
   if (schema.settings.collectEmail) {
     if (!input.email?.trim()) {
       const error = new Error(
@@ -3075,12 +3307,14 @@ const responseMetadata: Record<
   string,
   unknown
 > = {
-  ...(input.metadata ?? {}),
+  ...clientMeta.metadata,
   ...(normalizedEmail
     ? {
         email: normalizedEmail,
       }
     : {}),
+  // Server-built, spread LAST so nothing from the client can override it.
+  ...(manualRecord ? { manualPayment: manualRecord } : {}),
 };
 
 // For single-response forms, set respondentEmail so the DB unique index
@@ -3224,8 +3458,35 @@ if (paidPayment) {
   // above already ran, so FORM_CLOSED keeps precedence over FORM_FULL.
   const capacityLimit = schema.settings.capacity.limit;
   response = await prisma.$transaction((tx) =>
-    insertResponseWithCapacity(tx, form, responseCreateData, capacityLimit),
+    insertResponseWithCapacity(
+      tx,
+      form,
+      responseCreateData,
+      capacityLimit,
+      manualRecord ? { manualUtr: manualRecord.utr } : undefined,
+    ),
   );
+} else if (manualRecord) {
+  // Manual UPI without capacity: same per-form advisory lock as the capacity
+  // path so concurrent submits of one UTR serialize.
+  const manualUtr = manualRecord.utr;
+  try {
+    response = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw(
+        Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${form.id}))`,
+      );
+      await assertUtrUnique(tx, form.id, manualUtr);
+      return tx.formResponse.create({ data: responseCreateData });
+    });
+  } catch (err) {
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === "P2002"
+    ) {
+      throw duplicateResponseError();
+    }
+    throw err;
+  }
 } else {
   // Free path (capacity off): unchanged, non-transactional create.
   try {
@@ -3311,6 +3572,17 @@ void (async () => {
       submittedAt: response.submittedAt,
       answers: input.answers,
       questions,
+      ...(manualRecord
+        ? {
+            manualPayment: {
+              utr: manualRecord.utr,
+              ...(manualRecord.proofUrl
+                ? { proofUrl: manualRecord.proofUrl }
+                : {}),
+              status: manualRecord.status,
+            },
+          }
+        : {}),
     }),
   );
 })().catch((err) => console.error("webhook trigger failed:", err));
@@ -3477,9 +3749,16 @@ export async function editFormResponse(
 
   // 7) Overwrite answers + stamp metadata.editedAt (merge existing metadata).
   //    submittedAt is NOT written, so the original submit time is preserved.
+  //    Client metadata is ignored; any stored manualPayment is re-asserted so
+  //    a respondent can never change UTR/proof/amount/status via edit.
+  const existingMeta =
+    (existing.metadata as Record<string, unknown> | null) ?? {};
   const mergedMetadata = {
-    ...((existing.metadata as Record<string, unknown> | null) ?? {}),
+    ...existingMeta,
     editedAt: new Date().toISOString(),
+    ...(existingMeta.manualPayment !== undefined
+      ? { manualPayment: existingMeta.manualPayment }
+      : {}),
   };
 
   const updated = await prisma.formResponse.update({
@@ -3497,12 +3776,122 @@ export async function editFormResponse(
   return { id: updated.id, submittedAt: updated.submittedAt, quizScore };
 }
 
+/**
+ * Review a manual UPI payment (pending/verified/rejected). Editor-only: reuses
+ * getEditableForm, so a VIEWER gets FORM_NOT_FOUND. Read-merge-write on the
+ * metadata column (same style as editFormResponse); utr/proofUrl/amount/
+ * submittedAt are never touched. Known limitation: a respondent edit landing in
+ * the same few milliseconds could write back a stale status.
+ */
+export async function setManualPaymentStatus(
+  formId: string,
+  responseId: string,
+  userId: string,
+  status: ManualPaymentStatus,
+) {
+  const form = await getEditableForm(formId, userId);
+
+  const existing = await prisma.formResponse.findFirst({
+    where: { id: responseId, formId: form.id },
+  });
+  if (!existing) {
+    const error = new Error("Response not found.");
+    error.name = "RESPONSE_NOT_FOUND";
+    throw error;
+  }
+
+  const current = readManualPayment(existing.metadata);
+  if (!current) {
+    const error = new Error("This response has no UPI payment to review.");
+    error.name = "MANUAL_PAYMENT_NOT_FOUND";
+    throw error;
+  }
+
+  const existingMeta =
+    (existing.metadata as Record<string, unknown> | null) ?? {};
+  // Spread the raw stored record so unknown keys survive; drop review fields
+  // first, then re-add them for non-pending statuses.
+  const rawRecord = {
+    ...((existingMeta.manualPayment as Record<string, unknown>) ?? {}),
+  };
+  delete rawRecord.reviewedAt;
+  delete rawRecord.reviewedBy;
+  const newRecord = {
+    ...rawRecord,
+    status,
+    ...(status === "pending"
+      ? {}
+      : { reviewedAt: new Date().toISOString(), reviewedBy: userId }),
+  };
+
+  const updated = await prisma.formResponse.update({
+    where: { id: responseId },
+    data: {
+      metadata: {
+        ...existingMeta,
+        manualPayment: newRecord,
+      } as Prisma.InputJsonValue,
+    },
+  });
+
+  void logAction({
+    workspaceId: form.workspaceId,
+    userId,
+    action: "MANUAL_PAYMENT_REVIEWED",
+    entityType: "FormResponse",
+    entityId: responseId,
+    metadata: { formId: form.id, from: current.status, to: status },
+  }).catch((err) =>
+    console.error("logAction MANUAL_PAYMENT_REVIEWED failed:", err),
+  );
+
+  return updated;
+}
+
+/**
+ * True counts per status and duplicate UTRs across ALL responses of a form
+ * (not just the loaded page). Read-only; same access as listFormResponses.
+ */
+export async function getManualPaymentSummary(
+  formId: string,
+  userId: string,
+) {
+  const form = await getFormForResponseAccess(formId, userId);
+
+  const countRows = await prisma.$queryRaw<
+    Array<{ status: string; count: number }>
+  >(Prisma.sql`
+    SELECT COALESCE("metadata"->'manualPayment'->>'status', 'pending') AS status, count(*)::int AS count
+    FROM "FormResponse"
+    WHERE "formId" = ${form.id} AND jsonb_typeof("metadata"->'manualPayment') = 'object'
+    GROUP BY 1
+  `);
+
+  const dupRows = await prisma.$queryRaw<Array<{ utr: string }>>(Prisma.sql`
+    SELECT "metadata"->'manualPayment'->>'utr' AS utr
+    FROM "FormResponse"
+    WHERE "formId" = ${form.id} AND jsonb_typeof("metadata"->'manualPayment') = 'object'
+      AND COALESCE("metadata"->'manualPayment'->>'status', 'pending') <> 'rejected'
+    GROUP BY 1 HAVING count(*) > 1 LIMIT 200
+  `);
+
+  const counts = { pending: 0, verified: 0, rejected: 0 };
+  for (const row of countRows) {
+    if (row.status === "verified") counts.verified += Number(row.count);
+    else if (row.status === "rejected") counts.rejected += Number(row.count);
+    else counts.pending += Number(row.count);
+  }
+
+  return { counts, duplicateUtrs: dupRows.map((r) => r.utr) };
+}
+
 export async function listFormResponses(
   formId: string,
   userId: string,
   input: {
     limit: number;
     cursor?: string;
+    manualStatus?: ManualPaymentStatus;
   },
 ) {
   const form = await getFormForResponseAccess(
@@ -3516,6 +3905,14 @@ export async function listFormResponses(
     await prisma.formResponse.findMany({
       where: {
         formId: form.id,
+        ...(input.manualStatus !== undefined
+          ? {
+              metadata: {
+                path: ["manualPayment", "status"],
+                equals: input.manualStatus,
+              },
+            }
+          : {}),
       },
       // id is a stable tiebreaker so cursor paging can't skip/repeat rows
       // that share the same submittedAt timestamp.
@@ -3856,10 +4253,16 @@ export async function createFormFromCustomTemplate(input: {
 
   // Clear time-bound scheduling: it is meaningless on a fresh draft. Omit the
   // keys rather than copy them forward.
-  const { scheduledPublishAt, scheduledCloseAt, ...carriedSettings } =
-    rebuilt.settings;
+  // A personal UPI ID must not travel with a shared template: drop manualUpi.
+  const {
+    scheduledPublishAt,
+    scheduledCloseAt,
+    manualUpi,
+    ...carriedSettings
+  } = rebuilt.settings;
   void scheduledPublishAt;
   void scheduledCloseAt;
+  void manualUpi;
 
   const rebuiltSchema: FormSchema = {
     ...rebuilt,

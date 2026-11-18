@@ -98,6 +98,8 @@ export type ResponseCreatedPayload = {
   questions: Record<string, string>;
   /** Per-question option value→label map so receivers can resolve either way. */
   optionLabels: Record<string, Record<string, string>>;
+  /** Present only for manual-UPI forms. */
+  manualPayment?: { utr: string; proofUrl?: string; status: string };
 };
 
 /**
@@ -156,6 +158,7 @@ export function buildResponseCreatedPayload(args: {
   submittedAt: Date;
   answers: Record<string, unknown>;
   questions: PayloadQuestion[];
+  manualPayment?: { utr: string; proofUrl?: string; status: string } | undefined;
 }): ResponseCreatedPayload {
   const questions: Record<string, string> = {};
   const optionLabels: Record<string, Record<string, string>> = {};
@@ -185,6 +188,7 @@ export function buildResponseCreatedPayload(args: {
     answersLabeled,
     questions,
     optionLabels,
+    ...(args.manualPayment ? { manualPayment: args.manualPayment } : {}),
   };
 }
 
