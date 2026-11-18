@@ -140,6 +140,11 @@ export default function FormEditorPage() {
   const [responseEditing, setResponseEditing] = useState<"disabled" | "timed" | "until_close">("disabled");
   const [responseEditMinutes, setResponseEditMinutes] = useState(15);
   const [paymentEnabled, setPaymentEnabled] = useState(false);
+  // Server-derived boolean: is this form's workspace allowed to use Razorpay?
+  // Fail closed until the form has loaded. `paymentWasEnabled` = legacy form
+  // saved with payments ON in a workspace that is no longer allowed.
+  const [paymentsAllowed, setPaymentsAllowed] = useState(false);
+  const [paymentWasEnabled, setPaymentWasEnabled] = useState(false);
   // "fixed" = owner sets one amount; "respondent" = payer enters the amount.
   const [paymentMode, setPaymentMode] = useState<"fixed" | "respondent">(
     "fixed",
@@ -222,7 +227,10 @@ export default function FormEditorPage() {
     setResponseEditing(schema.settings?.responseEditing ?? "disabled");
     setResponseEditMinutes(schema.settings?.responseEditMinutes ?? 15);
     const payment = schema.settings?.payment;
-    setPaymentEnabled(payment?.enabled ?? false);
+    const allowed = formData.form.paymentsAllowed === true;
+    setPaymentsAllowed(allowed);
+    setPaymentWasEnabled(payment?.enabled === true && !allowed);
+    setPaymentEnabled(allowed && (payment?.enabled ?? false));
     // Missing mode => fixed (back-compat).
     const mode = payment?.mode ?? "fixed";
     setPaymentMode(mode);
@@ -802,7 +810,7 @@ export default function FormEditorPage() {
         setError("Minimum amount must not exceed the maximum.");
         return;
       }
-      payment = { enabled: paymentEnabled, mode: "respondent" };
+      payment = { enabled: paymentsAllowed && paymentEnabled, mode: "respondent" };
       if (minAmount != null) payment.minAmount = minAmount;
       if (maxAmount != null) payment.maxAmount = maxAmount;
       if (desc) payment.description = desc;
@@ -810,7 +818,7 @@ export default function FormEditorPage() {
       // Fixed: `amount` is required by the API schema in every case. When
       // enabled, validate the owner's entry; when disabled, carry the current
       // value (or the ₹1 floor) so turning payment back on preserves it.
-      if (paymentEnabled) {
+      if (paymentsAllowed && paymentEnabled) {
         const amountPaise = toBoundedPaise(paymentAmountRupees);
         if (amountPaise == null || amountPaise < 100) {
           setSavingSettings(false);
@@ -882,6 +890,7 @@ export default function FormEditorPage() {
         },
       );
       setForm(data.form); setMessage("Settings saved.");
+      if (!paymentsAllowed) setPaymentWasEnabled(false);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : "Unable to save settings.");
     } finally { setSavingSettings(false); }
@@ -1370,8 +1379,16 @@ export default function FormEditorPage() {
               <div className="question-field"><label htmlFor="s-confirm">Confirmation message</label><textarea id="s-confirm" rows={3} value={confirmationMessage} onChange={(e) => setConfirmationMessage(e.target.value)} placeholder="Thanks for your response." /><small className="muted">Shown to respondents after they submit.</small></div>
             </SettingsGroup>
             <SettingsGroup title="Payments" description="Require a payment before respondents can submit" summary={paymentEnabled ? (paymentMode === "respondent" ? "Required · payer enters amount" : `Required · ₹${paymentAmountRupees || "0"}`) : "Off"}>
-              <label className="settings-toggle"><input type="checkbox" checked={paymentEnabled} onChange={(e) => setPaymentEnabled(e.target.checked)} /><span><strong>Require payment to submit</strong><small>Respondents pay with Razorpay before their response is saved.</small></span></label>
-              {paymentEnabled ? (
+              {!paymentsAllowed ? (
+                <div role="note" className="muted" style={{ border: "1px solid #fcd34d", background: "#fffbeb", borderRadius: 10, padding: "10px 12px", marginBottom: 12 }}>
+                  <p style={{ margin: 0 }}>Online card/UPI payments are limited to approved workspaces. Collect payments with the manual UPI option instead.</p>
+                  {paymentWasEnabled ? (
+                    <p style={{ margin: "8px 0 0", fontWeight: 600 }}>Payments were enabled on this form earlier. Respondents can't pay right now, and saving settings will turn payments off.</p>
+                  ) : null}
+                </div>
+              ) : null}
+              <label className="settings-toggle" style={!paymentsAllowed ? { opacity: 0.6 } : undefined}><input type="checkbox" checked={paymentsAllowed && paymentEnabled} disabled={!paymentsAllowed} onChange={(e) => setPaymentEnabled(e.target.checked)} /><span><strong>Require payment to submit</strong><small>Respondents pay with Razorpay before their response is saved.</small></span></label>
+              {paymentsAllowed && paymentEnabled ? (
                 <>
                   <div className="question-field">
                     <label htmlFor="s-payment-mode">Payment amount</label>

@@ -10,7 +10,7 @@ const prismaMock = vi.hoisted(() => ({
   formAnalytics: { create: vi.fn() },
   payment: { create: vi.fn(), findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
   user: { findUnique: vi.fn() },
-  workspace: { findFirst: vi.fn() },
+  workspace: { findFirst: vi.fn(), findUnique: vi.fn() },
   $transaction: vi.fn(),
 }));
 
@@ -86,6 +86,10 @@ function formRow(settings: Settings, overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  process.env.PAYMENTS_ALLOWED_OWNER_EMAILS = "owner@example.com";
+  prismaMock.workspace.findUnique.mockResolvedValue({
+    owner: { email: "owner@example.com" },
+  });
   razorpayMock.isRazorpayConfigured.mockReturnValue(true);
   razorpayMock.isValidAmountPaise.mockReturnValue(true);
   razorpayMock.verifyPaymentSignature.mockReturnValue(true);

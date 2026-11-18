@@ -13,6 +13,7 @@ import { z } from "zod";
 import prisma from "./db/prisma.js";
 import { csrfProtection } from "./middleware/csrf.js";
 import { isRazorpayConfigured } from "./services/razorpay.js";
+import { isAllowListConfigured } from "./services/paymentsAccess.js";
 import { zodErrorMessage } from "./utils/zodMessage.js";
 import authRouter from "./modules/auth/auth.routes.js";
 import formRouter from "./modules/forms/form.routes.js";
@@ -159,6 +160,7 @@ app.get("/api/health", (_req, res) => {
       payments: {
         configured: isRazorpayConfigured(),
         webhookConfigured: Boolean(process.env.RAZORPAY_WEBHOOK_SECRET),
+        allowListConfigured: isAllowListConfigured(),
       },
     },
   });
@@ -575,6 +577,16 @@ const errorHandler: ErrorRequestHandler = (
         success: false,
         error: {
           code: "WEBHOOK_URL_INVALID",
+          message: error.message,
+        },
+      });
+      return;
+
+    case "PAYMENTS_NOT_ALLOWED":
+      res.status(403).json({
+        success: false,
+        error: {
+          code: "PAYMENTS_NOT_ALLOWED",
           message: error.message,
         },
       });

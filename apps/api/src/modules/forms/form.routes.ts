@@ -60,6 +60,7 @@ import {
   deleteQuestion,
   duplicateForm,
   getForm,
+  isWorkspacePaymentsAllowed,
   getFormAnalytics,
   getFormResponse,
   getFormResponseCount,
@@ -1209,9 +1210,15 @@ formRouter.get(
         req.user.id,
       );
 
+      // Boolean only: lets the editor disable the Payments UI for workspaces
+      // whose owner isn't allow-listed. Never exposes the list or any email.
+      const paymentsAllowed = await isWorkspacePaymentsAllowed(
+        form.workspaceId,
+      );
+
       res.json({
         success: true,
-        data: { form },
+        data: { form: { ...form, paymentsAllowed } },
       });
     } catch (error) {
       next(error);

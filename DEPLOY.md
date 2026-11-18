@@ -68,6 +68,17 @@ Payments are **code-complete but were never validated against live Razorpay**
 (built while the deploy was down). After deploying, validate end-to-end with
 **TEST keys first**, then switch to live.
 
+> ⚠️ **`PAYMENTS_ALLOWED_OWNER_EMAILS` FAILS CLOSED.** Razorpay uses ONE set of
+> keys (the platform owner's account), so payments only work for workspaces
+> whose **owner account email** is in this comma-separated, case-insensitive
+> list. If it is unset or empty, **payments are OFF FOR EVERYONE, including the
+> owner**. Set it on Railway to the email you log into Qivo with **BEFORE
+> deploying** the change that introduced it. Confirm with `GET /api/health`
+> → `payments.allowListConfigured: true` (booleans only; emails are never shown).
+> Forms that already had payments enabled in other workspaces show
+> "Payments are temporarily unavailable" to respondents and never accept a free
+> submission; already-captured payments still reconcile via the webhook.
+
 ### Setup
 1. On Railway (API), set `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, and
    `RAZORPAY_WEBHOOK_SECRET`. Use **test-mode** keys first (`rzp_test_...`).
@@ -119,6 +130,7 @@ never trusted.
 | `CLOUDINARY_API_SECRET` | Cloudinary API secret — **server-side only, never exposed to the frontend** |
 | `RAZORPAY_KEY_ID` | Razorpay key id (publishable; sent to the client for Checkout). Payments disabled if unset. |
 | `RAZORPAY_KEY_SECRET` | Razorpay key secret — **server-side only.** Creates orders + verifies payment signatures. |
+| `PAYMENTS_ALLOWED_OWNER_EMAILS` | **Fails closed.** Comma-separated, case-insensitive owner emails allowed to use Razorpay payments. Unset/empty = payments off for everyone (including you). Set to your Qivo login email BEFORE deploying. |
 | `RAZORPAY_WEBHOOK_SECRET` | Razorpay webhook signing secret — **server-side only.** Verifies the reconciliation webhook; if unset the webhook is dropped (logged). |
 | `PORT` | **leave unset** — Railway injects it (currently 8080) |
 

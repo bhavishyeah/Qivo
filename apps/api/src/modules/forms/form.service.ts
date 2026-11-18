@@ -23,6 +23,10 @@ import {
   verifyWebhookSignature,
 } from "../../services/razorpay.js";
 import {
+  isAllowListConfigured,
+  isPaymentsAllowedForOwnerEmail,
+} from "../../services/paymentsAccess.js";
+import {
   sendNewResponseNotificationEmail,
   sendResponseConfirmationEmail,
   sendResponseDigestEmail,
@@ -662,6 +666,23 @@ export async function getWorkspaceStats(
   };
 }
 
+/**
+ * Whether Razorpay payments are permitted for a workspace: its OWNER account
+ * email must be in PAYMENTS_ALLOWED_OWNER_EMAILS. Fails closed: with no valid
+ * allow-list this returns false without touching the DB, and a missing
+ * workspace/owner is treated as not allowed. Boolean only; never exposes emails.
+ */
+export async function isWorkspacePaymentsAllowed(
+  workspaceId: string,
+): Promise<boolean> {
+  if (!isAllowListConfigured()) return false;
+  const workspace = await prisma.workspace.findUnique({
+    where: { id: workspaceId },
+    select: { owner: { select: { email: true } } },
+  });
+  return isPaymentsAllowedForOwnerEmail(workspace?.owner?.email);
+}
+
 export async function getForm(
   formId: string,
   userId: string,
@@ -814,6 +835,19 @@ export async function updateFormSettings(
     formId,
     userId,
   );
+
+  // Razorpay uses the platform owner's keys: only allow-listed workspace owners
+  // may switch payments ON. Disabling and every other setting stay open to all.
+  if (
+    input.payment?.enabled === true &&
+    !(await isWorkspacePaymentsAllowed(form.workspaceId))
+  ) {
+    const error = new Error(
+      "Online payments aren't available for your workspace. You can collect payments with the manual UPI option instead.",
+    );
+    error.name = "PAYMENTS_NOT_ALLOWED";
+    throw error;
+  }
 
   const schema = getFormSchema(form.schema);
 
@@ -1585,6 +1619,11 @@ export async function getPublicForm(
     ? await prisma.formResponse.count({ where: { formId: form.id } })
     : 0;
 
+  // Owner allow-list lookup only when payments are on (no extra query otherwise).
+  const paymentsAllowed = payment?.enabled
+    ? await isWorkspacePaymentsAllowed(form.workspaceId)
+    : false;
+
   return {
     id: form.id,
     slug: form.slug,
@@ -1601,6 +1640,9 @@ export async function getPublicForm(
     // exposed; the secret and webhook secret are never read here.
     payment: (() => {
       if (!payment?.enabled) return { required: false as const };
+      // `configured` also requires the workspace owner to be allow-listed, so a
+      // legacy payment-enabled form in a non-allowed workspace blocks submit.
+      const configured = isRazorpayConfigured() && paymentsAllowed;
       // Narrow on `payment.mode` directly so the discriminated union resolves
       // per-mode fields. A legacy form carries `mode: "fixed"` from the
       // normalizer, so the fixed branch covers it too.
@@ -1615,7 +1657,7 @@ export async function getPublicForm(
           currency: "INR" as const,
           description: payment.description ?? null,
           keyId: getPublicKeyId(),
-          configured: isRazorpayConfigured(),
+          configured,
         };
       }
       if (!isValidAmountPaise(payment.amount)) {
@@ -1628,7 +1670,7 @@ export async function getPublicForm(
         currency: "INR" as const,
         description: payment.description ?? null,
         keyId: getPublicKeyId(),
-        configured: isRazorpayConfigured(),
+        configured,
       };
     })(),
     // Derived capacity block, sibling of `schema` (matches PublicForm.capacity).
@@ -1695,6 +1737,14 @@ export async function createPaymentOrder(
   }
 
   if (!isRazorpayConfigured()) {
+    const error = new Error("Payments are not configured.");
+    error.name = "PAYMENTS_NOT_CONFIGURED";
+    throw error;
+  }
+
+  // Non-allow-listed workspace: same generic error as "unconfigured", raised
+  // BEFORE any validation, Razorpay call or Payment row.
+  if (!(await isWorkspacePaymentsAllowed(form.workspaceId))) {
     const error = new Error("Payments are not configured.");
     error.name = "PAYMENTS_NOT_CONFIGURED";
     throw error;
@@ -2870,7 +2920,11 @@ export async function submitFormResponse(
       error.name = "PAYMENT_REQUIRED";
       throw error;
     }
-    if (!isRazorpayConfigured()) {
+    if (
+      !isRazorpayConfigured() ||
+      !(await isWorkspacePaymentsAllowed(form.workspaceId))
+    ) {
+      // Always throws: a payment-enabled form never falls through to a free save.
       const error = new Error("Payments are not configured.");
       error.name = "PAYMENTS_NOT_CONFIGURED";
       throw error;

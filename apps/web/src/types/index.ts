@@ -126,6 +126,8 @@ export type FormRecord = {
   schema: FormSchema;
   createdAt: string;
   updatedAt: string;
+  /** Only on GET /api/forms/:id. Whether Razorpay payments may be used here. */
+  paymentsAllowed?: boolean;
 };
 
 export type PublicForm = {
