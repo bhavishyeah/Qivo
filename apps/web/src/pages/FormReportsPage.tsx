@@ -62,7 +62,7 @@ function renderSampleAnswer(answer: string) {
 
 type QuestionType =
   | "SHORT_TEXT" | "LONG_TEXT" | "EMAIL" | "NUMBER" | "DATE"
-  | "SINGLE_CHOICE" | "MULTIPLE_CHOICE" | "RATING" | "YES_NO"
+  | "SINGLE_CHOICE" | "MULTIPLE_CHOICE" | "DROPDOWN" | "RATING" | "YES_NO"
   | "PHONE" | "URL" | "FILE_UPLOAD" | "SIGNATURE" | "LINEAR_SCALE" | "MULTI_ENTRY"
   | "TIME" | "MULTIPLE_CHOICE_GRID" | "CHECKBOX_GRID";
 

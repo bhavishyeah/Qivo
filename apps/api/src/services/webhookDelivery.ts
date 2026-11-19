@@ -126,6 +126,7 @@ function renderAnswerLabel(
 
   switch (question.type) {
     case "SINGLE_CHOICE":
+    case "DROPDOWN":
       return labelFor(raw);
     case "MULTIPLE_CHOICE":
       // Stored as an array of option values; map each to its label.

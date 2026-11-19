@@ -93,6 +93,7 @@ const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
   DATE: "Date",
   SINGLE_CHOICE: "Multiple choice",
   MULTIPLE_CHOICE: "Checkboxes",
+  DROPDOWN: "Dropdown",
   RATING: "Rating",
   YES_NO: "Yes / No",
   PHONE: "Phone number",
@@ -108,7 +109,7 @@ const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
   IMAGE_BLOCK: "Image",
 };
 
-const CHOICE_TYPES = new Set<QuestionType>(["SINGLE_CHOICE", "MULTIPLE_CHOICE"]);
+const CHOICE_TYPES = new Set<QuestionType>(["SINGLE_CHOICE", "MULTIPLE_CHOICE", "DROPDOWN"]);
 const RATING_TYPES = new Set<QuestionType>(["RATING", "LINEAR_SCALE"]);
 const IMAGE_ACCEPT = "image/png,image/jpeg,image/gif,image/webp";
 

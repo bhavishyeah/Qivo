@@ -48,7 +48,7 @@ function renderAnswerValue(question: Question, value: AnswerValue): string {
   }
 
   if (typeof value === "string") {
-    if (question.type === "SINGLE_CHOICE") {
+    if (question.type === "SINGLE_CHOICE" || question.type === "DROPDOWN") {
       return question.options?.find((o) => o.value === value)?.label ?? value;
     }
     if (question.type === "YES_NO") {

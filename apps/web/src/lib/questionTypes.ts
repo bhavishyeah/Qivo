@@ -11,7 +11,7 @@ export function isGridType(type: string): boolean {
 /** Question types in the type picker, grouped like Google Forms (dividers between groups). */
 export const QUESTION_TYPE_GROUPS: readonly (readonly QuestionType[])[] = [
   ["SHORT_TEXT", "LONG_TEXT", "EMAIL", "PHONE", "URL", "NUMBER", "MULTI_ENTRY"],
-  ["SINGLE_CHOICE", "MULTIPLE_CHOICE", "YES_NO"],
+  ["SINGLE_CHOICE", "MULTIPLE_CHOICE", "DROPDOWN", "YES_NO"],
   ["FILE_UPLOAD", "SIGNATURE"],
   ["LINEAR_SCALE", "RATING", "MULTIPLE_CHOICE_GRID", "CHECKBOX_GRID"],
   ["DATE", "TIME"],
@@ -117,6 +117,12 @@ export function scaleRange(question: Pick<Question, "type" | "settings">): { min
     min: question.settings?.min ?? 1,
     max: question.settings?.max ?? (question.type === "LINEAR_SCALE" ? 10 : 5),
   };
+}
+
+/** Star values 1..max; legacy ratings stored with min 0 never render a "0 star". */
+export function starValues(min: number, max: number): number[] {
+  const first = Math.max(1, min);
+  return Array.from({ length: Math.max(0, max - first + 1) }, (_, i) => first + i);
 }
 
 export function isValidTime(value: string): boolean {

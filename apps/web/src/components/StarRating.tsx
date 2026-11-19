@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { starValues } from "../lib/questionTypes";
 
 /**
  * Star rating for respondents. Native radio inputs (visually hidden) keep the
@@ -28,7 +29,7 @@ export function StarRating({
   disabled?: boolean | undefined;
 }) {
   const [hover, setHover] = useState<number | null>(null);
-  const stars = Array.from({ length: max - min + 1 }, (_, i) => min + i);
+  const stars = starValues(min, max);
   const shown = hover ?? value ?? 0;
   return (
     <div

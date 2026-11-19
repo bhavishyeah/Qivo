@@ -43,6 +43,9 @@ export function RadioIcon(p: IconProps) {
 export function CheckboxIcon(p: IconProps) {
   return <Svg {...p}><rect x="4" y="4" width="16" height="16" rx="3" /><path d="m8 12 3 3 5-6" /></Svg>;
 }
+export function DropdownIcon(p: IconProps) {
+  return <Svg {...p}><circle cx="12" cy="12" r="9" /><path d="m8.5 10.5 3.5 3.5 3.5-3.5" /></Svg>;
+}
 export function RatingIcon(p: IconProps) {
   return <Svg {...p}><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z" /></Svg>;
 }
@@ -135,6 +138,7 @@ export function QuestionTypeIcon({ type, size }: { type: QuestionType; size?: nu
     case "DATE": return <DateIcon size={size} />;
     case "SINGLE_CHOICE": return <RadioIcon size={size} />;
     case "MULTIPLE_CHOICE": return <CheckboxIcon size={size} />;
+    case "DROPDOWN": return <DropdownIcon size={size} />;
     case "RATING": return <RatingIcon size={size} />;
     case "YES_NO": return <YesNoIcon size={size} />;
     case "PHONE": return <PhoneIcon size={size} />;

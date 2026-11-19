@@ -182,6 +182,30 @@ form {
     box-shadow 160ms ease;
 }
 
+.question-field select.question-select {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--qivo-input-border);
+  border-radius: var(--qivo-radius-control, 12px);
+  padding: 13px 14px;
+  color: var(--qivo-text);
+  background: var(--qivo-input-bg);
+  color-scheme: light dark;
+  outline: none;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.question-field select.question-select:focus {
+  border-color: var(--qivo-primary);
+  box-shadow: 0 0 0 4px var(--qivo-focus-ring);
+}
+
+.question-field select.question-select[aria-invalid="true"] {
+  border-color: #dc2626;
+}
+
 .question-field input::placeholder,
 .question-field textarea::placeholder {
   color: var(--qivo-placeholder);

@@ -6,6 +6,8 @@ import {
   isAnswerMissing,
   isGridAnswerMissing,
   setGridCell,
+  starValues,
+  QUESTION_TYPE_GROUPS,
 } from "./questionTypes";
 import { imageLayout } from "../components/QuestionImage";
 import { validateQuestionFormat } from "./validation";
@@ -82,5 +84,31 @@ describe("imageLayout", () => {
   });
   it("aligns the caption text with the image", () => {
     expect(imageLayout("RIGHT", 25).box.textAlign).toBe("right");
+  });
+});
+
+describe("dropdown question type", () => {
+  it("sits right after Checkboxes in the choice group", () => {
+    const choice = QUESTION_TYPE_GROUPS.find((g) => g.includes("SINGLE_CHOICE"));
+    expect(choice?.slice(0, 3)).toEqual(["SINGLE_CHOICE", "MULTIPLE_CHOICE", "DROPDOWN"]);
+    expect(groupQuestionTypes(["SINGLE_CHOICE", "MULTIPLE_CHOICE", "DROPDOWN", "RATING"])[0]).toEqual([
+      "SINGLE_CHOICE",
+      "MULTIPLE_CHOICE",
+      "DROPDOWN",
+    ]);
+  });
+
+  it("pipes the chosen option label", () => {
+    const questions: Question[] = [
+      { id: "d", label: "Plan", type: "DROPDOWN", required: false, options: [{ value: "o1", label: "Gold" }] },
+    ];
+    expect(resolvePipedLabel("Hi {{d}}", questions, { d: "o1" })).toBe("Hi Gold");
+  });
+});
+
+describe("star ratings", () => {
+  it("never yields a 0 star for legacy min 0", () => {
+    expect(starValues(0, 5)).toEqual([1, 2, 3, 4, 5]);
+    expect(starValues(1, 3)).toEqual([1, 2, 3]);
   });
 });

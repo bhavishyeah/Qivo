@@ -215,6 +215,7 @@ const questionTypeSchema = z.enum([
   "DATE",
   "SINGLE_CHOICE",
   "MULTIPLE_CHOICE",
+  "DROPDOWN",
   "RATING",
   "YES_NO",
   "PHONE",

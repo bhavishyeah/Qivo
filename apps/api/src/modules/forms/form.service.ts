@@ -82,6 +82,7 @@ export type QuestionType =
   | "DATE"
   | "SINGLE_CHOICE"
   | "MULTIPLE_CHOICE"
+  | "DROPDOWN"
   | "RATING"
   | "YES_NO"
   | "PHONE"
@@ -2472,6 +2473,7 @@ function validateAnswerAgainstQuestion(
       return null;
 
     case "SINGLE_CHOICE":
+    case "DROPDOWN":
       if (!isString) return "expected a single selection";
       if (allowedOptionValues.size > 0 && !allowedOptionValues.has(value)) {
         return "selection is not an available option";
@@ -5034,6 +5036,7 @@ export async function getFormReport(
 
     if (
       question.type === "SINGLE_CHOICE" ||
+      question.type === "DROPDOWN" ||
       question.type === "MULTIPLE_CHOICE" ||
       question.type === "YES_NO"
     ) {

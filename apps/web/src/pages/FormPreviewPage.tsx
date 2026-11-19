@@ -465,6 +465,35 @@ function PreviewQuestion({
     );
   }
 
+  if (question.type === "DROPDOWN") {
+    return (
+      <div className="question-field">
+        <label htmlFor={previewId}>{label}</label>
+        {desc}
+        <select
+          id={previewId}
+          className="question-select"
+          value={typeof value === "string" ? value : ""}
+          onChange={(e) => onChange(question.id, e.target.value)}
+          onBlur={onBlur}
+          aria-required={question.required ? true : undefined}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={
+            [question.description ? descriptionId : null, error ? errorId : null]
+              .filter(Boolean)
+              .join(" ") || undefined
+          }
+        >
+          <option value="">Choose</option>
+          {(question.options ?? []).map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+        {errorElement}
+      </div>
+    );
+  }
+
   if (question.type === "MULTIPLE_CHOICE") {
     const selected = Array.isArray(value) ? value : [];
     return (
