@@ -14,6 +14,8 @@ import { nextSectionAfter } from "../lib/sectionJumps";
 import { resolvePipedLabel } from "../lib/piping";
 import { DEFAULT_ACCENT, ensureFontLoaded, resolveTheme } from "../lib/theme";
 import SignaturePad from "../components/SignaturePad";
+import { QuestionImage } from "../components/QuestionImage";
+import { answerableQuestions } from "../lib/questionKinds";
 import ManualUpiPayment from "../components/ManualUpiPayment";
 import { toPublicManualUpi } from "../lib/manualUpi";
 import type { AnswerValue, FormRecord, Question } from "../types";
@@ -101,7 +103,7 @@ export default function FormPreviewPage() {
   function validateCurrentSection(): boolean {
     const errors: Record<string, string> = {};
     let firstInvalidId: string | null = null;
-    for (const q of questions) {
+    for (const q of answerableQuestions(questions)) {
       const message = validateQuestionFormat(q, answers[q.id]);
       if (message) {
         errors[q.id] = message;
@@ -378,8 +380,51 @@ function PreviewQuestion({
     </span>
   );
 
-  const desc = question.description ? (
-    <span className="question-description" id={descriptionId}>{question.description}</span>
+  if (question.type === "TEXT_BLOCK") {
+    return (
+      <div className="question-field question-block">
+        <h3 className="question-block-title">{resolvedLabel}</h3>
+        {question.description ? (
+          <p className="muted question-block-text" style={{ whiteSpace: "pre-wrap" }}>
+            {question.description}
+          </p>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (question.type === "IMAGE_BLOCK") {
+    return (
+      <div className="question-field question-block">
+        {question.label && question.label !== "Image" ? (
+          <h3 className="question-block-title">{resolvedLabel}</h3>
+        ) : null}
+        {question.imageUrl ? (
+          <QuestionImage
+            url={question.imageUrl}
+            align={question.imageAlign}
+            caption={question.imageCaption}
+            label={question.label}
+          />
+        ) : null}
+      </div>
+    );
+  }
+
+  const desc = question.description || question.imageUrl ? (
+    <>
+      {question.description ? (
+        <span className="question-description" id={descriptionId}>{question.description}</span>
+      ) : null}
+      {question.imageUrl ? (
+        <QuestionImage
+          url={question.imageUrl}
+          align={question.imageAlign}
+          caption={question.imageCaption}
+          label={question.label}
+        />
+      ) : null}
+    </>
   ) : null;
 
   if (question.type === "SINGLE_CHOICE" || question.type === "YES_NO") {

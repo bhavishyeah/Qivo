@@ -21,6 +21,7 @@ import {
   rupeesToPaise,
 } from "../lib/manualUpi";
 import { useManualPaymentReview } from "../lib/useManualPaymentReview";
+import { answerableQuestions, isAnswerable } from "../lib/questionKinds";
 import {
   DEFAULT_ACCENT,
   ensureFontLoaded,
@@ -75,6 +76,8 @@ const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
   SIGNATURE: "Signature",
   LINEAR_SCALE: "Linear scale",
   MULTI_ENTRY: "Multi-Entry",
+  TEXT_BLOCK: "Title and description",
+  IMAGE_BLOCK: "Image",
 };
 
 const CHOICE_TYPES = new Set<QuestionType>(["SINGLE_CHOICE", "MULTIPLE_CHOICE"]);
@@ -1431,7 +1434,7 @@ export default function FormEditorPage() {
             <div>
               <label htmlFor="new-question-type">Type</label>
               <select id="new-question-type" value={newQuestionType} onChange={(e) => setNewQuestionType(e.target.value as QuestionType)}>
-                {(Object.keys(QUESTION_TYPE_LABELS) as QuestionType[]).map((t) => (
+                {(Object.keys(QUESTION_TYPE_LABELS) as QuestionType[]).filter((t) => isAnswerable({ type: t })).map((t) => (
                   <option key={t} value={t}>{QUESTION_TYPE_LABELS[t]}</option>
                 ))}
               </select>
@@ -1597,7 +1600,7 @@ export default function FormEditorPage() {
 
       {/* ── TAB: Responses ── */}
       {activeTab === "responses" ? (
-        <ResponsesTabPanel formId={formId!} formTitle={form.title} questions={questions} hasManualUpi={Boolean(form.schema?.settings?.manualUpi)} />
+        <ResponsesTabPanel formId={formId!} formTitle={form.title} questions={answerableQuestions(questions)} hasManualUpi={Boolean(form.schema?.settings?.manualUpi)} />
       ) : null}
 
       {/* ── TAB: Webhooks ── */}
@@ -2099,7 +2102,7 @@ function QuestionCard({
                   cursor: "pointer",
                 }}
               >
-                {(Object.keys(QUESTION_TYPE_LABELS) as QuestionType[]).map((t) => (
+                {(Object.keys(QUESTION_TYPE_LABELS) as QuestionType[]).filter((t) => isAnswerable({ type: t })).map((t) => (
                   <option key={t} value={t}>{QUESTION_TYPE_LABELS[t]}</option>
                 ))}
               </select>

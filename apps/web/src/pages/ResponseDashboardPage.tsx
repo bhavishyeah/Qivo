@@ -11,6 +11,7 @@ import {
 } from "../components/ManualPaymentReview";
 import { getManualPayment, neutralizeFormula } from "../lib/manualUpi";
 import { useManualPaymentReview } from "../lib/useManualPaymentReview";
+import { answerableQuestions } from "../lib/questionKinds";
 import type {
   FormRecord,
   ManualPaymentStatus,
@@ -177,7 +178,9 @@ export default function ResponseDashboardPage() {
 
   // Derive questions from form state (fixed — was using form before declaration)
   const questions =
-    form?.schema?.sections?.flatMap((section) => section.questions) ?? [];
+    answerableQuestions(
+    form?.schema?.sections?.flatMap((section) => section.questions) ?? [],
+  );
 
   async function loadResponses(
     cursor?: string,

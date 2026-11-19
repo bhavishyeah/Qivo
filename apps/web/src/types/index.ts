@@ -13,7 +13,11 @@ export type QuestionType =
   | "FILE_UPLOAD"
   | "SIGNATURE"
   | "LINEAR_SCALE"
-  | "MULTI_ENTRY";
+  | "MULTI_ENTRY"
+  | "TEXT_BLOCK"
+  | "IMAGE_BLOCK";
+
+export type ImageAlign = "LEFT" | "CENTER" | "RIGHT";
 
 export type QuestionOption = {
   value: string;
@@ -46,6 +50,9 @@ export type Question = {
   options?: QuestionOption[];
   settings?: QuestionSettings;
   conditions?: ConditionRule[];
+  imageUrl?: string | null;
+  imageAlign?: ImageAlign;
+  imageCaption?: string | null;
   // Present when questions are loaded via the flattened list endpoint.
   sectionId?: string;
 };

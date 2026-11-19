@@ -2,7 +2,7 @@
 // views. Kept in a plain module (not a component file) so React Fast Refresh
 // stays happy and the helpers can be imported anywhere.
 
-import { publicPost } from "./api";
+import { api, publicPost } from "./api";
 
 /**
  * True only for URLs that point at an actual image we can render as an <img>.
@@ -120,6 +120,23 @@ export async function uploadToCloudinary(
   // MUST use "raw". If a PDF goes through "auto", Cloudinary classifies it as
   // an image and then blocks public delivery of it (401 "deny or ACL failure").
   // "raw" stores/serves it as a plain downloadable file.
+  return sendToCloudinary(file, sig, onProgress);
+}
+
+type CloudinaryUploadSignature = {
+  cloudName: string;
+  apiKey: string;
+  timestamp: number;
+  signature: string;
+  folder: string;
+};
+
+/** POST a file to Cloudinary with a server signature; resolves to secure_url. */
+function sendToCloudinary(
+  file: File,
+  sig: CloudinaryUploadSignature,
+  onProgress?: (percent: number) => void,
+): Promise<string> {
   const body = new FormData();
   body.append("file", file);
   body.append("api_key", sig.apiKey);
@@ -155,4 +172,38 @@ export async function uploadToCloudinary(
     xhr.onerror = () => reject(new Error("Upload failed. Please try again."));
     xhr.send(body);
   });
+}
+
+export const MAX_EDITOR_IMAGE_BYTES = 5 * 1024 * 1024;
+const EDITOR_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+
+/** Client-side check for editor images. Returns an error message or null. */
+export function validateImageFile(file: { type: string; size: number }): string | null {
+  if (!EDITOR_IMAGE_TYPES.includes(file.type)) {
+    return "Please choose a PNG, JPG, GIF or WebP image.";
+  }
+  if (file.size > MAX_EDITOR_IMAGE_BYTES) {
+    return "Image must be 5 MB or smaller.";
+  }
+  return null;
+}
+
+/**
+ * Upload an image from the form editor (works for DRAFT forms) using an
+ * authenticated upload signature. Validates type/size first and compresses
+ * large images before sending. Resolves to the delivered secure URL.
+ */
+export async function uploadEditorImage(
+  formId: string,
+  rawFile: File,
+  onProgress?: (percent: number) => void,
+): Promise<string> {
+  const problem = validateImageFile(rawFile);
+  if (problem) throw new Error(problem);
+  const file = await maybeCompressImage(rawFile);
+  const sig = await api.post<CloudinaryUploadSignature>(
+    `/api/forms/${formId}/upload-signature`,
+    {},
+  );
+  return sendToCloudinary(file, sig, onProgress);
 }

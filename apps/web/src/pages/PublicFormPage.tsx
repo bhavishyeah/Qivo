@@ -41,6 +41,8 @@ import ManualUpiPayment from "../components/ManualUpiPayment";
 import { formatInr, normalizeUtr, validateManualPayment } from "../lib/manualUpi";
 import { ensureFontLoaded, resolveTheme } from "../lib/theme";
 import type { AnswerValue, PublicForm, Question, Section } from "../types";
+import { QuestionImage } from "../components/QuestionImage";
+import { answerableQuestions } from "../lib/questionKinds";
 
 // ─── Razorpay Checkout (lazy-loaded) ───────────────────────────────────────
 
@@ -400,7 +402,7 @@ export default function PublicFormPage() {
     const errors: Record<string, string> = {};
     const orderedIds: string[] = [];
     for (const section of sectionsToCheck) {
-      for (const q of section.questions) {
+      for (const q of answerableQuestions(section.questions)) {
         if (!evaluateConditions(q.conditions, answers)) continue;
         const message = validateQuestionFormat(q, answers[q.id]);
         if (message) {
@@ -434,7 +436,7 @@ export default function PublicFormPage() {
   }
 
   function validateSection(questions: Question[]): string {
-    const missing = questions.find((q) => {
+    const missing = answerableQuestions(questions).find((q) => {
       if (!q.required) return false;
       // Skip questions hidden by conditional logic
       if (!evaluateConditions(q.conditions, answers)) return false;
@@ -465,7 +467,7 @@ export default function PublicFormPage() {
     const reached = computeReachedSections(sections, answers);
     for (const section of sections) {
       if (!reached.has(section.id)) continue;
-      for (const q of section.questions) {
+      for (const q of answerableQuestions(section.questions)) {
         if (!q.required) continue;
         // Skip questions hidden by conditional logic
         if (!evaluateConditions(q.conditions, answers)) continue;
@@ -1665,11 +1667,55 @@ export function QuestionField({
     </span>
   );
 
-  const descriptionElement = description ? (
-    <span className="question-description" id={descriptionId}>
-      {description}
-    </span>
-  ) : null;
+  if (question.type === "TEXT_BLOCK") {
+    return (
+      <div className="question-field question-block">
+        <h3 className="question-block-title">{resolvedLabel}</h3>
+        {description ? (
+          <p className="muted question-block-text" style={{ whiteSpace: "pre-wrap" }}>
+            {description}
+          </p>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (question.type === "IMAGE_BLOCK") {
+    return (
+      <div className="question-field question-block">
+        {question.label && question.label !== "Image" ? (
+          <h3 className="question-block-title">{resolvedLabel}</h3>
+        ) : null}
+        {question.imageUrl ? (
+          <QuestionImage
+            url={question.imageUrl}
+            align={question.imageAlign}
+            caption={question.imageCaption}
+            label={question.label}
+          />
+        ) : null}
+      </div>
+    );
+  }
+
+  const descriptionElement =
+    description || question.imageUrl ? (
+      <>
+        {description ? (
+          <span className="question-description" id={descriptionId}>
+            {description}
+          </span>
+        ) : null}
+        {question.imageUrl ? (
+          <QuestionImage
+            url={question.imageUrl}
+            align={question.imageAlign}
+            caption={question.imageCaption}
+            label={question.label}
+          />
+        ) : null}
+      </>
+    ) : null;
 
   if (question.type === "SINGLE_CHOICE" || question.type === "YES_NO") {
     const options =

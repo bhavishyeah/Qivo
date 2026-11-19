@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, ApiRequestError } from "../lib/api";
+import { answerableQuestions } from "../lib/questionKinds";
 import PopoverMenu from "../components/PopoverMenu";
 import type { FormRecord, WorkspaceRecord } from "../types";
 
@@ -352,7 +353,10 @@ export default function DashboardPage() {
       <section className="forms-grid">
         {filteredForms.map((form) => {
           const questionCount =
-            form.schema?.sections?.reduce((total, s) => total + s.questions.length, 0) ?? 0;
+            form.schema?.sections?.reduce(
+      (total, s) => total + answerableQuestions(s.questions).length,
+      0,
+    ) ?? 0;
 
           const folderName = form.folderId
             ? folders.find((f) => f.id === form.folderId)?.name ?? null
