@@ -14,6 +14,8 @@ import { nextSectionAfter } from "../lib/sectionJumps";
 import { resolvePipedLabel } from "../lib/piping";
 import { DEFAULT_ACCENT, ensureFontLoaded, resolveTheme } from "../lib/theme";
 import SignaturePad from "../components/SignaturePad";
+import ManualUpiPayment from "../components/ManualUpiPayment";
+import { toPublicManualUpi } from "../lib/manualUpi";
 import type { AnswerValue, FormRecord, Question } from "../types";
 
 /**
@@ -33,6 +35,8 @@ export default function FormPreviewPage() {
   // Set when jump logic lands on the submit sentinel from a non-last section —
   // preview never submits, so it shows the disabled submit control instead.
   const [reachedEnd, setReachedEnd] = useState(false);
+  // Local-only manual UPI inputs; nothing is ever submitted from preview.
+  const [manualPay, setManualPay] = useState({ utr: "", proofUrl: "" });
   // Inline per-field format errors, keyed by question id — mirrors the public
   // form so editors see exactly what respondents will.
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -271,6 +275,21 @@ export default function FormPreviewPage() {
           {questions.length === 0 && section ? (
             <p className="muted" style={{ textAlign: "center", padding: "24px 0" }}>No visible questions in this section.</p>
           ) : null}
+
+          {(() => {
+            const manualConfig = toPublicManualUpi(form?.schema.settings);
+            return manualConfig && (reachedEnd || currentSection >= totalSections - 1) ? (
+              <ManualUpiPayment
+                preview
+                config={manualConfig}
+                formTitle={form?.title ?? ""}
+                slug={null}
+                value={manualPay}
+                onChange={setManualPay}
+                errors={{}}
+              />
+            ) : null;
+          })()}
 
           {/* Nav */}
           <div className="public-form-nav" style={{ marginTop: 16 }}>

@@ -3354,3 +3354,285 @@ form {
     grid-template-columns: 1fr;
   }
 }
+
+
+/* -- Manual UPI payment (public block + owner review) ------------------
+   Built from the shared --qivo-* tokens so dark mode flips automatically
+   (same approach as .upload-dropzone). */
+.manual-upi {
+  margin: 20px 0;
+  padding: 16px;
+  border: 1px solid var(--qivo-border);
+  border-radius: 12px;
+  background: var(--qivo-card-bg);
+  color: var(--qivo-text);
+}
+
+.manual-upi-heading {
+  margin: 0 0 4px;
+}
+
+.manual-upi-label,
+.manual-upi-helper {
+  margin: 0 0 10px;
+  color: var(--qivo-text-secondary);
+  font-size: var(--qivo-font-helper);
+}
+
+.manual-upi-details {
+  margin: 0 0 6px;
+  display: grid;
+  gap: 6px;
+}
+
+.manual-upi-details > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.manual-upi-details dt {
+  min-width: 70px;
+  color: var(--qivo-text-secondary);
+}
+
+.manual-upi-details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.manual-upi-id {
+  user-select: all;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--qivo-surface);
+  border: 1px solid var(--qivo-border);
+}
+
+.manual-upi-copy-status {
+  display: block;
+  min-height: 1.2em;
+  font-size: var(--qivo-font-helper);
+  color: var(--qivo-text-secondary);
+}
+
+.manual-upi-instructions {
+  margin: 8px 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.manual-upi-warning {
+  margin: 10px 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  color: #92400e;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  font-size: var(--qivo-font-helper);
+}
+
+[data-color-scheme="dark"] .manual-upi-warning {
+  color: #fbbf24;
+  background: rgb(120 53 15 / 35%);
+  border-color: #b45309;
+}
+
+.manual-upi-qr {
+  margin: 12px 0;
+  text-align: center;
+}
+
+/* White tile keeps the QR scannable in dark mode. */
+.manual-upi-qr-tile {
+  display: inline-block;
+  padding: 12px;
+  background: #ffffff;
+  border-radius: 12px;
+  line-height: 0;
+}
+
+.manual-upi-qr figcaption {
+  margin-top: 8px;
+  color: var(--qivo-text-secondary);
+  font-size: var(--qivo-font-helper);
+}
+
+/* Shown only on touch / small screens; no user-agent sniffing. */
+.manual-upi-open-app {
+  display: none;
+  margin: 0 0 8px;
+  text-align: center;
+  text-decoration: none;
+}
+
+@media (pointer: coarse), (max-width: 768px) {
+  .manual-upi-open-app {
+    display: block;
+  }
+}
+
+.manual-upi-dropzone {
+  padding: 16px;
+}
+
+/* Visually hidden but still focusable (focus target for the error summary). */
+.manual-upi-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.manual-upi-dropzone {
+  position: relative;
+}
+
+.manual-upi-dropzone:focus-within {
+  outline: 2px solid var(--qivo-primary);
+  outline-offset: 2px;
+}
+
+.manual-upi-file-label {
+  display: inline-block;
+  cursor: pointer;
+}
+
+.manual-upi-file-label.is-disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.manual-upi-proof-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.manual-upi-proof-actions,
+.manual-upi-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.manual-upi-uploading {
+  margin: 10px 0;
+  color: var(--qivo-text-secondary);
+  font-weight: 600;
+}
+
+.manual-upi-thumb {
+  max-width: 160px;
+  max-height: 120px;
+  border-radius: 8px;
+  border: 1px solid var(--qivo-border);
+  object-fit: cover;
+}
+
+.manual-upi-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: var(--qivo-font-micro);
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+
+.manual-upi-badge-pending {
+  color: #92400e;
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.manual-upi-badge-verified {
+  color: #166534;
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.manual-upi-badge-rejected {
+  color: #991b1b;
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+[data-color-scheme="dark"] .manual-upi-badge-pending {
+  color: #fbbf24;
+  background: rgb(120 53 15 / 35%);
+  border-color: #b45309;
+}
+
+[data-color-scheme="dark"] .manual-upi-badge-verified {
+  color: #86efac;
+  background: rgb(20 83 45 / 40%);
+  border-color: #166534;
+}
+
+[data-color-scheme="dark"] .manual-upi-badge-rejected {
+  color: var(--qivo-error-text);
+  background: rgb(127 29 29 / 25%);
+  border-color: #991b1b;
+}
+
+.manual-upi-cell {
+  display: grid;
+  gap: 6px;
+  min-width: 160px;
+}
+
+.manual-upi-cell-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.manual-upi-utr {
+  overflow-wrap: anywhere;
+}
+
+.manual-upi-duplicate {
+  margin: 0;
+  color: #b45309;
+  font-size: var(--qivo-font-helper);
+  font-weight: 600;
+}
+
+[data-color-scheme="dark"] .manual-upi-duplicate {
+  color: #fbbf24;
+}
+
+.manual-upi-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--qivo-border);
+  border-radius: 10px;
+  background: var(--qivo-surface);
+  color: var(--qivo-text);
+}
+
+.manual-upi-filter-label {
+  margin-left: auto;
+}
+
+.manual-upi-notice {
+  margin: 8px 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--qivo-border-strong);
+  background: var(--qivo-surface);
+  color: var(--qivo-text);
+  font-size: var(--qivo-font-helper);
+}

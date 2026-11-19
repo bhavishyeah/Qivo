@@ -37,6 +37,8 @@ import { resolvePipedLabel } from "../lib/piping";
 import { isImageUrl, uploadToCloudinary } from "../lib/upload";
 import SignaturePad, { type SignaturePadHandle } from "../components/SignaturePad";
 import ColorSchemeToggle from "../components/ColorSchemeToggle";
+import ManualUpiPayment from "../components/ManualUpiPayment";
+import { formatInr, normalizeUtr, validateManualPayment } from "../lib/manualUpi";
 import { ensureFontLoaded, resolveTheme } from "../lib/theme";
 import type { AnswerValue, PublicForm, Question, Section } from "../types";
 
@@ -160,6 +162,10 @@ export default function PublicFormPage() {
   // Respondent-entered payment amount (rupees, as typed). Only used when the
   // form's payment mode is "respondent"; validated inline before Checkout.
   const [respondentAmount, setRespondentAmount] = useState("");
+  // Manual UPI payment details. Deliberately NOT part of `answers` and never
+  // saved to drafts (v1).
+  const [manualPay, setManualPay] = useState({ utr: "", proofUrl: "" });
+  const [manualUploading, setManualUploading] = useState(false);
   // True once the post-payment save failed, so the error banner can explain the
   // payment was received (distinct styling + copy).
   const [paymentSaveFailed, setPaymentSaveFailed] = useState(false);
@@ -585,6 +591,21 @@ export default function PublicFormPage() {
       }
     }
 
+    if (form?.manualUpi?.enabled && !isEditing) {
+      const manualErrors = validateManualPayment(
+        manualPay,
+        form.manualUpi.requireScreenshot !== false,
+      );
+      if (manualErrors.utr) {
+        errors["manual-utr"] = manualErrors.utr;
+        focusIds.push("manual-upi-utr");
+      }
+      if (manualErrors.proof) {
+        errors["manual-proof"] = manualErrors.proof;
+        focusIds.push("manual-upi-proof");
+      }
+    }
+
     if (Object.keys(errors).length > 0) {
       setFieldErrors((errs) => ({ ...errs, ...errors }));
       setSubmitError("Please fix the highlighted fields before submitting.");
@@ -616,8 +637,17 @@ export default function PublicFormPage() {
           razorpayPaymentId: string;
           razorpaySignature: string;
         };
+        manualPayment?: { utr: string; proofUrl?: string };
       } = {
         answers,
+        ...(form?.manualUpi?.enabled && !isEditing
+          ? {
+              manualPayment: {
+                utr: normalizeUtr(manualPay.utr),
+                ...(manualPay.proofUrl ? { proofUrl: manualPay.proofUrl } : {}),
+              },
+            }
+          : {}),
         ...(collectEmail ? { email: normalizedEmail } : {}),
         metadata: {
           source: "qivo-web",
@@ -797,6 +827,12 @@ export default function PublicFormPage() {
         setSubmitting(false);
         return;
       }
+      if (err instanceof ApiRequestError && err.code === "MANUAL_PAYMENT_DUPLICATE_UTR") {
+        setFieldErrors((errs) => ({ ...errs, "manual-utr": err.message }));
+        focusFirstInvalid(["manual-upi-utr"]);
+        setSubmitError("Please fix the highlighted fields before submitting.");
+        return;
+      }
       setSubmitError(
         err instanceof ApiRequestError
           ? mapEditErrorMessage(err)
@@ -927,6 +963,27 @@ export default function PublicFormPage() {
             {form.schema.confirmationMessage ||
               "Thank you! Your response has been recorded."}
           </p>
+          {form.manualUpi?.enabled && manualPay.utr ? (
+            <div className="manual-upi-notice" role="note">
+              <p style={{ margin: "0 0 6px" }}>
+                Your payment
+                {form.manualUpi.amount !== undefined
+                  ? ` of ${formatInr(form.manualUpi.amount)}`
+                  : ""}
+                {form.manualUpi.payeeName ? ` to ${form.manualUpi.payeeName}` : ""} is not
+                confirmed yet. The organiser will check it and confirm your payment. This is
+                not instant.
+              </p>
+              <p style={{ margin: 0 }}>
+                UTR submitted: <code>{normalizeUtr(manualPay.utr)}</code>
+              </p>
+              {editToken ? (
+                <p className="muted" style={{ margin: "6px 0 0" }}>
+                  Payment details can't be changed when you edit your response.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           {editToken &&
           (editWindowExpiresAt === null || now < editWindowExpiresAt) ? (
             <div style={{ marginTop: 20 }}>
@@ -1003,6 +1060,14 @@ export default function PublicFormPage() {
         respondentMaxPaise,
       )
     : null;
+
+  // Manual UPI block: shown on the step that submits (the last section, or an
+  // earlier section whose jump rules lead straight to submit), never while editing.
+  const showsSubmitStep =
+    isLastSection ||
+    nextSectionAfter(sections, currentSectionIndex, answers).kind === "submit";
+  const showManualUpi =
+    form.manualUpi?.enabled === true && !isEditing && showsSubmitStep;
 
   return (
     <main
@@ -1266,6 +1331,45 @@ export default function PublicFormPage() {
             </div>
           ) : null}
 
+          {showManualUpi && form.manualUpi ? (
+            <ManualUpiPayment
+              config={form.manualUpi}
+              formTitle={form.title}
+              slug={slug ?? null}
+              value={manualPay}
+              onChange={(next) => {
+                setManualPay(next);
+                setFieldErrors((errs) => {
+                  let out = errs;
+                  if (errs["manual-utr"] && validateManualPayment(next, false).utr === undefined) {
+                    const { "manual-utr": _u, ...rest } = out;
+                    out = rest;
+                  }
+                  if (errs["manual-proof"] && next.proofUrl) {
+                    const { "manual-proof": _p, ...rest } = out;
+                    out = rest;
+                  }
+                  return out;
+                });
+              }}
+              errors={{
+                ...(fieldErrors["manual-utr"] ? { utr: fieldErrors["manual-utr"] } : {}),
+                ...(fieldErrors["manual-proof"] ? { proof: fieldErrors["manual-proof"] } : {}),
+              }}
+              onBlurUtr={() => {
+                const msg = validateManualPayment(manualPay, false).utr;
+                setFieldErrors((errs) => {
+                  if (msg) return { ...errs, "manual-utr": msg };
+                  if (!errs["manual-utr"]) return errs;
+                  const { "manual-utr": _u, ...rest } = errs;
+                  return rest;
+                });
+              }}
+              onUploadingChange={setManualUploading}
+              disabled={submitting}
+            />
+          ) : null}
+
           {/* Error */}
           {submitError ? (
             <p
@@ -1306,6 +1410,7 @@ export default function PublicFormPage() {
                 style={{ flex: 1, maxWidth: 240, ...(resolved.accent ? { background: resolved.accent } : {}) }}
                 disabled={
                   submitting ||
+                  manualUploading ||
                   allQuestions.length === 0 ||
                   // Respondent mode: block until a valid amount is entered.
                   (!isEditing &&

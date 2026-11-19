@@ -11,6 +11,15 @@ import { api, ApiRequestError } from "../lib/api";
 import { PIPING_TOKEN_RE } from "../lib/piping";
 import { uploadToCloudinary } from "../lib/upload";
 import WebhooksTabPanel from "../components/WebhooksTabPanel";
+import { ManualPaymentCell, ManualPaymentSummaryBar } from "../components/ManualPaymentReview";
+import {
+  getManualPayment,
+  isValidPayeeName,
+  isValidUpiId,
+  paiseToRupeesInput,
+  rupeesToPaise,
+} from "../lib/manualUpi";
+import { useManualPaymentReview } from "../lib/useManualPaymentReview";
 import {
   DEFAULT_ACCENT,
   ensureFontLoaded,
@@ -25,6 +34,7 @@ import {
   type QuestionType,
   type ConditionRule,
   type SectionJumpRule,
+  type ManualPaymentStatus,
 } from "../types";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -159,6 +169,14 @@ export default function FormEditorPage() {
   // empty field during editing doesn't fight the number input.
   const [capacityEnabled, setCapacityEnabled] = useState(false);
   const [capacityLimit, setCapacityLimit] = useState("");
+  // Manual UPI payment (no gateway). Mutually exclusive with Razorpay above.
+  const [manualUpiEnabled, setManualUpiEnabled] = useState(false);
+  const [upiId, setUpiId] = useState("");
+  const [payeeName, setPayeeName] = useState("");
+  const [upiAmountRupees, setUpiAmountRupees] = useState("");
+  const [upiInstructions, setUpiInstructions] = useState("");
+  const [upiRequireScreenshot, setUpiRequireScreenshot] = useState(true);
+  const [paymentTurnedOffNote, setPaymentTurnedOffNote] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
 
   // Appearance (per-form theme). "" means inherit / default.
@@ -250,6 +268,16 @@ export default function FormEditorPage() {
         : "",
     );
     setPaymentDescription(payment?.description ?? "");
+    const manualUpi = schema.settings?.manualUpi;
+    setManualUpiEnabled(manualUpi?.enabled === true);
+    setUpiId(manualUpi?.upiId ?? "");
+    setPayeeName(manualUpi?.payeeName ?? "");
+    setUpiAmountRupees(
+      typeof manualUpi?.amount === "number" ? paiseToRupeesInput(manualUpi.amount) : "",
+    );
+    setUpiInstructions(manualUpi?.instructions ?? "");
+    setUpiRequireScreenshot(manualUpi?.requireScreenshot !== false);
+    setPaymentTurnedOffNote(false);
     const capacity = schema.settings?.capacity;
     setCapacityEnabled(capacity?.enabled ?? false);
     setCapacityLimit(
@@ -868,6 +896,41 @@ export default function FormEditorPage() {
       capacity = { enabled: false, limit: carried };
     }
 
+    // Build the manual UPI block. When enabled, validate (same rules as the
+    // server); when disabled, still send the valid fields so they survive
+    // turning it off, and skip anything invalid or empty.
+    const upiIdTrimmed = upiId.trim();
+    const payeeTrimmed = payeeName.trim();
+    const instructionsTrimmed = upiInstructions.trim();
+    const amountPaise = upiAmountRupees.trim() ? rupeesToPaise(upiAmountRupees) : null;
+    if (manualUpiEnabled) {
+      if (!isValidUpiId(upiIdTrimmed)) {
+        setSavingSettings(false);
+        setError("Enter a valid UPI ID like name@bank.");
+        return;
+      }
+      if (!isValidPayeeName(payeeTrimmed)) {
+        setSavingSettings(false);
+        setError("Enter the payee name respondents will see (up to 60 characters).");
+        return;
+      }
+      if (upiAmountRupees.trim() && amountPaise == null) {
+        setSavingSettings(false);
+        setError("UPI amount must be between ?1 and ?1,50,000 with at most 2 decimals, or left empty.");
+        return;
+      }
+    }
+    const manualUpi = {
+      enabled: manualUpiEnabled,
+      requireScreenshot: upiRequireScreenshot,
+      ...(isValidUpiId(upiIdTrimmed) ? { upiId: upiIdTrimmed } : {}),
+      ...(isValidPayeeName(payeeTrimmed) ? { payeeName: payeeTrimmed } : {}),
+      ...(amountPaise != null ? { amount: amountPaise } : {}),
+      ...(instructionsTrimmed && instructionsTrimmed.length <= 300
+        ? { instructions: instructionsTrimmed }
+        : {}),
+    };
+
     try {
       const data = await api.patch<{ form: FormRecord }>(
         `/api/forms/${formId}/settings`,
@@ -885,6 +948,7 @@ export default function FormEditorPage() {
           responseEditing,
           responseEditMinutes,
           payment,
+          manualUpi,
           theme,
           capacity,
         },
@@ -1340,7 +1404,7 @@ export default function FormEditorPage() {
 
       {/* ── TAB: Responses ── */}
       {activeTab === "responses" ? (
-        <ResponsesTabPanel formId={formId!} formTitle={form.title} questions={questions} />
+        <ResponsesTabPanel formId={formId!} formTitle={form.title} questions={questions} hasManualUpi={Boolean(form.schema?.settings?.manualUpi)} />
       ) : null}
 
       {/* ── TAB: Webhooks ── */}
@@ -1387,7 +1451,7 @@ export default function FormEditorPage() {
                   ) : null}
                 </div>
               ) : null}
-              <label className="settings-toggle" style={!paymentsAllowed ? { opacity: 0.6 } : undefined}><input type="checkbox" checked={paymentsAllowed && paymentEnabled} disabled={!paymentsAllowed} onChange={(e) => setPaymentEnabled(e.target.checked)} /><span><strong>Require payment to submit</strong><small>Respondents pay with Razorpay before their response is saved.</small></span></label>
+              <label className="settings-toggle" style={!paymentsAllowed ? { opacity: 0.6 } : undefined}><input type="checkbox" checked={paymentsAllowed && paymentEnabled} disabled={!paymentsAllowed || manualUpiEnabled} onChange={(e) => { setPaymentEnabled(e.target.checked); if (e.target.checked) setPaymentTurnedOffNote(false); }} /><span><strong>Require payment to submit</strong><small>{manualUpiEnabled ? "Turn off manual UPI to use Razorpay." : "Respondents pay with Razorpay before their response is saved."}</small></span></label>
               {paymentsAllowed && paymentEnabled ? (
                 <>
                   <div className="question-field">
@@ -1433,6 +1497,32 @@ export default function FormEditorPage() {
                     <small className="muted">Up to 300 characters.</small>
                   </div>
                   <small className="muted">Razorpay keys must be set on the server to collect live payments.</small>
+                </>
+              ) : null}
+            </SettingsGroup>
+            <SettingsGroup title="UPI payment (manual)" description="Collect payments directly to your UPI ID, no gateway needed" summary={manualUpiEnabled ? `On � ${upiId || "no UPI ID"}` : "Off"}>
+              <div role="note" className="manual-upi-notice">
+                Qivo can't confirm that money arrived. Compare each UTR with your bank or UPI app before marking a response Verified. Only use a UPI ID you are comfortable showing publicly.
+              </div>
+              <div role="note" className="manual-upi-notice">
+                A seat is reserved as soon as a response is submitted, even before you verify the payment. Delete rejected responses to free their seats.
+              </div>
+              <label className="settings-toggle"><input type="checkbox" checked={manualUpiEnabled} onChange={(e) => { const on = e.target.checked; setManualUpiEnabled(on); if (on && paymentEnabled) { setPaymentEnabled(false); setPaymentTurnedOffNote(true); } if (!on) setPaymentTurnedOffNote(false); }} /><span><strong>Accept manual UPI payments</strong><small>Respondents pay your UPI ID in their own UPI app, then enter the UTR{upiRequireScreenshot ? " and upload a screenshot" : ""}.</small></span></label>
+              {paymentTurnedOffNote ? (<p role="status" className="muted">Online payments were turned off because a form can use only one payment method.</p>) : null}
+              {manualUpiEnabled ? (
+                <>
+                  <div className="question-field"><label htmlFor="s-upi-id">UPI ID</label><input id="s-upi-id" type="text" autoComplete="off" maxLength={100} value={upiId} onChange={(e) => setUpiId(e.target.value)} placeholder="name@bank" style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }} /><small className="muted">Shown publicly to everyone who opens this form.</small></div>
+                  <div className="question-field"><label htmlFor="s-upi-payee">Payee name</label><input id="s-upi-payee" type="text" autoComplete="off" maxLength={60} value={payeeName} onChange={(e) => setPayeeName(e.target.value)} placeholder="Name shown in the payer's UPI app" style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }} /><small className="muted">Respondents compare this with the name their UPI app shows.</small></div>
+                  <div className="question-field">
+                    <label htmlFor="s-upi-amount">Amount (?, optional)</label>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span aria-hidden="true" style={{ color: "#64748b" }}>?</span>
+                      <input id="s-upi-amount" type="number" min={1} max={150000} step="0.01" inputMode="decimal" value={upiAmountRupees} onChange={(e) => setUpiAmountRupees(e.target.value)} placeholder="Leave empty to state the amount in the instructions" style={{ flex: 1, border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }} />
+                    </div>
+                    <small className="muted">Fixed amount, ?1 to ?1,50,000.</small>
+                  </div>
+                  <div className="question-field"><label htmlFor="s-upi-instructions">Instructions (optional)</label><textarea id="s-upi-instructions" rows={3} maxLength={300} value={upiInstructions} onChange={(e) => setUpiInstructions(e.target.value)} placeholder="e.g. Pay the registration fee, then enter the UTR below." /><small className="muted">{upiInstructions.length}/300 � plain text only.</small></div>
+                  <label className="settings-toggle"><input type="checkbox" checked={upiRequireScreenshot} onChange={(e) => setUpiRequireScreenshot(e.target.checked)} /><span><strong>Require payment screenshot</strong><small>The UTR is always required. A screenshot helps you verify faster.</small></span></label>
                 </>
               ) : null}
             </SettingsGroup>
@@ -2150,11 +2240,31 @@ function QuestionCard({
 
 // ─── Responses Tab Panel ──────────────────────────────────────────────────────
 
-function ResponsesTabPanel({ formId }: { formId: string; formTitle: string; questions: Question[] }) {
+function ResponsesTabPanel({ formId, hasManualUpi }: { formId: string; formTitle: string; questions: Question[]; hasManualUpi: boolean }) {
   const [responses, setResponses] = useState<Array<{ id: string; answers: Record<string, unknown>; metadata?: Record<string, unknown> | null; submittedAt: string }>>([]);
   const [totalCount, setTotalCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [manualFilter, setManualFilter] = useState<"" | ManualPaymentStatus>("");
+  const [filtering, setFiltering] = useState(false);
+
+  const manualEnabled = hasManualUpi || responses.some((r) => getManualPayment(r.metadata));
+  const manualReview = useManualPaymentReview(formId, manualEnabled, responses, setResponses);
+
+  async function applyManualFilter(next: "" | ManualPaymentStatus) {
+    setManualFilter(next);
+    setFiltering(true);
+    try {
+      const query = new URLSearchParams({ limit: "50" });
+      if (next) query.set("manualStatus", next);
+      const data = await api.get<{ responses: typeof responses }>(`/api/forms/${formId}/responses?${query.toString()}`);
+      setResponses(data.responses);
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : "Unable to load responses.");
+    } finally {
+      setFiltering(false);
+    }
+  }
 
   useEffect(() => {
     async function load() {
@@ -2210,8 +2320,21 @@ function ResponsesTabPanel({ formId }: { formId: string; formTitle: string; ques
         </div>
       </div>
 
+      {manualEnabled ? (
+        <ManualPaymentSummaryBar
+          id="editor-manual-upi-filter"
+          counts={manualReview.counts}
+          duplicateCount={manualReview.duplicateUtrs.length}
+          filter={manualFilter}
+          onFilterChange={(next) => void applyManualFilter(next)}
+        />
+      ) : null}
+      {manualReview.actionError ? (
+        <p className="submit-error" role="alert">{manualReview.actionError}</p>
+      ) : null}
+
       {/* Response list */}
-      <div className="editor-card">
+      <div className="editor-card" aria-busy={filtering}>
         <div className="editor-card-header">
           <div><p className="eyebrow">Recent responses</p><h2>{responses.length} shown</h2></div>
           <Link to={`/forms/${formId}/responses`} className="secondary-button compact">Full view →</Link>
@@ -2224,8 +2347,10 @@ function ResponsesTabPanel({ formId }: { formId: string; formTitle: string; ques
           </div>
         ) : (
           <div style={{ display: "grid", gap: 8 }}>
-            {responses.slice(0, 20).map((resp) => (
-              <div key={resp.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", background: "#f8fafc", borderRadius: 10, border: "1px solid #f1f5f9" }}>
+            {responses.slice(0, 20).map((resp) => {
+              const manualPayment = getManualPayment(resp.metadata);
+              return (
+              <div key={resp.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", padding: "12px 16px", background: "#f8fafc", borderRadius: 10, border: "1px solid #f1f5f9" }}>
                 <div>
                   <strong style={{ color: "#1e293b", fontSize: "0.9rem" }}>
                     {new Date(resp.submittedAt).toLocaleString()}
@@ -2234,9 +2359,19 @@ function ResponsesTabPanel({ formId }: { formId: string; formTitle: string; ques
                     <span className="muted" style={{ marginLeft: 12, fontSize: "0.8rem" }}>{resp.metadata.email}</span>
                   ) : null}
                 </div>
+                {manualPayment ? (
+                  <ManualPaymentCell
+                    compact
+                    payment={manualPayment}
+                    duplicate={manualPayment.status !== "rejected" && manualReview.duplicateUtrs.includes(manualPayment.utr)}
+                    busy={manualReview.busyIds.has(resp.id)}
+                    onStatusChange={(next) => void manualReview.changeStatus(resp.id, next)}
+                  />
+                ) : null}
                 <span className="muted" style={{ fontSize: "0.72rem" }}>{resp.id.slice(0, 8)}…</span>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

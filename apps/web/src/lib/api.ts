@@ -1,3 +1,5 @@
+import type { ManualPaymentStatus, ResponseRecord } from "../types";
+
 const API_BASE_URL =
   import.meta.env.VITE_API_URL ?? "";
 
@@ -247,4 +249,29 @@ export async function emailResumeLink(
     token,
     email,
   }).catch(() => {});
+}
+
+// ---------------------------------------------------------------------------
+// Manual UPI payment review (owner side).
+// ---------------------------------------------------------------------------
+
+// Change a response's manual-payment status. Editors only; the server returns
+// the full updated response row.
+export async function setManualPaymentStatus(
+  formId: string,
+  responseId: string,
+  status: ManualPaymentStatus,
+): Promise<{ response: ResponseRecord }> {
+  return api.patch(
+    `/api/forms/${formId}/responses/${responseId}/manual-payment`,
+    { status },
+  );
+}
+
+// True status counts and duplicate UTRs across ALL responses of the form.
+export async function getManualPaymentSummary(formId: string): Promise<{
+  counts: { pending: number; verified: number; rejected: number };
+  duplicateUtrs: string[];
+}> {
+  return api.get(`/api/forms/${formId}/manual-payment-summary`);
 }

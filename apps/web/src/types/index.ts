@@ -110,8 +110,39 @@ export type FormSchema = {
         };
     // Response capacity ("seats left"). Off by default (absent = unlimited).
     capacity?: { enabled: boolean; limit: number };
+    // Manual UPI payment (no gateway). Mutually exclusive with `payment`.
+    manualUpi?: {
+      enabled: boolean;
+      upiId?: string;
+      payeeName?: string;
+      amount?: number; // PAISE
+      instructions?: string;
+      requireScreenshot: boolean;
+    };
   };
   confirmationMessage?: string;
+};
+
+export type ManualPaymentStatus = "pending" | "verified" | "rejected";
+
+export type ManualPaymentRecord = {
+  utr: string;
+  proofUrl?: string;
+  amount?: number; // PAISE snapshot
+  status: ManualPaymentStatus;
+  submittedAt: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
+};
+
+// Public-facing manual UPI block from getPublicForm (top-level, sibling of schema).
+export type PublicManualUpi = {
+  enabled: boolean;
+  upiId?: string;
+  payeeName?: string;
+  amount?: number; // PAISE
+  instructions?: string;
+  requireScreenshot?: boolean;
 };
 
 export type FormRecord = {
@@ -164,6 +195,7 @@ export type PublicForm = {
     submitted?: number;
     seatsLeft?: number;
   };
+  manualUpi?: PublicManualUpi;
   schema: FormSchema;
 };
 

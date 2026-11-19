@@ -5,7 +5,18 @@ import { api, ApiRequestError } from "../lib/api";
 import { isImageUrl } from "../lib/upload";
 import { Chips } from "../components/Chips";
 import { stripPipingTokens } from "../lib/piping";
-import type { FormRecord, Question, ResponseRecord } from "../types";
+import {
+  ManualPaymentCell,
+  ManualPaymentSummaryBar,
+} from "../components/ManualPaymentReview";
+import { getManualPayment, neutralizeFormula } from "../lib/manualUpi";
+import { useManualPaymentReview } from "../lib/useManualPaymentReview";
+import type {
+  FormRecord,
+  ManualPaymentStatus,
+  Question,
+  ResponseRecord,
+} from "../types";
 
 /**
  * Column header for a question's stored label. The response dashboard and its
@@ -64,15 +75,29 @@ function renderAnswerValue(value: unknown) {
   return formatResponseValue(value);
 }
 
+// The three manual-UPI export cells. Neutralized against spreadsheet formula
+// injection (UTR is respondent-supplied; proof URL is stored, but defend anyway).
+function upiExportCells(response: ResponseRecord): string[] {
+  const mp = getManualPayment(response.metadata);
+  if (!mp) return ["", "", ""];
+  return [
+    neutralizeFormula(mp.utr),
+    neutralizeFormula(mp.proofUrl ?? ""),
+    neutralizeFormula(mp.status),
+  ];
+}
+
 function downloadResponsesCsv(
   responses: ResponseRecord[],
   questions: Question[],
   formTitle: string,
 ) {
+  const includeUpi = responses.some((r) => getManualPayment(r.metadata));
   const headers = [
     "Submitted at",
     "Email",
     ...questions.map((q) => questionHeaderLabel(q, questions)),
+    ...(includeUpi ? ["UPI UTR", "UPI proof URL", "UPI status"] : []),
   ];
 
   const rows = responses.map((response) => {
@@ -82,6 +107,7 @@ function downloadResponsesCsv(
       response.submittedAt,
       email,
       ...questions.map((q) => formatResponseValue(response.answers[q.id])),
+      ...(includeUpi ? upiExportCells(response) : []),
     ];
   });
 
@@ -106,10 +132,12 @@ function downloadResponsesExcel(
   questions: Question[],
   formTitle: string,
 ) {
+  const includeUpi = responses.some((r) => getManualPayment(r.metadata));
   const headers = [
     "Submitted at",
     "Email",
     ...questions.map((q) => questionHeaderLabel(q, questions)),
+    ...(includeUpi ? ["UPI UTR", "UPI proof URL", "UPI status"] : []),
   ];
 
   const rows = responses.map((response) => {
@@ -118,6 +146,7 @@ function downloadResponsesExcel(
       new Date(response.submittedAt).toLocaleString(),
       email,
       ...questions.map((q) => formatResponseValue(response.answers[q.id])),
+      ...(includeUpi ? upiExportCells(response) : []),
     ];
   });
 
@@ -144,19 +173,24 @@ export default function ResponseDashboardPage() {
   const [error, setError] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [manualFilter, setManualFilter] = useState<"" | ManualPaymentStatus>("");
 
   // Derive questions from form state (fixed — was using form before declaration)
   const questions =
     form?.schema?.sections?.flatMap((section) => section.questions) ?? [];
 
-  async function loadResponses(cursor?: string) {
+  async function loadResponses(
+    cursor?: string,
+    opts?: { quiet?: boolean; filter?: "" | ManualPaymentStatus },
+  ) {
     if (!formId) {
       setError("A form ID is missing.");
       setLoading(false);
       return;
     }
 
-    const isNextPage = cursor !== undefined;
+    // `quiet` (filter change) keeps the page mounted so the filter keeps focus.
+    const isNextPage = cursor !== undefined || opts?.quiet === true;
     if (isNextPage) setLoadingMore(true);
     else setLoading(true);
     setError("");
@@ -164,6 +198,8 @@ export default function ResponseDashboardPage() {
     try {
       const query = new URLSearchParams({ limit: "20" });
       if (cursor) query.set("cursor", cursor);
+      const activeFilter = opts?.filter ?? manualFilter;
+      if (activeFilter) query.set("manualStatus", activeFilter);
 
       const [formData, responsesData] = await Promise.all([
         form
@@ -197,6 +233,22 @@ export default function ResponseDashboardPage() {
     void loadResponses();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formId]);
+
+  const manualEnabled =
+    Boolean(form?.schema?.settings?.manualUpi) ||
+    responses.some((r) => getManualPayment(r.metadata));
+  const manualReview = useManualPaymentReview(
+    formId ?? "",
+    manualEnabled && Boolean(formId),
+    responses,
+    setResponses,
+  );
+
+  function changeManualFilter(next: "" | ManualPaymentStatus) {
+    setManualFilter(next);
+    setCursorHistory([]);
+    void loadResponses(undefined, { quiet: true, filter: next });
+  }
 
   // Fetch ALL responses (paginating through the cursor endpoint) so exports
   // include every response, not just the page currently on screen.
@@ -348,6 +400,11 @@ export default function ResponseDashboardPage() {
           {error}
         </p>
       ) : null}
+      {manualReview.actionError ? (
+        <p className="submit-error" role="alert">
+          {manualReview.actionError}
+        </p>
+      ) : null}
 
       <section className="response-summary">
         <div>
@@ -364,6 +421,15 @@ export default function ResponseDashboardPage() {
         </div>
       </section>
 
+      {manualEnabled ? (
+        <ManualPaymentSummaryBar
+          counts={manualReview.counts}
+          duplicateCount={manualReview.duplicateUtrs.length}
+          filter={manualFilter}
+          onFilterChange={changeManualFilter}
+        />
+      ) : null}
+
       <section className="responses-card">
         {responses.length === 0 ? (
           <div className="empty-dashboard">
@@ -373,10 +439,12 @@ export default function ResponseDashboardPage() {
           </div>
         ) : (
           <div className="response-list">
-            {responses.map((response) => (
+            {responses.map((response) => {
+              const manualPayment = getManualPayment(response.metadata);
+              return (
               <div
                 key={response.id}
-                style={{ display: "flex", alignItems: "center", gap: 8 }}
+                style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}
               >
                 <button
                   className="response-row"
@@ -402,8 +470,21 @@ export default function ResponseDashboardPage() {
                 >
                   {deletingId === response.id ? "..." : "Delete"}
                 </button>
+                {manualPayment ? (
+                  <ManualPaymentCell
+                    compact
+                    payment={manualPayment}
+                    duplicate={
+                      manualPayment.status !== "rejected" &&
+                      manualReview.duplicateUtrs.includes(manualPayment.utr)
+                    }
+                    busy={manualReview.busyIds.has(response.id)}
+                    onStatusChange={(next) => void manualReview.changeStatus(response.id, next)}
+                  />
+                ) : null}
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -430,8 +511,20 @@ export default function ResponseDashboardPage() {
 
       {selectedResponse ? (
         <ResponseDetail
-          response={selectedResponse}
+          // Metadata is read from the live list so a status change made in the
+          // row or the modal shows in both.
+          response={{
+            ...selectedResponse,
+            metadata:
+              responses.find((r) => r.id === selectedResponse.id)?.metadata ??
+              selectedResponse.metadata,
+          }}
           questions={questions}
+          duplicateUtrs={manualReview.duplicateUtrs}
+          busy={manualReview.busyIds.has(selectedResponse.id)}
+          onManualStatusChange={(next) =>
+            void manualReview.changeStatus(selectedResponse.id, next)
+          }
           onClose={() => setSelectedResponse(null)}
         />
       ) : null}
@@ -442,12 +535,19 @@ export default function ResponseDashboardPage() {
 function ResponseDetail({
   response,
   questions,
+  duplicateUtrs,
+  busy,
+  onManualStatusChange,
   onClose,
 }: {
   response: ResponseRecord;
   questions: Question[];
+  duplicateUtrs: string[];
+  busy: boolean;
+  onManualStatusChange: (next: ManualPaymentStatus) => void;
   onClose: () => void;
 }) {
+  const manualPayment = getManualPayment(response.metadata);
   // Non-resolving context: neutralize piping tokens in stored labels so the
   // detail view shows a readable placeholder, never raw `{{question_abc}}`.
   const questionLabels = new Map(
@@ -494,6 +594,20 @@ function ResponseDetail({
             </div>
           ))}
         </div>
+
+        {manualPayment ? (
+          <div className="metadata-block">
+            <p className="eyebrow">UPI payment</p>
+            <ManualPaymentCell
+              payment={manualPayment}
+              duplicate={
+                manualPayment.status !== "rejected" && duplicateUtrs.includes(manualPayment.utr)
+              }
+              busy={busy}
+              onStatusChange={onManualStatusChange}
+            />
+          </div>
+        ) : null}
 
         {response.metadata ? (
           <div className="metadata-block">
