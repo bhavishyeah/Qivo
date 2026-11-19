@@ -10,6 +10,8 @@ import {
   loadDraftQuerySchema,
   deleteDraftBodySchema,
   emailDraftSchema,
+  createQuestionSchema,
+  updateQuestionSchema,
 } from "./form.schemas.js";
 
 const baseSettings = {
@@ -304,5 +306,42 @@ describe("manual UPI schemas", () => {
     expect(manualPaymentStatusSchema.safeParse({ status: "pending", x: 1 }).success).toBe(false);
     expect(responseListQuerySchema.safeParse({ manualStatus: "rejected" }).success).toBe(true);
     expect(responseListQuerySchema.safeParse({ manualStatus: "nope" }).success).toBe(false);
+  });
+});
+describe("question image and block schemas", () => {
+  const img = "https://res.cloudinary.com/demo/image/upload/v1/a.png";
+
+  it("accepts block types and image fields on create", () => {
+    const r = createQuestionSchema.safeParse({
+      label: "Intro",
+      type: "TEXT_BLOCK",
+      imageUrl: img,
+      imageAlign: "CENTER",
+      imageCaption: "cap",
+    });
+    expect(r.success).toBe(true);
+    expect(
+      createQuestionSchema.safeParse({ label: "Image", type: "IMAGE_BLOCK" }).success,
+    ).toBe(true);
+  });
+
+  it("rejects non-Cloudinary or non-image urls and bad alignment", () => {
+    for (const imageUrl of [
+      "https://example.com/a.png",
+      "http://res.cloudinary.com/demo/image/upload/a.png",
+      "https://res.cloudinary.com/demo/image/upload/a.svg",
+    ]) {
+      expect(
+        createQuestionSchema.safeParse({ label: "Q", type: "SHORT_TEXT", imageUrl }).success,
+      ).toBe(false);
+      expect(updateQuestionSchema.safeParse({ imageUrl }).success).toBe(false);
+    }
+    expect(updateQuestionSchema.safeParse({ imageAlign: "TOP" }).success).toBe(false);
+  });
+
+  it("allows null to clear image fields on update", () => {
+    expect(
+      updateQuestionSchema.safeParse({ imageUrl: null, imageCaption: null }).success,
+    ).toBe(true);
   });
 });

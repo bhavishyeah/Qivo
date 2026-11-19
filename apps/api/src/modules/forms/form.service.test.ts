@@ -801,3 +801,76 @@ describe("FILE_UPLOAD / SIGNATURE url enforcement", () => {
     ).toBe("signature must be an image");
   });
 });
+
+describe("non-answerable blocks", () => {
+  const imageUrl = "https://res.cloudinary.com/demo/image/upload/v1/a.png";
+
+  it("validateSubmission never requires a TEXT_BLOCK", () => {
+    const schema = schemaWith([
+      { id: "t1", label: "Intro", type: "TEXT_BLOCK", required: true },
+      { id: "q1", label: "Name", type: "SHORT_TEXT", required: true },
+    ]);
+    expect(() => validateSubmission(schema, { q1: "Ada" })).not.toThrow();
+  });
+
+  it("validateSubmission rejects an answer keyed to a block id", () => {
+    const schema = schemaWith([
+      { id: "t1", label: "Intro", type: "TEXT_BLOCK", required: false },
+      { id: "i1", label: "Image", type: "IMAGE_BLOCK", required: false },
+      { id: "q1", label: "Name", type: "SHORT_TEXT", required: false },
+    ]);
+    for (const id of ["t1", "i1"]) {
+      try {
+        validateSubmission(schema, { q1: "Ada", [id]: "x" });
+        expect.unreachable("should have thrown");
+      } catch (err) {
+        expect((err as Error).name).toBe("INVALID_RESPONSE");
+        expect((err as Error).message).toContain("Unknown question ID");
+      }
+    }
+  });
+
+  it("rebuildSchemaWithFreshIds keeps image fields", () => {
+    const rebuilt = rebuildSchemaWithFreshIds({
+      version: 1,
+      settings: { collectEmail: false, allowMultipleResponses: true },
+      sections: [
+        {
+          id: "s0",
+          title: "A",
+          questions: [
+            {
+              id: "q1",
+              label: "Q",
+              type: "SHORT_TEXT",
+              required: false,
+              imageUrl,
+              imageAlign: "CENTER",
+              imageCaption: "cap",
+            },
+          ],
+        },
+      ],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    expect(rebuilt.sections[0]!.questions[0]).toMatchObject({
+      imageUrl,
+      imageAlign: "CENTER",
+      imageCaption: "cap",
+    });
+  });
+
+  it("computeSectionCompleteness is not diluted by blocks", () => {
+    const sections = [
+      {
+        id: "s1",
+        title: "One",
+        questions: [{ id: "t", type: "TEXT_BLOCK" }, { id: "a", type: "SHORT_TEXT" }],
+      },
+      { id: "s2", title: "Two", questions: [{ id: "i", type: "IMAGE_BLOCK" }] },
+    ];
+    const result = computeSectionCompleteness(sections, [{ t: "x", i: "y", a: "z" }]);
+    expect(result![0]!.percentage).toBe(100);
+    expect(result![1]!.percentage).toBe(0);
+  });
+});

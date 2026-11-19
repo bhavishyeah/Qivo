@@ -71,6 +71,7 @@ import {
   recordFormStart,
   getPublicForm,
   getUploadSignatureForForm,
+  getEditorUploadSignature,
   getWorkspaceStats,
   getFormVersion,
   restoreFormVersion,
@@ -461,6 +462,15 @@ formRouter.post(
           ...(input.sectionId !== undefined
             ? { sectionId: input.sectionId }
             : {}),
+          ...(input.imageUrl !== undefined
+            ? { imageUrl: input.imageUrl }
+            : {}),
+          ...(input.imageAlign !== undefined
+            ? { imageAlign: input.imageAlign }
+            : {}),
+          ...(input.imageCaption !== undefined
+            ? { imageCaption: input.imageCaption }
+            : {}),
         },
       );
 
@@ -657,6 +667,15 @@ formRouter.patch(
             : {}),
           ...(input.conditions !== undefined
             ? { conditions: input.conditions }
+            : {}),
+          ...(input.imageUrl !== undefined
+            ? { imageUrl: input.imageUrl }
+            : {}),
+          ...(input.imageAlign !== undefined
+            ? { imageAlign: input.imageAlign }
+            : {}),
+          ...(input.imageCaption !== undefined
+            ? { imageCaption: input.imageCaption }
             : {}),
         },
       );
@@ -1479,6 +1498,43 @@ formRouter.post(
       const signature = await getUploadSignatureForForm(slug);
       // Never cache signatures (they are short-lived + per-request) and stop
       // any proxy/edge from caching this path's responses.
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+      res.json({ success: true, data: signature });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+// Cloudinary signature for editor image uploads (question images, banner).
+// Authenticated and edit-permission gated, so it works for DRAFT forms too.
+formRouter.post(
+  "/:formId/upload-signature",
+  requireAuth,
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: {
+            code: "UNAUTHENTICATED",
+            message: "Authentication is required.",
+          },
+        });
+        return;
+      }
+      const formId = req.params.formId;
+      if (typeof formId !== "string") {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "INVALID_FORM_ID",
+            message: "A valid form ID is required.",
+          },
+        });
+        return;
+      }
+      const signature = await getEditorUploadSignature(formId, req.user.id);
       res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
       res.json({ success: true, data: signature });
     } catch (error) {

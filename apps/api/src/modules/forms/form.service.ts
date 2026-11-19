@@ -57,6 +57,8 @@ import {
   type ManualPaymentStatus,
 } from "./manualPayment.js";
 import { TEMPLATES } from "./templates.js";
+import { CLOUDINARY_DELIVERY_HOSTS } from "./questionImage.js";
+import { answerableQuestions, isAnswerableQuestion } from "./questionKinds.js";
 import type {
   UpdateFormSettingsInput,
   SaveDraftInput,
@@ -77,7 +79,9 @@ export type QuestionType =
   | "FILE_UPLOAD"
   | "SIGNATURE"
   | "LINEAR_SCALE"
-  | "MULTI_ENTRY";
+  | "MULTI_ENTRY"
+  | "TEXT_BLOCK"
+  | "IMAGE_BLOCK";
 
 type FormQuestionOption = {
   value: string;
@@ -93,6 +97,9 @@ type FormQuestion = {
   options?: FormQuestionOption[];
   settings?: Record<string, unknown>;
   conditions?: Array<{ questionId: string; operator: string; value?: string | undefined }>;
+  imageUrl?: string | null;
+  imageAlign?: "LEFT" | "CENTER" | "RIGHT";
+  imageCaption?: string | null;
 };
 
 type SectionJumpRule = {
@@ -1124,6 +1131,9 @@ export async function createQuestion(
       | Record<string, unknown>
       | undefined;
     sectionId?: string | undefined;
+    imageUrl?: string | undefined;
+    imageAlign?: "LEFT" | "CENTER" | "RIGHT" | undefined;
+    imageCaption?: string | undefined;
   },
 ) {
   const form = await getEditableForm(
@@ -1161,7 +1171,7 @@ export async function createQuestion(
     description:
       input.description?.trim() ?? null,
     type: input.type,
-    required: input.required,
+    required: isAnswerableQuestion({ type: input.type }) ? input.required : false,
     ...(input.options !== undefined
       ? {
           options: input.options,
@@ -1171,6 +1181,11 @@ export async function createQuestion(
       ? {
           settings: input.settings,
         }
+      : {}),
+    ...(input.imageUrl !== undefined ? { imageUrl: input.imageUrl } : {}),
+    ...(input.imageAlign !== undefined ? { imageAlign: input.imageAlign } : {}),
+    ...(input.imageCaption !== undefined
+      ? { imageCaption: input.imageCaption.trim() }
       : {}),
   };
 
@@ -1322,6 +1337,9 @@ export async function updateQuestion(
       | Array<{ questionId: string; operator: string; value?: string | undefined }>
       | null
       | undefined;
+    imageUrl?: string | null | undefined;
+    imageAlign?: "LEFT" | "CENTER" | "RIGHT" | undefined;
+    imageCaption?: string | null | undefined;
   },
 ) {
   const form = await getEditableForm(
@@ -1379,6 +1397,30 @@ export async function updateQuestion(
       } else {
         question.conditions = input.conditions;
       }
+    }
+
+    if (input.imageUrl !== undefined) {
+      if (input.imageUrl === null) {
+        delete question.imageUrl;
+      } else {
+        question.imageUrl = input.imageUrl;
+      }
+    }
+
+    if (input.imageAlign !== undefined) {
+      question.imageAlign = input.imageAlign;
+    }
+
+    if (input.imageCaption !== undefined) {
+      if (input.imageCaption === null) {
+        delete question.imageCaption;
+      } else {
+        question.imageCaption = input.imageCaption.trim();
+      }
+    }
+
+    if (!isAnswerableQuestion(question)) {
+      question.required = false;
     }
 
     break;
@@ -1553,8 +1595,8 @@ export async function publishForm(
 
   const schema = getFormSchema(form.schema);
 
-  const questions = schema.sections.flatMap(
-    (section) => section.questions,
+  const questions = answerableQuestions(
+    schema.sections.flatMap((section) => section.questions),
   );
 
   if (questions.length === 0) {
@@ -2170,7 +2212,7 @@ const MAX_MULTI_ENTRY_COUNT = 50;
 // built-in URL parser's `.hostname` (never a regex over the raw string), so
 // bypass tricks like `res.cloudinary.com.evil.com` or userinfo
 // (`https://res.cloudinary.com@evil.com/…`) are correctly rejected.
-const CLOUDINARY_DELIVERY_HOSTS = new Set(["res.cloudinary.com"]);
+// (The host set lives in questionImage.ts so form.schemas.ts can share it.)
 
 // Pinned MIME → allowed-extension map covering the builder's allow-list
 // vocabulary (MIME_TO_EXT / MIME_FRIENDLY in PublicFormPage.tsx) plus the
@@ -2485,8 +2527,8 @@ export function validateSubmission(
   schema: FormSchema,
   answers: Record<string, unknown>,
 ): void {
-  const questions = schema.sections.flatMap(
-    (section) => section.questions,
+  const questions = answerableQuestions(
+    schema.sections.flatMap((section) => section.questions),
   );
 
   const questionIds = new Set(questions.map((question) => question.id));
@@ -2509,7 +2551,7 @@ export function validateSubmission(
   let missingRequiredQuestion: FormQuestion | undefined;
   for (const section of schema.sections) {
     if (!reached.has(section.id)) continue; // skipped section: don't enforce.
-    for (const question of section.questions) {
+    for (const question of answerableQuestions(section.questions)) {
       if (!question.required) continue;
       if (!isQuestionVisibleFor(question, answers)) continue;
       const answer = answers[question.id];
@@ -2912,6 +2954,18 @@ export async function getUploadSignatureForForm(
   return signUpload(`qivo/forms/${form.id}`);
 }
 
+/**
+ * Upload signature for the form editor (works for DRAFT forms, unlike the
+ * public route). Requires edit permission; same per-form folder.
+ */
+export async function getEditorUploadSignature(
+  formId: string,
+  userId: string,
+): Promise<CloudinarySignature> {
+  const form = await getEditableForm(formId, userId);
+  return signUpload(`qivo/forms/${form.id}`);
+}
+
 // Collision-free id generator for the raw capacity insert. `FormResponse.id` is
 // `@default(cuid())`, applied by Prisma IN THE CLIENT, not the DB — a raw INSERT
 // must supply the id itself. There is no cuid generator exported from the
@@ -3273,8 +3327,8 @@ export async function submitFormResponse(
     }
   }
 
-  const questions = schema.sections.flatMap(
-    (section) => section.questions,
+  const questions = answerableQuestions(
+    schema.sections.flatMap((section) => section.questions),
   );
 
   // Shared answer-only validation (unknown-question, visibility-aware required,
@@ -4046,7 +4100,7 @@ export function isCustomTemplateId(id: string): boolean {
 /** Count every question across all sections of a snapshot schema. */
 function countSnapshotQuestions(schema: FormSchema): number {
   return schema.sections.reduce(
-    (sum, section) => sum + section.questions.length,
+    (sum, section) => sum + answerableQuestions(section.questions).length,
     0,
   );
 }
@@ -4742,13 +4796,19 @@ export type SectionCompleteness = {
  * the UI. Single-section forms get null (the caller hides the card).
  */
 export function computeSectionCompleteness(
-  sections: Array<{ id: string; title: string; questions: Array<{ id: string }> }>,
+  sections: Array<{
+    id: string;
+    title: string;
+    questions: Array<{ id: string; type?: string }>;
+  }>,
   answerRows: Array<Record<string, unknown>>,
 ): SectionCompleteness[] | null {
   if (sections.length <= 1) return null;
   const total = answerRows.length;
   return sections.map((section) => {
-    const questionIds = section.questions.map((q) => q.id);
+    const questionIds = section.questions
+      .filter((q) => q.type === undefined || isAnswerableQuestion({ type: q.type }))
+      .map((q) => q.id);
     const withAnswer = answerRows.filter((row) =>
       questionIds.some((qid) => isAnswered(row[qid])),
     ).length;
@@ -4789,7 +4849,9 @@ export async function getFormReport(
 ) {
   const form = await getFormForResponseAccess(formId, userId);
   const schema = getFormSchema(form.schema);
-  const questions = schema.sections.flatMap((s) => s.questions);
+  const questions = answerableQuestions(
+    schema.sections.flatMap((s) => s.questions),
+  );
 
   const from = options?.from;
   const to = options?.to;

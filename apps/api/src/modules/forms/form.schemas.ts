@@ -6,6 +6,7 @@ import {
   isValidUpiId,
   isValidUtr,
 } from "./manualPayment.js";
+import { validateQuestionImageUrl } from "./questionImage.js";
 
 // Curated Google Fonts allow-list. This is the AUTHORITATIVE copy; it is
 // enforced server-side via z.enum below (the only injection surface, since
@@ -221,7 +222,18 @@ const questionTypeSchema = z.enum([
   "SIGNATURE",
   "LINEAR_SCALE",
   "MULTI_ENTRY",
+  "TEXT_BLOCK",
+  "IMAGE_BLOCK",
 ]);
+
+const questionImageUrlSchema = z
+  .string()
+  .trim()
+  .max(2000)
+  .refine((url) => validateQuestionImageUrl(url) === null, {
+    message: "must be an image uploaded through the form editor",
+  });
+const imageAlignSchema = z.enum(["LEFT", "CENTER", "RIGHT"]);
 
 const questionOptionSchema = z.object({
   value: z.string().trim().min(1).max(100),
@@ -236,6 +248,9 @@ export const createQuestionSchema = z.object({
   options: z.array(questionOptionSchema).max(100).optional(),
   settings: z.record(z.string(), z.unknown()).optional(),
   sectionId: z.string().min(1).optional(),
+  imageUrl: questionImageUrlSchema.optional(),
+  imageAlign: imageAlignSchema.optional(),
+  imageCaption: z.string().trim().max(300).optional(),
 });
 
 export const createSectionSchema = z.object({
@@ -270,6 +285,9 @@ export const updateQuestionSchema = z.object({
     operator: z.enum(["equals", "not_equals", "contains", "not_empty"]),
     value: z.string().optional(),
   })).max(10).nullable().optional(),
+  imageUrl: questionImageUrlSchema.nullable().optional(),
+  imageAlign: imageAlignSchema.optional(),
+  imageCaption: z.string().trim().max(300).nullable().optional(),
 });
 
 export const reorderQuestionsSchema = z.object({
