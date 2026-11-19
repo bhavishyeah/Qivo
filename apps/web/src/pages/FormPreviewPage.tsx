@@ -81,6 +81,7 @@ export default function FormPreviewPage() {
         .flatMap((s) => s.questions)
         .find((q) => q.id === questionId);
       if (question && validateQuestionFormat(question, value) === null) {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { [questionId]: _r, ...rest } = errs;
         return rest;
       }
@@ -93,6 +94,7 @@ export default function FormPreviewPage() {
     setFieldErrors((errs) => {
       if (message) return { ...errs, [question.id]: message };
       if (!errs[question.id]) return errs;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { [question.id]: _r, ...rest } = errs;
       return rest;
     });

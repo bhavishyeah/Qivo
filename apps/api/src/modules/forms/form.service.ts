@@ -1314,6 +1314,42 @@ export async function deleteSection(
   });
 }
 
+/**
+ * Apply image fields from an update to a stored question. Removing the image
+ * (imageUrl: null) also drops imageAlign/imageCaption so they can't go stale.
+ */
+export function applyImageFieldUpdates(
+  question: FormQuestion,
+  input: {
+    imageUrl?: string | null | undefined;
+    imageAlign?: "LEFT" | "CENTER" | "RIGHT" | undefined;
+    imageCaption?: string | null | undefined;
+  },
+): void {
+  if (input.imageUrl === null) {
+    delete question.imageUrl;
+    delete question.imageAlign;
+    delete question.imageCaption;
+    return;
+  }
+
+  if (input.imageUrl !== undefined) {
+    question.imageUrl = input.imageUrl;
+  }
+
+  if (input.imageAlign !== undefined) {
+    question.imageAlign = input.imageAlign;
+  }
+
+  if (input.imageCaption !== undefined) {
+    if (input.imageCaption === null) {
+      delete question.imageCaption;
+    } else {
+      question.imageCaption = input.imageCaption.trim();
+    }
+  }
+}
+
 export async function updateQuestion(
   formId: string,
   questionId: string,
@@ -1399,25 +1435,7 @@ export async function updateQuestion(
       }
     }
 
-    if (input.imageUrl !== undefined) {
-      if (input.imageUrl === null) {
-        delete question.imageUrl;
-      } else {
-        question.imageUrl = input.imageUrl;
-      }
-    }
-
-    if (input.imageAlign !== undefined) {
-      question.imageAlign = input.imageAlign;
-    }
-
-    if (input.imageCaption !== undefined) {
-      if (input.imageCaption === null) {
-        delete question.imageCaption;
-      } else {
-        question.imageCaption = input.imageCaption.trim();
-      }
-    }
+    applyImageFieldUpdates(question, input);
 
     if (!isAnswerableQuestion(question)) {
       question.required = false;
@@ -2597,13 +2615,15 @@ export function validateSubmission(
  * when the form is not in quiz mode. Shared by submit + edit so a corrected quiz
  * answer yields the correct on-screen score.
  */
-function computeQuizScore(
+export function computeQuizScore(
   schema: FormSchema,
   answers: Record<string, unknown>,
 ): { earned: number; total: number; percentage: number } | null {
   if (!schema.settings.quizMode) return null;
 
-  const scoringQuestions = schema.sections.flatMap((s) => s.questions);
+  const scoringQuestions = answerableQuestions(
+    schema.sections.flatMap((s) => s.questions),
+  );
   let earned = 0;
   let total = 0;
   for (const q of scoringQuestions) {

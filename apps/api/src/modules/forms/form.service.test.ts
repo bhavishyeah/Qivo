@@ -14,6 +14,8 @@ import {
   deriveSampled,
   computeAvgTime,
   computeSectionCompleteness,
+  applyImageFieldUpdates,
+  computeQuizScore,
   computePeakDay,
   isAllowedUploadUrl,
 } from "./form.service.js";
@@ -858,6 +860,40 @@ describe("non-answerable blocks", () => {
       imageAlign: "CENTER",
       imageCaption: "cap",
     });
+  });
+
+  it("applyImageFieldUpdates drops align and caption when the image is removed", () => {
+    const question = {
+      id: "q1",
+      label: "Q",
+      type: "SHORT_TEXT",
+      required: false,
+      imageUrl,
+      imageAlign: "CENTER",
+      imageCaption: "cap",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any;
+    applyImageFieldUpdates(question, { imageUrl: null, imageAlign: "RIGHT", imageCaption: "x" });
+    expect(question.imageUrl).toBeUndefined();
+    expect(question.imageAlign).toBeUndefined();
+    expect(question.imageCaption).toBeUndefined();
+  });
+
+  it("applyImageFieldUpdates keeps align and caption when the image stays", () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const question = { id: "q1", label: "Q", type: "SHORT_TEXT", required: false, imageUrl } as any;
+    applyImageFieldUpdates(question, { imageAlign: "RIGHT", imageCaption: " hi " });
+    expect(question.imageAlign).toBe("RIGHT");
+    expect(question.imageCaption).toBe("hi");
+  });
+
+  it("computeQuizScore ignores blocks", () => {
+    const schema = schemaWith([
+      { id: "t1", label: "Intro", type: "TEXT_BLOCK", required: false, settings: { correctAnswer: "x" } },
+      { id: "q1", label: "Name", type: "SHORT_TEXT", required: false, settings: { correctAnswer: "Ada" } },
+    ]);
+    schema.settings.quizMode = true;
+    expect(computeQuizScore(schema, { q1: "Ada" })).toEqual({ earned: 1, total: 1, percentage: 100 });
   });
 
   it("computeSectionCompleteness is not diluted by blocks", () => {

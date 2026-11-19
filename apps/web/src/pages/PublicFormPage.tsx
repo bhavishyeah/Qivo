@@ -344,6 +344,7 @@ export default function PublicFormPage() {
         const question = allQuestions.find((q) => q.id === questionId);
         if (!question) return errs;
         if (validateQuestionFormat(question, value) === null) {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const { [questionId]: _removed, ...rest } = errs;
           return rest;
         }
@@ -360,6 +361,7 @@ export default function PublicFormPage() {
     setFieldErrors((errs) => {
       if (message) return { ...errs, [question.id]: message };
       if (!errs[question.id]) return errs;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { [question.id]: _removed, ...rest } = errs;
       return rest;
     });
@@ -375,6 +377,7 @@ export default function PublicFormPage() {
     setFieldErrors((errs) => {
       if (message) return { ...errs, "respondent-email": message };
       if (!errs["respondent-email"]) return errs;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { "respondent-email": _removed, ...rest } = errs;
       return rest;
     });
@@ -1192,6 +1195,7 @@ export default function PublicFormPage() {
                   setFieldErrors((errs) => {
                     if (!errs["respondent-email"]) return errs;
                     if (isValidEmail(e.target.value.trim())) {
+                      // eslint-disable-next-line @typescript-eslint/no-unused-vars
                       const { "respondent-email": _r, ...rest } = errs;
                       return rest;
                     }
@@ -1282,6 +1286,7 @@ export default function PublicFormPage() {
                         respondentMaxPaise,
                       );
                       if (check.ok) {
+                        // eslint-disable-next-line @typescript-eslint/no-unused-vars
                         const { "respondent-amount": _r, ...rest } = errs;
                         return rest;
                       }
@@ -1299,6 +1304,7 @@ export default function PublicFormPage() {
                         return { ...errs, "respondent-amount": check.message };
                       }
                       if (!errs["respondent-amount"]) return errs;
+                      // eslint-disable-next-line @typescript-eslint/no-unused-vars
                       const { "respondent-amount": _r, ...rest } = errs;
                       return rest;
                     });
@@ -1344,10 +1350,12 @@ export default function PublicFormPage() {
                 setFieldErrors((errs) => {
                   let out = errs;
                   if (errs["manual-utr"] && validateManualPayment(next, false).utr === undefined) {
+                    // eslint-disable-next-line @typescript-eslint/no-unused-vars
                     const { "manual-utr": _u, ...rest } = out;
                     out = rest;
                   }
                   if (errs["manual-proof"] && next.proofUrl) {
+                    // eslint-disable-next-line @typescript-eslint/no-unused-vars
                     const { "manual-proof": _p, ...rest } = out;
                     out = rest;
                   }
@@ -1363,6 +1371,7 @@ export default function PublicFormPage() {
                 setFieldErrors((errs) => {
                   if (msg) return { ...errs, "manual-utr": msg };
                   if (!errs["manual-utr"]) return errs;
+                  // eslint-disable-next-line @typescript-eslint/no-unused-vars
                   const { "manual-utr": _u, ...rest } = errs;
                   return rest;
                 });
