@@ -707,17 +707,28 @@ export default function FormEditorPage() {
       );
       const created: Question = anchorSectionId ? { ...data.question, sectionId: anchorSectionId } : data.question;
       const reordered = insertAfterId(questions, created, anchor ? anchor.id : null);
+      // The question now exists on the server (at the end). Always show it locally; only
+      // place it after the anchor when the reorder succeeds so local state matches the server.
+      let placed = true;
       if (anchor) {
-        pushHistory(questions);
-        await api.post(`/api/forms/${formId}/questions/reorder`, { questionIds: reordered.map((q) => q.id) });
+        placed = false;
+        for (let attempt = 0; attempt < 2 && !placed; attempt++) {
+          try {
+            await api.post(`/api/forms/${formId}/questions/reorder`, { questionIds: reordered.map((q) => q.id) });
+            placed = true;
+          } catch {
+            // retry once, then fall back to the server order (end of list)
+          }
+        }
+        if (placed) pushHistory(questions);
       }
-      setQuestions((current) => insertAfterId(current, created, anchor ? anchor.id : null));
+      setQuestions((current) => insertAfterId(current, created, placed && anchor ? anchor.id : null));
       setActiveQuestionId(created.id);
       setPendingScrollId(created.id);
       setNewQuestionLabel("");
       setNewQuestionType("SHORT_TEXT");
       setShowAddQuestion(false);
-      setMessage("Question added.");
+      setMessage(placed ? "Question added." : "Question added, but could not be placed after the selected one. Drag it to reorder.");
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : "Unable to add question.");
     } finally {
