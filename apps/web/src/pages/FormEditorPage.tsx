@@ -916,7 +916,7 @@ export default function FormEditorPage() {
       }
       if (upiAmountRupees.trim() && amountPaise == null) {
         setSavingSettings(false);
-        setError("UPI amount must be between ?1 and ?1,50,000 with at most 2 decimals, or left empty.");
+        setError("UPI amount must be between ₹1 and ₹1,50,000 with at most 2 decimals, or left empty.");
         return;
       }
     }
@@ -1500,7 +1500,7 @@ export default function FormEditorPage() {
                 </>
               ) : null}
             </SettingsGroup>
-            <SettingsGroup title="UPI payment (manual)" description="Collect payments directly to your UPI ID, no gateway needed" summary={manualUpiEnabled ? `On � ${upiId || "no UPI ID"}` : "Off"}>
+            <SettingsGroup title="UPI payment (manual)" description="Collect payments directly to your UPI ID, no gateway needed" summary={manualUpiEnabled ? `On · ${upiId || "no UPI ID"}` : "Off"}>
               <div role="note" className="manual-upi-notice">
                 Qivo can't confirm that money arrived. Compare each UTR with your bank or UPI app before marking a response Verified. Only use a UPI ID you are comfortable showing publicly.
               </div>
@@ -1519,9 +1519,9 @@ export default function FormEditorPage() {
                       <span aria-hidden="true" style={{ color: "#64748b" }}>?</span>
                       <input id="s-upi-amount" type="number" min={1} max={150000} step="0.01" inputMode="decimal" value={upiAmountRupees} onChange={(e) => setUpiAmountRupees(e.target.value)} placeholder="Leave empty to state the amount in the instructions" style={{ flex: 1, border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }} />
                     </div>
-                    <small className="muted">Fixed amount, ?1 to ?1,50,000.</small>
+                    <small className="muted">Fixed amount, ₹1 to ₹1,50,000.</small>
                   </div>
-                  <div className="question-field"><label htmlFor="s-upi-instructions">Instructions (optional)</label><textarea id="s-upi-instructions" rows={3} maxLength={300} value={upiInstructions} onChange={(e) => setUpiInstructions(e.target.value)} placeholder="e.g. Pay the registration fee, then enter the UTR below." /><small className="muted">{upiInstructions.length}/300 � plain text only.</small></div>
+                  <div className="question-field"><label htmlFor="s-upi-instructions">Instructions (optional)</label><textarea id="s-upi-instructions" rows={3} maxLength={300} value={upiInstructions} onChange={(e) => setUpiInstructions(e.target.value)} placeholder="e.g. Pay the registration fee, then enter the UTR below." /><small className="muted">{upiInstructions.length}/300 · plain text only.</small></div>
                   <label className="settings-toggle"><input type="checkbox" checked={upiRequireScreenshot} onChange={(e) => setUpiRequireScreenshot(e.target.checked)} /><span><strong>Require payment screenshot</strong><small>The UTR is always required. A screenshot helps you verify faster.</small></span></label>
                 </>
               ) : null}
