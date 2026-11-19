@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeToolbarTop, insertAfterId, shouldCollapseOnPointerDown } from "./editorSelection";
+import { computeToolbarTop, insertAfterId, moveItem, shouldCollapseOnPointerDown } from "./editorSelection";
 
 describe("insertAfterId", () => {
   const list = [{ id: "a" }, { id: "b" }, { id: "c" }];
@@ -59,5 +59,28 @@ describe("computeToolbarTop", () => {
   });
   it("clamps inside the canvas", () => {
     expect(computeToolbarTop({ ...base, anchorTop: 1990 })).toBe(1900);
+  });
+});
+
+describe("moveItem", () => {
+  const list = ["a", "b", "c", "d"];
+  it("moves an item forward and backward", () => {
+    expect(moveItem(list, 0, 2)).toEqual(["b", "c", "a", "d"]);
+    expect(moveItem(list, 3, 1)).toEqual(["a", "d", "b", "c"]);
+  });
+  it("clamps the target index", () => {
+    expect(moveItem(list, 1, -5)).toEqual(["b", "a", "c", "d"]);
+    expect(moveItem(list, 1, 99)).toEqual(["a", "c", "d", "b"]);
+  });
+  it("returns an unchanged copy when from === to or from is out of range", () => {
+    const same = moveItem(list, 2, 2);
+    expect(same).toEqual(list);
+    expect(same).not.toBe(list);
+    expect(moveItem(list, 9, 0)).toEqual(list);
+    expect(moveItem([], 0, 1)).toEqual([]);
+  });
+  it("does not mutate the input", () => {
+    moveItem(list, 0, 3);
+    expect(list).toEqual(["a", "b", "c", "d"]);
   });
 });

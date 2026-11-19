@@ -9,7 +9,7 @@ import {
 import { Link, useParams } from "react-router-dom";
 import { api, ApiRequestError } from "../lib/api";
 import { PIPING_TOKEN_RE } from "../lib/piping";
-import { computeToolbarTop, insertAfterId, shouldCollapseOnPointerDown } from "../lib/editorSelection";
+import { computeToolbarTop, insertAfterId, moveItem, shouldCollapseOnPointerDown } from "../lib/editorSelection";
 import { uploadToCloudinary } from "../lib/upload";
 import WebhooksTabPanel from "../components/WebhooksTabPanel";
 import { ManualPaymentCell, ManualPaymentSummaryBar } from "../components/ManualPaymentReview";
@@ -21,7 +21,17 @@ import {
   rupeesToPaise,
 } from "../lib/manualUpi";
 import { useManualPaymentReview } from "../lib/useManualPaymentReview";
-import { answerableQuestions, isAnswerable } from "../lib/questionKinds";
+import { answerableQuestions, displayNumber, isAnswerable } from "../lib/questionKinds";
+import PopoverMenu, { type PopoverMenuItem } from "../components/PopoverMenu";
+import QuestionTypeSelect from "../components/QuestionTypeSelect";
+import {
+  DuplicateIcon,
+  GripIcon,
+  ImageIcon,
+  KebabIcon,
+  QuestionTypeIcon,
+  TrashIcon,
+} from "../components/questionIcons";
 import {
   DEFAULT_ACCENT,
   ensureFontLoaded,
@@ -202,6 +212,10 @@ export default function FormEditorPage() {
 
   // Drag state
   const dragIndex = useRef<number | null>(null);
+  // Screen-reader announcement for keyboard reordering, and the section whose
+  // skip-logic editor should open (nonce bumps re-trigger the same section).
+  const [reorderNote, setReorderNote] = useState("");
+  const [jumpSignal, setJumpSignal] = useState<{ sectionId: string; nonce: number } | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
 
@@ -848,12 +862,20 @@ export default function FormEditorPage() {
     const fromIndex = dragIndex.current;
     if (fromIndex === null || fromIndex === dropIndex) { dragIndex.current = null; return; }
 
-    pushHistory(questions);
-    const reordered = [...questions];
-    const [moved] = reordered.splice(fromIndex, 1);
-    reordered.splice(dropIndex, 0, moved);
-    setQuestions(reordered);
     dragIndex.current = null;
+    await reorderTo(fromIndex, dropIndex);
+  }
+
+  /** Move a question between global indices and persist the new order. */
+  async function reorderTo(fromIndex: number, toIndex: number) {
+    if (fromIndex === toIndex) return;
+    pushHistory(questions);
+    const reordered = moveItem(questions, fromIndex, toIndex);
+    setQuestions(reordered);
+    const moved = questions[fromIndex];
+    if (moved) {
+      setReorderNote(`Moved question to position ${reordered.findIndex((q) => q.id === moved.id) + 1} of ${reordered.length}.`);
+    }
 
     if (!formId) return;
     try {
@@ -1390,7 +1412,7 @@ export default function FormEditorPage() {
               {form.status.replace(/_/g, " ")}
             </span>
             <span className="muted" style={{ fontSize: "0.78rem" }}>
-              {questions.length} question{questions.length !== 1 ? "s" : ""}
+              {answerableQuestions(questions).length} question{answerableQuestions(questions).length !== 1 ? "s" : ""}
             </span>
             <span className="muted" style={{ fontSize: "0.78rem" }}>
               Updated {new Date(form.updatedAt).toLocaleDateString()}
@@ -1404,7 +1426,7 @@ export default function FormEditorPage() {
         <div className="editor-card-header">
           <div>
             <p className="eyebrow">Questions</p>
-            <h2>{questions.length} question{questions.length !== 1 ? "s" : ""}</h2>
+            <h2>{answerableQuestions(questions).length} question{answerableQuestions(questions).length !== 1 ? "s" : ""}</h2>
           </div>
           <button className="secondary-button" type="button" onClick={() => setShowAddQuestion((v) => !v)}>
             {showAddQuestion ? "Cancel" : "+ Add question"}
@@ -1454,6 +1476,7 @@ export default function FormEditorPage() {
           </div>
         ) : (
           <div className="editor-canvas-with-toolbar" ref={canvasRef}>
+            <div className="sr-only" role="status" aria-live="polite">{reorderNote}</div>
             <div className="editor-question-list">
               {(() => {
                 // Group questions by section while preserving each card's GLOBAL
@@ -1474,7 +1497,7 @@ export default function FormEditorPage() {
                     );
                   // In-section questions (the real Question objects) — the
                   // trigger-question source for the jump editor.
-                  const inSectionQuestions = questions.filter(
+                  const inSectionQuestions = answerableQuestions(questions).filter(
                     (q) => (q.sectionId ?? sections[0]?.id) === section.id,
                   );
                   // Sections strictly AFTER this one in document order are the
@@ -1518,6 +1541,7 @@ export default function FormEditorPage() {
                           rules={section.jumpRules ?? []}
                           inSectionQuestions={inSectionQuestions}
                           laterSections={laterSections}
+                          openSignal={jumpSignal?.sectionId === section.id ? jumpSignal.nonce : 0}
                           onChange={(nextRules) =>
                             void patchSection(section.id, {
                               title: section.title,
@@ -1532,6 +1556,17 @@ export default function FormEditorPage() {
                           key={question.id}
                           question={question}
                           index={index}
+                          displayNum={displayNumber(questions, question.id)}
+                          sectionCount={sections.length}
+                          sectionRuleCount={section.jumpRules?.length ?? 0}
+                          onMove={(delta) => {
+                            const pos = sectionQuestions.findIndex((entry) => entry.index === index);
+                            const target = sectionQuestions[pos + delta];
+                            if (target) void reorderTo(index, target.index);
+                          }}
+                          onEditSectionLogic={() =>
+                            setJumpSignal((cur) => ({ sectionId: section.id, nonce: (cur?.nonce ?? 0) + 1 }))
+                          }
                           total={questions.length}
                           saving={saving}
                           isDragOver={dragOverIndex === index}
@@ -1945,12 +1980,15 @@ function previewLabelWithPlaceholders(label: string, allQuestions: Question[]): 
 function QuestionCard({
   question,
   index,
+  displayNum,
   saving,
   isDragOver,
   isDragging,
   allQuestions,
   isQuizMode,
   isActive,
+  sectionCount,
+  sectionRuleCount,
   onActivate,
   onHover,
   onDragStart,
@@ -1960,9 +1998,14 @@ function QuestionCard({
   onChange,
   onDelete,
   onDuplicate,
+  onMove,
+  onEditSectionLogic,
+  onAddImage,
 }: {
   question: Question;
   index: number;
+  /** 1-based number among answerable questions; null for display blocks. */
+  displayNum: number | null;
   total: number;
   saving: boolean;
   isDragOver: boolean;
@@ -1970,6 +2013,10 @@ function QuestionCard({
   allQuestions: Question[];
   isQuizMode: boolean;
   isActive: boolean;
+  /** Number of sections in the form. */
+  sectionCount: number;
+  /** Number of skip-logic rules on this question's section. */
+  sectionRuleCount: number;
   onActivate: () => void;
   onHover: (hovering: boolean) => void;
   onDragStart: () => void;
@@ -1979,9 +2026,29 @@ function QuestionCard({
   onChange: (id: string, patch: Partial<Question>) => void;
   onDelete: () => void;
   onDuplicate: () => void;
+  /** Move within the question's section by one step (-1 up, +1 down). */
+  onMove: (delta: -1 | 1) => void;
+  /** Open the skip-logic editor of this question's section. */
+  onEditSectionLogic: () => void;
+  /** When provided, an image button is shown (wired up by the image feature). */
+  onAddImage?: () => void;
 }) {
   const isChoice = CHOICE_TYPES.has(question.type);
   const isRating = RATING_TYPES.has(question.type);
+  const answerable = isAnswerable(question);
+  const hasTokens = question.label.match(PIPING_TOKEN_RE) !== null;
+
+  // Rows that stay hidden until asked for (or already in use).
+  const [showDesc, setShowDesc] = useState(Boolean(question.description));
+  const [showRef, setShowRef] = useState(hasTokens);
+  const [conditionSignal, setConditionSignal] = useState(0);
+
+  const answerableAll = answerableQuestions(allQuestions);
+  // Only questions BEFORE this one can be piped or used in conditions.
+  const earlierQuestions = answerableAll.filter(
+    (q) => q.id !== question.id && allQuestions.indexOf(q) < allQuestions.indexOf(question),
+  );
+  const conditionCount = question.conditions?.length ?? 0;
 
   function addOption() {
     const existing = question.options ?? [];
@@ -2004,6 +2071,58 @@ function QuestionCard({
     onChange(question.id, { options: updated });
   }
 
+  function changeType(newType: QuestionType) {
+    // Preserve compatible data, reset type-specific fields
+    const patch: Partial<Question> = { type: newType };
+    // Reset options if switching away from choice types
+    if (!CHOICE_TYPES.has(newType) && CHOICE_TYPES.has(question.type)) {
+      patch.options = undefined;
+    }
+    // Add default options if switching TO choice types
+    if (CHOICE_TYPES.has(newType) && !question.options?.length) {
+      patch.options = [{ value: "option_1", label: "Option 1" }];
+    }
+    // Reset settings for rating/scale
+    if (RATING_TYPES.has(newType) && !question.settings?.min) {
+      patch.settings = { ...question.settings, min: 1, max: newType === "LINEAR_SCALE" ? 10 : 5 };
+    }
+    // SIGNATURE reads no settings; clear any leftover FILE_UPLOAD
+    // settings for tidiness (they would be inert otherwise).
+    if (newType === "SIGNATURE") {
+      patch.settings = undefined;
+    }
+    onChange(question.id, patch);
+  }
+
+  const menuItems: PopoverMenuItem[] = [
+    { id: "description", label: "Description", onSelect: () => setShowDesc(true), hidden: !answerable },
+    {
+      id: "reference",
+      label: "Insert answer reference",
+      onSelect: () => setShowRef(true),
+      disabled: earlierQuestions.length === 0,
+      hidden: !answerable,
+    },
+    {
+      id: "condition",
+      label: conditionCount > 0 ? "Edit condition" : "Add condition",
+      onSelect: () => setConditionSignal((n) => n + 1),
+      disabled: conditionCount === 0 && earlierQuestions.length === 0,
+      hidden: !answerable,
+    },
+    {
+      id: "section-logic",
+      label: "Go to section based on answer",
+      onSelect: onEditSectionLogic,
+      hidden: !answerable || sectionCount <= 1,
+    },
+    { id: "image", label: "Add image", onSelect: onAddImage, hidden: !onAddImage },
+  ];
+
+  const titleText = previewLabelWithPlaceholders(question.label, allQuestions) || "Untitled question";
+  const optionPreview = (question.options ?? []).slice(0, 3);
+  const extraOptions = (question.options ?? []).length - optionPreview.length;
+
   return (
     <article
       className={`editor-question ${isDragOver ? "drag-over" : ""} ${isDragging ? "dragging" : ""} ${isActive ? "active-card" : "inactive-card"}`}
@@ -2018,12 +2137,13 @@ function QuestionCard({
       data-question-id={question.id}
       style={{ cursor: isDragging ? "grabbing" : isActive ? "default" : "pointer" }}
     >
-      {/* Drag handle (the open card is only draggable from here) */}
+      {/* Grip: the open card is only draggable from here; Arrow Up/Down reorders from the keyboard. */}
       <div
-        className="editor-question-handle"
-        role="img"
-        title="Drag to reorder"
-        aria-label={`Drag to reorder question ${index + 1}`}
+        className="editor-question-grip"
+        role="button"
+        tabIndex={isActive ? 0 : -1}
+        title="Drag to reorder (or use Arrow Up / Arrow Down)"
+        aria-label={`Reorder question ${index + 1}`}
         draggable={isActive}
         onDragStart={(e) => {
           if (!isActive) return;
@@ -2031,205 +2151,193 @@ function QuestionCard({
           const card = e.currentTarget.closest(".editor-question");
           if (card) e.dataTransfer.setDragImage(card, 16, 16);
         }}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+            e.preventDefault();
+            e.stopPropagation();
+            onMove(e.key === "ArrowUp" ? -1 : 1);
+          }
+        }}
         onClick={(e) => e.stopPropagation()}
       >
-        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-          <g fill="currentColor">
-            <circle cx="5.5" cy="3.5" r="1.4" /><circle cx="10.5" cy="3.5" r="1.4" />
-            <circle cx="5.5" cy="8" r="1.4" /><circle cx="10.5" cy="8" r="1.4" />
-            <circle cx="5.5" cy="12.5" r="1.4" /><circle cx="10.5" cy="12.5" r="1.4" />
-          </g>
-        </svg>
+        <GripIcon />
       </div>
 
       <div className="editor-question-body">
-        {/* ── Inactive view: minimal info ── */}
+        {/* ── Collapsed view: compact summary ── */}
         {!isActive ? (
-          <div className="editor-question-meta" style={{ gap: 10 }}>
-            <span className="editor-question-index" aria-label={`Question ${index + 1}`}>{index + 1}</span>
-            <span className="status-pill" style={{ fontSize: "0.7rem" }}>
-              {QUESTION_TYPE_LABELS[question.type]}
+          <button type="button" className="editor-question-summary" onClick={onActivate}>
+            <span className="editor-question-summary-head">
+              {displayNum !== null ? (
+                <span className="editor-question-index" aria-label={`Question ${displayNum}`}>{displayNum}</span>
+              ) : null}
+              <span className="editor-question-summary-title">
+                {answerable ? titleText : question.label || (question.type === "IMAGE_BLOCK" ? "Image" : "Untitled title")}
+                {question.required ? <span className="editor-required-mark" aria-label="required"> *</span> : null}
+              </span>
+              <span className="editor-question-badges">
+                {conditionCount > 0 ? <span className="editor-badge">Condition</span> : null}
+                {sectionRuleCount > 0 ? <span className="editor-badge">Logic</span> : null}
+                {question.imageUrl ? <span className="editor-badge">Image</span> : null}
+              </span>
             </span>
-            <span style={{ flex: 1, color: "#1e293b", fontWeight: 600, fontSize: "0.95rem" }}>
-              {question.label || "Untitled question"}
-            </span>
-            {question.required ? (
-              <span style={{ color: "#dc2626", fontSize: "0.75rem", fontWeight: 700 }}>Required</span>
-            ) : null}
-          </div>
+            {isChoice ? (
+              <span className="editor-question-summary-options">
+                {optionPreview.map((o) => (
+                  <span key={o.value} className="editor-summary-option">
+                    <span className={`editor-option-marker ${question.type === "MULTIPLE_CHOICE" ? "is-square" : ""}`} aria-hidden="true" />
+                    {o.label}
+                  </span>
+                ))}
+                {extraOptions > 0 ? <span className="editor-summary-option muted">+{extraOptions} more</span> : null}
+              </span>
+            ) : (
+              <span className="editor-question-summary-type">
+                <QuestionTypeIcon type={question.type} size={14} />
+                {QUESTION_TYPE_LABELS[question.type]}
+              </span>
+            )}
+          </button>
         ) : null}
 
         {/* ── Active view: full editing controls ── */}
         {isActive ? (
           <>
-            {/* Type selector + Meta */}
-            <div className="editor-question-meta" style={{ marginBottom: 12, gap: 10 }}>
-              <span className="editor-question-index" aria-label={`Question ${index + 1}`}>{index + 1}</span>
-              <select
-                value={question.type}
-                onChange={(e) => {
-                  const newType = e.target.value as QuestionType;
-                  // Preserve compatible data, reset type-specific fields
-                  const patch: Partial<Question> = { type: newType };
-                  // Reset options if switching away from choice types
-                  if (!CHOICE_TYPES.has(newType) && CHOICE_TYPES.has(question.type)) {
-                    patch.options = undefined;
-                  }
-                  // Add default options if switching TO choice types
-                  if (CHOICE_TYPES.has(newType) && !question.options?.length) {
-                    patch.options = [{ value: "option_1", label: "Option 1" }];
-                  }
-                  // Reset settings for rating/scale
-                  if (RATING_TYPES.has(newType) && !question.settings?.min) {
-                    patch.settings = { ...question.settings, min: 1, max: newType === "LINEAR_SCALE" ? 10 : 5 };
-                  }
-                  // SIGNATURE reads no settings; clear any leftover FILE_UPLOAD
-                  // settings for tidiness (they would be inert otherwise).
-                  if (newType === "SIGNATURE") {
-                    patch.settings = undefined;
-                  }
-                  onChange(question.id, patch);
-                }}
+            {/* Title row: title + image + type */}
+            <div className="editor-question-top">
+              <input
+                id={`editor-label-${question.id}`}
+                className="editor-question-title"
+                type="text"
+                aria-label={answerable ? "Question title" : "Title"}
+                placeholder={answerable ? "Untitled Question" : question.type === "IMAGE_BLOCK" ? "Image" : "Untitled title"}
+                value={question.label}
+                onChange={(e) => onChange(question.id, { label: e.target.value })}
                 onClick={(e) => e.stopPropagation()}
-                style={{
-                  border: "1px solid #cbd5e1",
-                  borderRadius: 8,
-                  padding: "5px 10px",
-                  fontSize: "0.8rem",
-                  fontWeight: 700,
-                  color: "#334155",
-                  background: "#f8fafc",
-                  cursor: "pointer",
-                }}
-              >
-                {(Object.keys(QUESTION_TYPE_LABELS) as QuestionType[]).filter((t) => isAnswerable({ type: t })).map((t) => (
-                  <option key={t} value={t}>{QUESTION_TYPE_LABELS[t]}</option>
-                ))}
-              </select>
-              <span className="muted" style={{ fontSize: "0.78rem" }}>
-                {question.required ? "Required" : "Optional"}
-              </span>
+                autoFocus
+              />
+              {onAddImage ? (
+                <button
+                  type="button"
+                  className="editor-icon-btn"
+                  aria-label="Add image"
+                  title="Add image"
+                  onClick={(e) => { e.stopPropagation(); onAddImage(); }}
+                >
+                  <ImageIcon />
+                </button>
+              ) : null}
+              {answerable ? (
+                <QuestionTypeSelect
+                  value={question.type}
+                  types={(Object.keys(QUESTION_TYPE_LABELS) as QuestionType[]).filter((t) => isAnswerable({ type: t }))}
+                  labels={QUESTION_TYPE_LABELS}
+                  onChange={changeType}
+                />
+              ) : (
+                <span className="editor-badge">{QUESTION_TYPE_LABELS[question.type]}</span>
+              )}
             </div>
 
-            {/* Label */}
-            <label htmlFor={`editor-label-${question.id}`}>Question label</label>
-            <input
-              id={`editor-label-${question.id}`}
-              type="text"
-              value={question.label}
-              onChange={(e) => onChange(question.id, { label: e.target.value })}
-              onClick={(e) => e.stopPropagation()}
-              autoFocus
-            />
-
-            {/* Answer piping: insert a reference to an EARLIER question's answer */}
-            {(() => {
-              // Only questions BEFORE this one can be piped (same filter as
-              // ConditionEditor). A hand-crafted forward/self reference still
-              // degrades gracefully at render time, but the UI never offers one.
-              const earlierQuestions = allQuestions.filter(
-                (q) => q.id !== question.id && allQuestions.indexOf(q) < allQuestions.indexOf(question),
-              );
-              const hasTokens = question.label.match(PIPING_TOKEN_RE) !== null;
-              return (
-                <div style={{ marginTop: 6 }}>
-                  <select
-                    value=""
-                    disabled={earlierQuestions.length === 0}
-                    title={earlierQuestions.length === 0 ? "Add questions above first" : "Insert answer reference"}
-                    onClick={(e) => e.stopPropagation()}
-                    onChange={(e) => {
-                      const id = e.target.value;
-                      if (!id) return;
-                      const sep = question.label && !question.label.endsWith(" ") ? " " : "";
-                      onChange(question.id, { label: `${question.label}${sep}{{${id}}}` });
-                      // Reset back to the placeholder so the same reference can
-                      // be inserted again.
-                      e.target.value = "";
-                    }}
-                    style={{ border: "1px solid #cbd5e1", borderRadius: 8, padding: "5px 10px", fontSize: "0.78rem", color: "#334155", background: "#f8fafc" }}
-                  >
-                    <option value="" disabled>
-                      Insert answer reference
-                    </option>
-                    {earlierQuestions.map((q) => (
-                      <option key={q.id} value={q.id}>{q.label.slice(0, 30) || "Untitled question"}</option>
-                    ))}
-                  </select>
-                  {hasTokens ? (
-                    <p className="muted" style={{ fontSize: "0.78rem", marginTop: 6 }}>
-                      Preview: {previewLabelWithPlaceholders(question.label, allQuestions)}
-                    </p>
-                  ) : null}
-                </div>
-              );
-            })()}
+            {/* Title-and-description block: body text */}
+            {question.type === "TEXT_BLOCK" ? (
+              <textarea
+                className="editor-question-desc"
+                aria-label="Description"
+                rows={3}
+                placeholder="Description (optional)"
+                value={question.description ?? ""}
+                onChange={(e) => onChange(question.id, { description: e.target.value || null })}
+                onClick={(e) => e.stopPropagation()}
+              />
+            ) : null}
 
             {/* Description */}
-            <label
-              htmlFor={`editor-desc-${question.id}`}
-              style={{ marginTop: 12, display: "block" }}
-            >
-              Description <span className="muted">(optional)</span>
-            </label>
-            <input
-              id={`editor-desc-${question.id}`}
-              type="text"
-              value={question.description ?? ""}
-              onChange={(e) => onChange(question.id, { description: e.target.value || null })}
-              placeholder="Add a hint or explanation..."
-              onClick={(e) => e.stopPropagation()}
-              style={{ border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px", width: "100%", marginBottom: 12 }}
-            />
-
-            {/* Required toggle */}
-            <label className="editor-checkbox">
+            {answerable && showDesc ? (
               <input
-                type="checkbox"
-                checked={question.required}
-                onChange={(e) => onChange(question.id, { required: e.target.checked })}
+                id={`editor-desc-${question.id}`}
+                className="editor-question-desc"
+                type="text"
+                aria-label="Description"
+                value={question.description ?? ""}
+                onChange={(e) => onChange(question.id, { description: e.target.value || null })}
+                placeholder="Description (optional)"
+                onClick={(e) => e.stopPropagation()}
               />
-              Required question
-            </label>
+            ) : null}
+
+            {/* Answer piping: insert a reference to an EARLIER question's answer */}
+            {answerable && (showRef || hasTokens) ? (
+              <div className="editor-question-ref">
+                <select
+                  value=""
+                  disabled={earlierQuestions.length === 0}
+                  aria-label="Insert answer reference"
+                  title={earlierQuestions.length === 0 ? "Add questions above first" : "Insert answer reference"}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    if (!id) return;
+                    const sep = question.label && !question.label.endsWith(" ") ? " " : "";
+                    onChange(question.id, { label: `${question.label}${sep}{{${id}}}` });
+                    // Reset back to the placeholder so the same reference can
+                    // be inserted again.
+                    e.target.value = "";
+                  }}
+                >
+                  <option value="" disabled>
+                    Insert answer reference
+                  </option>
+                  {earlierQuestions.map((q) => (
+                    <option key={q.id} value={q.id}>{q.label.slice(0, 30) || "Untitled question"}</option>
+                  ))}
+                </select>
+                {hasTokens ? (
+                  <p className="muted" style={{ fontSize: "0.78rem", marginTop: 6 }}>
+                    Preview: {previewLabelWithPlaceholders(question.label, allQuestions)}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
 
             {/* Choice options editor */}
             {isChoice ? (
-              <div style={{ marginTop: 14 }}>
-                <label style={{ display: "block", marginBottom: 8, fontWeight: 750, fontSize: "0.86rem" }}>
-                  Options
-                </label>
-                <div style={{ display: "grid", gap: 8 }}>
-                  {(question.options ?? []).map((option, idx) => (
-                    <div key={option.value} style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      <input
-                        type="text"
-                        value={option.label}
-                        onChange={(e) => updateOption(idx, e.target.value)}
-                        style={{ flex: 1, border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px" }}
-                        placeholder={`Option ${idx + 1}`}
-                      />
-                      {(question.options ?? []).length > 1 ? (
-                        <button
-                          type="button"
-                          onClick={() => removeOption(idx)}
-                          style={{ border: "none", background: "none", color: "#94a3b8", fontSize: "1.1rem", cursor: "pointer", padding: "4px 8px", borderRadius: 6 }}
-                          title="Remove option"
-                          aria-label="Remove option"
-                        >
-                          ×
-                        </button>
-                      ) : null}
-                    </div>
-                  ))}
+              <div className="editor-options">
+                {(question.options ?? []).map((option, idx) => (
+                  <div key={option.value} className="editor-option-row">
+                    <span className={`editor-option-marker ${question.type === "MULTIPLE_CHOICE" ? "is-square" : ""}`} aria-hidden="true" />
+                    <input
+                      type="text"
+                      className="editor-option-input"
+                      value={option.label}
+                      onChange={(e) => updateOption(idx, e.target.value)}
+                      onClick={(e) => e.stopPropagation()}
+                      placeholder={`Option ${idx + 1}`}
+                      aria-label={`Option ${idx + 1}`}
+                    />
+                    {(question.options ?? []).length > 1 ? (
+                      <button
+                        type="button"
+                        className="editor-option-remove"
+                        onClick={(e) => { e.stopPropagation(); removeOption(idx); }}
+                        title="Remove option"
+                        aria-label="Remove option"
+                      >
+                        {"\u00d7"}
+                      </button>
+                    ) : null}
+                  </div>
+                ))}
+                <div className="editor-option-row">
+                  <span className={`editor-option-marker is-ghost ${question.type === "MULTIPLE_CHOICE" ? "is-square" : ""}`} aria-hidden="true" />
+                  <button
+                    type="button"
+                    className="editor-add-option"
+                    onClick={(e) => { e.stopPropagation(); addOption(); }}
+                  >
+                    Add option
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  className="back-button inline-button"
-                  style={{ marginTop: 10, fontSize: "0.82rem" }}
-                  onClick={addOption}
-                >
-                  + Add option
-                </button>
               </div>
             ) : null}
 
@@ -2305,7 +2413,7 @@ function QuestionCard({
                     <label style={{display: "block", fontSize: "0.75rem", color: "#64748b", marginBottom: 4}}>Allowed file types</label>
                     <div style={{display: "flex", flexDirection: "column", gap: 6}}>
                       {([
-                        { label: "Images (jpg, png, gif, webp…)", mime: "image/*" },
+                        { label: "Images (jpg, png, gif, webp\u2026)", mime: "image/*" },
                         { label: "PDF", mime: "application/pdf" },
                         { label: "Word (.docx)", mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" },
                         { label: "Word legacy (.doc)", mime: "application/msword" },
@@ -2374,7 +2482,7 @@ function QuestionCard({
               </div>
             ) : null}
 
-            {/* Signature preview (static placeholder — no live canvas) */}
+            {/* Signature preview (static placeholder, no live canvas) */}
             {question.type === "SIGNATURE" ? (
               <div style={{ marginTop: 14 }}>
                 <div
@@ -2393,7 +2501,7 @@ function QuestionCard({
             ) : null}
 
             {/* Quiz mode: correct answer + points */}
-            {isQuizMode ? (
+            {isQuizMode && answerable ? (
               <div style={{ marginTop: 14, padding: "12px 14px", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 10 }}>
                 <span style={{ fontSize: "0.78rem", fontWeight: 750, color: "#166534", display: "block", marginBottom: 10 }}>
                   Quiz scoring
@@ -2436,16 +2544,71 @@ function QuestionCard({
             ) : null}
 
             {/* Conditional logic */}
-            <ConditionEditor
-              question={question}
-              allQuestions={allQuestions}
-              onChange={onChange}
-            />
+            {answerable ? (
+              <ConditionEditor
+                question={question}
+                allQuestions={answerableAll}
+                onChange={onChange}
+                openSignal={conditionSignal}
+              />
+            ) : null}
 
-            {/* Actions */}
-            <div className="editor-question-actions" style={{ marginTop: 16 }}>
-              <button className="secondary-button compact" type="button" disabled={saving} onClick={onDuplicate}>Duplicate</button>
-              <button className="danger-button" type="button" disabled={saving} onClick={onDelete}>Delete</button>
+            {/* Section logic summary */}
+            {answerable && sectionRuleCount > 0 ? (
+              <div className="editor-logic-summary">
+                <span>Section logic: {sectionRuleCount} rule{sectionRuleCount !== 1 ? "s" : ""}</span>
+                <button type="button" className="editor-link-btn" onClick={(e) => { e.stopPropagation(); onEditSectionLogic(); }}>
+                  Edit
+                </button>
+              </div>
+            ) : null}
+
+            {/* Footer */}
+            <div className="editor-question-footer">
+              <button
+                type="button"
+                className="editor-icon-btn"
+                aria-label="Duplicate question"
+                title="Duplicate"
+                disabled={saving}
+                onClick={(e) => { e.stopPropagation(); onDuplicate(); }}
+              >
+                <DuplicateIcon />
+              </button>
+              <button
+                type="button"
+                className="editor-icon-btn"
+                aria-label="Delete question"
+                title="Delete"
+                disabled={saving}
+                onClick={(e) => { e.stopPropagation(); onDelete(); }}
+              >
+                <TrashIcon />
+              </button>
+              {answerable ? (
+                <>
+                  <span className="editor-footer-divider" aria-hidden="true" />
+                  <span id={`editor-required-${question.id}`} className="editor-required-label">Required</span>
+                  <button
+                    type="button"
+                    role="switch"
+                    className="editor-switch"
+                    aria-checked={question.required}
+                    aria-labelledby={`editor-required-${question.id}`}
+                    onClick={(e) => { e.stopPropagation(); onChange(question.id, { required: !question.required }); }}
+                  >
+                    <span className="editor-switch-thumb" />
+                  </button>
+                </>
+              ) : null}
+              {menuItems.some((item) => !item.hidden) ? (
+                <PopoverMenu
+                  label="More options"
+                  trigger={<KebabIcon />}
+                  items={menuItems}
+                  triggerClassName="editor-icon-btn"
+                />
+              ) : null}
             </div>
           </>
         ) : null}
@@ -2682,14 +2845,26 @@ function SectionJumpEditor({
   rules,
   inSectionQuestions,
   laterSections,
+  openSignal = 0,
   onChange,
 }: {
   rules: SectionJumpRule[];
   inSectionQuestions: Question[];
   laterSections: Array<{ id: string; title: string }>;
+  /** Bumped by a question's menu to open this editor and scroll it into view. */
+  openSignal?: number;
   onChange: (nextRules: SectionJumpRule[]) => void;
 }) {
   const [showEditor, setShowEditor] = useState(false);
+  const [seenSignal, setSeenSignal] = useState(openSignal);
+  const rootRef = useRef<HTMLDivElement>(null);
+  if (openSignal !== seenSignal) {
+    setSeenSignal(openSignal);
+    setShowEditor(true);
+  }
+  useEffect(() => {
+    if (openSignal > 0) rootRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [openSignal]);
 
   // Valid forward targets: every later section, plus the submit sentinel.
   const validTargets = new Set<string>([
@@ -2727,7 +2902,7 @@ function SectionJumpEditor({
 
   if (!showEditor && rules.length === 0) {
     return (
-      <div style={{ marginBottom: 12 }}>
+      <div ref={rootRef} style={{ marginBottom: 12 }}>
         <button
           type="button"
           className="back-button inline-button"
@@ -2743,7 +2918,7 @@ function SectionJumpEditor({
   }
 
   return (
-    <div style={{ marginBottom: 12, padding: "12px 14px", background: "#fefce8", border: "1px solid #fde68a", borderRadius: 10 }}>
+    <div ref={rootRef} style={{ marginBottom: 12, padding: "12px 14px", background: "#fefce8", border: "1px solid #fde68a", borderRadius: 10 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
         <span style={{ fontSize: "0.78rem", fontWeight: 750, color: "#92400e" }}>
           Skip logic — after this section, jump when:
@@ -2851,13 +3026,24 @@ function ConditionEditor({
   question,
   allQuestions,
   onChange,
+  openSignal = 0,
 }: {
   question: Question;
   allQuestions: Question[];
   onChange: (id: string, patch: Partial<Question>) => void;
+  /** Bumped by the question menu to open the editor. */
+  openSignal?: number;
 }) {
   const conditions = question.conditions ?? [];
   const [showEditor, setShowEditor] = useState(false);
+  // Existing conditions show as a one-line summary until Edit is pressed.
+  const [editing, setEditing] = useState(false);
+  const [seenSignal, setSeenSignal] = useState(openSignal);
+  if (openSignal !== seenSignal) {
+    setSeenSignal(openSignal);
+    setShowEditor(true);
+    setEditing(true);
+  }
 
   // Only questions that appear BEFORE this one can be used as conditions
   const availableQuestions = allQuestions.filter(
@@ -2886,16 +3072,41 @@ function ConditionEditor({
 
   if (!showEditor && conditions.length === 0) {
     return (
-      <div style={{ marginTop: 14 }}>
+      <div className="editor-condition-row">
         <button
           type="button"
-          className="back-button inline-button"
-          style={{ fontSize: "0.78rem", color: "#94a3b8" }}
-          onClick={() => setShowEditor(true)}
+          className="editor-link-btn"
+          onClick={(e) => { e.stopPropagation(); setShowEditor(true); setEditing(true); }}
           disabled={availableQuestions.length === 0}
           title={availableQuestions.length === 0 ? "Add questions above first" : ""}
         >
           + Add condition
+        </button>
+      </div>
+    );
+  }
+
+  if (conditions.length > 0 && !editing) {
+    const first = conditions[0];
+    const ref = allQuestions.find((q) => q.id === first.questionId);
+    const refLabel = (ref?.label.trim() || "Untitled question").slice(0, 40);
+    const operatorText: Record<ConditionRule["operator"], string> = {
+      equals: "equals",
+      not_equals: "does not equal",
+      contains: "contains",
+      not_empty: "is answered",
+    };
+    const valueLabel = ref?.options?.find((o) => o.value === first.value)?.label ?? first.value ?? "";
+    const more = conditions.length - 1;
+    return (
+      <div className="editor-condition-row editor-condition-summary">
+        <span>
+          Show only if <strong>{refLabel}</strong> {operatorText[first.operator]}
+          {first.operator !== "not_empty" && valueLabel ? <> <strong>{valueLabel}</strong></> : null}
+          {more > 0 ? ` (+${more} more)` : ""}
+        </span>
+        <button type="button" className="editor-link-btn" onClick={(e) => { e.stopPropagation(); setEditing(true); }}>
+          Edit
         </button>
       </div>
     );
@@ -2912,11 +3123,20 @@ function ConditionEditor({
             type="button"
             className="back-button inline-button"
             style={{ fontSize: "0.75rem" }}
-            onClick={() => setShowEditor(false)}
+            onClick={() => { setShowEditor(false); setEditing(false); }}
           >
             Cancel
           </button>
-        ) : null}
+        ) : (
+          <button
+            type="button"
+            className="back-button inline-button"
+            style={{ fontSize: "0.75rem" }}
+            onClick={() => setEditing(false)}
+          >
+            Done
+          </button>
+        )}
       </div>
 
       {conditions.map((rule, idx) => {

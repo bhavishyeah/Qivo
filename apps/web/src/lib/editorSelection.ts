@@ -5,6 +5,21 @@ export function insertAfterId<T extends { id: string }>(list: T[], item: T, afte
   return [...list.slice(0, index + 1), item, ...list.slice(index + 1)];
 }
 
+/**
+ * Move the entry at `from` to position `to` and return a new array. Both
+ * indices are clamped to the list; an out-of-range `from` or `from === to`
+ * returns an unchanged copy.
+ */
+export function moveItem<T>(list: T[], from: number, to: number): T[] {
+  const next = [...list];
+  if (next.length === 0 || from < 0 || from >= next.length) return next;
+  const target = Math.max(0, Math.min(to, next.length - 1));
+  if (target === from) return next;
+  const [item] = next.splice(from, 1);
+  next.splice(target, 0, item);
+  return next;
+}
+
 /** Selectors whose clicks must not collapse the active question. */
 const KEEP_OPEN_SELECTOR = [
   ".editor-question", // the card itself (other cards activate themselves on click)
