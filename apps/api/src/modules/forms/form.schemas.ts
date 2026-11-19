@@ -240,6 +240,7 @@ export const createQuestionSchema = z.object({
 
 export const createSectionSchema = z.object({
   title: z.string().trim().min(1).max(200).optional(),
+  afterQuestionId: z.string().min(1).optional(),
 });
 
 const jumpRuleSchema = z.object({

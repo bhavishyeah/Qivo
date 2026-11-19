@@ -665,24 +665,65 @@ form {
 
 .editor-question {
   display: grid;
-  grid-template-columns: 42px 1fr;
-  gap: 16px;
+  grid-template-columns: 28px 1fr;
+  gap: 12px;
   border: 1px solid #e2e8f0;
   border-radius: 16px;
   padding: 20px;
   background: #f8fafc;
 }
 
-.editor-question-number {
+/* Drag handle: neutral grip at the card's left edge, flush with the header row. */
+.editor-question-handle {
   display: grid;
-  width: 36px;
-  height: 36px;
   place-items: center;
-  border-radius: 50%;
-  color: #1d4ed8;
-  background: #dbeafe;
-  font-weight: 800;
+  width: 28px;
+  height: 36px;
+  margin: -4px 0 0 -6px;
+  border-radius: 8px;
+  color: #94a3b8;
+  background: transparent;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  transition: background 150ms ease, color 150ms ease;
 }
+
+.editor-question-handle:hover {
+  color: #475569;
+  background: #e2e8f0;
+}
+
+.editor-question-handle:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+}
+
+.editor-question-handle:active,
+.editor-question.dragging .editor-question-handle {
+  cursor: grabbing;
+  color: #ffffff;
+  background: var(--qivo-primary, #2563eb);
+}
+
+/* Question number: small neutral badge in the header row. */
+.editor-question-index {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 6px;
+  color: #64748b;
+  background: #f1f5f9;
+  font-size: 0.72rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+[data-color-scheme="dark"] .editor-question-handle { color: #94a3b8; }
+[data-color-scheme="dark"] .editor-question-handle:hover { color: #f1f5f9; background: #334155; }
+[data-color-scheme="dark"] .editor-question-index { color: #cbd5e1; background: #334155; }
 
 .editor-question-body {
   min-width: 0;
@@ -2246,14 +2287,7 @@ form {
   background: #ffffff;
 }
 
-.editor-question.inactive-card .editor-question-number {
-  opacity: 0;
-  transition: opacity 150ms ease;
-}
 
-.editor-question.inactive-card:hover .editor-question-number {
-  opacity: 1;
-}
 
 
 /* Save status spinner */
@@ -2297,6 +2331,50 @@ form {
   font-size: 0.95rem;
   color: #475569;
   line-height: 1.6;
+}
+
+/* Click-to-edit description (renders as a button for keyboard access). */
+.editor-form-header-desc-btn {
+  display: block;
+  width: 100%;
+  padding: 4px 8px;
+  margin: 0 0 12px -8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  white-space: pre-wrap;
+  cursor: text;
+  transition: background 150ms ease, border-color 150ms ease;
+}
+
+.editor-form-header-desc-btn.is-empty {
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.editor-form-header-desc-btn:hover {
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+}
+
+.editor-form-header-desc-btn:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+}
+
+.editor-form-header-desc-input {
+  display: block;
+  width: 100%;
+  margin: 0 0 12px;
+  padding: 6px 8px;
+  border: 1px solid #93c5fd;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  resize: vertical;
 }
 
 .editor-form-header-meta {
@@ -2480,7 +2558,12 @@ form {
   gap: 6px;
   position: absolute;
   right: -56px;
-  top: 0;
+  top: var(--toolbar-top, 0px);
+  transition: top 150ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .editor-floating-toolbar { transition: none; }
 }
 
 .editor-floating-btn {

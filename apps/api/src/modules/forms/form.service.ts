@@ -1194,7 +1194,7 @@ export async function createQuestion(
 export async function createSection(
   formId: string,
   userId: string,
-  input: { title?: string | undefined },
+  input: { title?: string | undefined; afterQuestionId?: string | undefined },
 ) {
   const form = await getEditableForm(formId, userId);
   const schema = getFormSchema(form.schema);
@@ -1204,7 +1204,24 @@ export async function createSection(
     title: input.title?.trim() || `Section ${schema.sections.length + 1}`,
     questions: [] as FormQuestion[],
   };
-  schema.sections.push(section);
+  if (input.afterQuestionId !== undefined) {
+    // Split: the new section goes right after the selected question's section
+    // and takes over the questions that followed the selected question.
+    const sectionIndex = schema.sections.findIndex((s) =>
+      s.questions.some((q) => q.id === input.afterQuestionId),
+    );
+    const host = schema.sections[sectionIndex];
+    if (!host) {
+      const error = new Error("Question not found.");
+      error.name = "QUESTION_NOT_FOUND";
+      throw error;
+    }
+    const questionIndex = host.questions.findIndex((q) => q.id === input.afterQuestionId);
+    section.questions = host.questions.splice(questionIndex + 1);
+    schema.sections.splice(sectionIndex + 1, 0, section);
+  } else {
+    schema.sections.push(section);
+  }
 
   const updatedForm = await prisma.form.update({
     where: { id: formId },

@@ -9,6 +9,7 @@ import {
 import { Link, useParams } from "react-router-dom";
 import { api, ApiRequestError } from "../lib/api";
 import { PIPING_TOKEN_RE } from "../lib/piping";
+import { computeToolbarTop, insertAfterId, shouldCollapseOnPointerDown } from "../lib/editorSelection";
 import { uploadToCloudinary } from "../lib/upload";
 import WebhooksTabPanel from "../components/WebhooksTabPanel";
 import { ManualPaymentCell, ManualPaymentSummaryBar } from "../components/ManualPaymentReview";
@@ -204,6 +205,21 @@ export default function FormEditorPage() {
   // Active question (for progressive disclosure)
   const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
 
+  // Question under the pointer (floating buttons follow it while nothing is selected)
+  const [hoveredQuestionId, setHoveredQuestionId] = useState<string | null>(null);
+  const [toolbarTop, setToolbarTop] = useState(0);
+  const canvasRef = useRef<HTMLDivElement | null>(null);
+  const toolbarRef = useRef<HTMLDivElement | null>(null);
+  // Newly inserted card to scroll into view once it has rendered.
+  const [pendingScrollId, setPendingScrollId] = useState<string | null>(null);
+  const [pendingSectionScroll, setPendingSectionScroll] = useState<string | null>(null);
+
+  // Inline description editing (real-time: state updates per keystroke, saved debounced)
+  const [editingDesc, setEditingDesc] = useState(false);
+  const descTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const descBeforeEdit = useRef("");
+  const descLastSaved = useRef("");
+
   // Inline title editing
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
@@ -397,6 +413,11 @@ export default function FormEditorPage() {
       }
     }
 
+    // Escape collapses the open question (unless a dialog owns the key)
+    if (e.key === "Escape" && activeQuestionId && !(e.target as HTMLElement).closest?.("[role='dialog'], [role='listbox']")) {
+      setActiveQuestionId(null);
+    }
+
     // Delete key to remove active card (only when not in input)
     if (e.key === "Delete" && activeQuestionId) {
       const target = e.target as HTMLElement;
@@ -420,6 +441,121 @@ export default function FormEditorPage() {
     window.addEventListener("keydown", listener);
     return () => window.removeEventListener("keydown", listener);
   }, []);
+
+  // Collapse the open question when the pointer goes down outside it. Clicks
+  // inside cards, popovers/dialogs, the floating buttons and the top bar are
+  // ignored (see shouldCollapseOnPointerDown).
+  useEffect(() => {
+    if (!activeQuestionId) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (shouldCollapseOnPointerDown(e.target)) setActiveQuestionId(null);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [activeQuestionId]);
+
+  // Keep the floating add buttons beside the selected card (else the hovered
+  // card, else pinned near the top of the viewport).
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const toolbar = toolbarRef.current;
+    if (!canvas || !toolbar) return;
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const followId = activeQuestionId ?? hoveredQuestionId;
+      const card = followId
+        ? canvas.querySelector<HTMLElement>(`[data-question-id="${CSS.escape(followId)}"]`)
+        : null;
+      const canvasRect = canvas.getBoundingClientRect();
+      const cardRect = card?.getBoundingClientRect();
+      const next = computeToolbarTop({
+        anchorTop: cardRect ? cardRect.top - canvasRect.top : null,
+        anchorHeight: cardRect?.height ?? 0,
+        canvasViewportTop: canvasRect.top,
+        canvasHeight: canvasRect.height,
+        toolbarHeight: toolbar.offsetHeight,
+        stickyOffset: 80,
+      });
+      setToolbarTop((prev) => (prev === next ? prev : next));
+    };
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(update);
+    };
+    update();
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(schedule) : null;
+    observer?.observe(canvas);
+    return () => {
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+      observer?.disconnect();
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [activeQuestionId, hoveredQuestionId, questions.length, sections.length, loading, activeTab]);
+
+  // Scroll a freshly inserted question/section into view.
+  useEffect(() => {
+    const id = pendingScrollId ?? pendingSectionScroll;
+    if (!id) return;
+    const selector = pendingScrollId ? `[data-question-id="${CSS.escape(id)}"]` : `[data-section-id="${CSS.escape(id)}"]`;
+    const el = canvasRef.current?.querySelector<HTMLElement>(selector);
+    if (!el) return;
+    const reduce = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    el.scrollIntoView({ block: "nearest", behavior: reduce ? "auto" : "smooth" });
+    setPendingScrollId(null);
+    setPendingSectionScroll(null);
+  }, [pendingScrollId, pendingSectionScroll, questions, sections]);
+
+  // ─── Form description (inline, real-time) ─────────────────────────────────
+
+  async function saveDescription(value: string) {
+    if (!formId) return;
+    const trimmed = value.trim();
+    setSaveStatus("saving");
+    try {
+      const data = await api.patch<{ form: FormRecord }>(`/api/forms/${formId}`, {
+        description: trimmed ? trimmed : null,
+      });
+      descLastSaved.current = value;
+      setForm((current) => (current ? { ...current, updatedAt: data.form.updatedAt } : current));
+      setSaveStatus("saved");
+      setTimeout(() => setSaveStatus((s) => (s === "saved" ? "idle" : s)), 3000);
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : "Unable to save description.");
+      setSaveStatus("error");
+    }
+  }
+
+  function changeDescription(value: string) {
+    setForm((current) => (current ? { ...current, description: value } : current));
+    if (descTimer.current) clearTimeout(descTimer.current);
+    descTimer.current = setTimeout(() => void saveDescription(value), 800);
+  }
+
+  function startEditingDescription() {
+    descBeforeEdit.current = form?.description ?? "";
+    descLastSaved.current = descBeforeEdit.current;
+    setEditingDesc(true);
+  }
+
+  // Blur commits: flush any pending debounce immediately.
+  function commitDescription() {
+    if (descTimer.current) { clearTimeout(descTimer.current); descTimer.current = null; }
+    const value = form?.description ?? "";
+    if (value !== descLastSaved.current) void saveDescription(value);
+    setEditingDesc(false);
+  }
+
+  // Escape cancels: restore the pre-edit text (and re-save it if a debounced save already went out).
+  function cancelDescription() {
+    if (descTimer.current) { clearTimeout(descTimer.current); descTimer.current = null; }
+    const before = descBeforeEdit.current;
+    setForm((current) => (current ? { ...current, description: before } : current));
+    if (before !== descLastSaved.current) void saveDescription(before);
+    setEditingDesc(false);
+  }
 
   // ─── Question mutations ───────────────────────────────────────────────────
 
@@ -550,10 +686,14 @@ export default function FormEditorPage() {
     event.preventDefault();
     if (!formId || !newQuestionLabel.trim()) return;
     setAddingQuestion(true); setMessage(""); setError("");
+    // Insert right after the selected question (in its section); append when nothing is selected.
+    const anchor = questions.find((q) => q.id === activeQuestionId) ?? null;
+    const anchorSectionId = anchor ? (anchor.sectionId ?? sections[0]?.id) : undefined;
     try {
       const data = await api.post<{ question: Question }>(
         `/api/forms/${formId}/questions`,
         {
+          ...(anchorSectionId ? { sectionId: anchorSectionId } : {}),
           label: newQuestionLabel.trim(),
           type: newQuestionType,
           required: false,
@@ -565,7 +705,15 @@ export default function FormEditorPage() {
           ...(newQuestionType === "FILE_UPLOAD" ? { settings: { maxFileSizeMB: 5, allowedFileTypes: ["image/*", "application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.openxmlformats-officedocument.presentationml.presentation", "application/msword", "application/vnd.ms-excel", "application/vnd.ms-powerpoint"] } } : {}),
         },
       );
-      setQuestions((current) => [...current, data.question]);
+      const created: Question = anchorSectionId ? { ...data.question, sectionId: anchorSectionId } : data.question;
+      const reordered = insertAfterId(questions, created, anchor ? anchor.id : null);
+      if (anchor) {
+        pushHistory(questions);
+        await api.post(`/api/forms/${formId}/questions/reorder`, { questionIds: reordered.map((q) => q.id) });
+      }
+      setQuestions((current) => insertAfterId(current, created, anchor ? anchor.id : null));
+      setActiveQuestionId(created.id);
+      setPendingScrollId(created.id);
       setNewQuestionLabel("");
       setNewQuestionType("SHORT_TEXT");
       setShowAddQuestion(false);
@@ -581,11 +729,20 @@ export default function FormEditorPage() {
     if (!formId) return;
     setMessage(""); setError("");
     try {
+      // With a selected question, the new section starts right after it (later
+      // questions of that section move into the new one); otherwise it is appended.
+      const anchor = questions.find((q) => q.id === activeQuestionId) ?? null;
       const data = await api.post<{ section: { id: string; title: string } }>(
         `/api/forms/${formId}/sections`,
-        {},
+        anchor ? { afterQuestionId: anchor.id } : {},
       );
-      setSections((current) => [...current, { id: data.section.id, title: data.section.title }]);
+      if (anchor) {
+        // Refresh in place so questions re-group under their sections.
+        await reloadEditorData();
+        setPendingSectionScroll(data.section.id);
+      } else {
+        setSections((current) => [...current, { id: data.section.id, title: data.section.title }]);
+      }
       setMessage("Section added. Use “+ Question” within it to add questions.");
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : "Unable to add section.");
@@ -1188,12 +1345,31 @@ export default function FormEditorPage() {
         <div className="editor-form-header-accent" />
         <div className="editor-form-header-content">
           <h2 className="editor-form-header-title">{form.title}</h2>
-          {form.description ? (
-            <p className="editor-form-header-desc">{form.description}</p>
+          {editingDesc ? (
+            <textarea
+              className="editor-form-header-desc-input"
+              aria-label="Form description"
+              placeholder="Add a description"
+              rows={2}
+              maxLength={2000}
+              value={form.description ?? ""}
+              onChange={(e) => changeDescription(e.target.value)}
+              onBlur={commitDescription}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") { e.preventDefault(); cancelDescription(); }
+              }}
+              autoFocus
+            />
           ) : (
-            <p className="editor-form-header-desc" style={{ color: "#94a3b8", fontStyle: "italic" }}>
-              No description
-            </p>
+            <button
+              type="button"
+              className={`editor-form-header-desc editor-form-header-desc-btn${form.description ? "" : " is-empty"}`}
+              onClick={startEditingDescription}
+              title="Click to edit description"
+              aria-label={form.description ? "Edit form description" : "Add a description"}
+            >
+              {form.description ? form.description : "No description"}
+            </button>
           )}
           <div className="editor-form-header-meta">
             <span className={`status-pill status-${form.status.toLowerCase()}`}>
@@ -1224,6 +1400,11 @@ export default function FormEditorPage() {
         {/* ── Add question form ── */}
         {showAddQuestion ? (
           <form className="add-question-form" onSubmit={addEditorQuestion}>
+            {activeQuestionId && questions.some((q) => q.id === activeQuestionId) ? (
+              <p className="muted" style={{ gridColumn: "1 / -1", margin: 0, fontSize: "0.8rem" }}>
+                Will be added after question {questions.findIndex((q) => q.id === activeQuestionId) + 1}.
+              </p>
+            ) : null}
             <div>
               <label htmlFor="new-question-label">Question label</label>
               <input
@@ -1258,7 +1439,7 @@ export default function FormEditorPage() {
             <p className="muted">No questions yet. Click "+ Add question" to start.</p>
           </div>
         ) : (
-          <div className="editor-canvas-with-toolbar">
+          <div className="editor-canvas-with-toolbar" ref={canvasRef}>
             <div className="editor-question-list">
               {(() => {
                 // Group questions by section while preserving each card's GLOBAL
@@ -1286,7 +1467,7 @@ export default function FormEditorPage() {
                   // only valid forward jump targets.
                   const laterSections = sections.slice(sectionIndex + 1);
                   return (
-                    <div key={section.id} className="editor-section-group">
+                    <div key={section.id} className="editor-section-group" data-section-id={section.id}>
                       {showSectionChrome ? (
                         <div
                           className="editor-section-header"
@@ -1345,6 +1526,7 @@ export default function FormEditorPage() {
                           isQuizMode={quizMode}
                           isActive={activeQuestionId === question.id}
                           onActivate={() => setActiveQuestionId(question.id)}
+                          onHover={(hovering) => setHoveredQuestionId((cur) => (hovering ? question.id : cur === question.id ? null : cur))}
                           onDragStart={() => handleDragStart(index)}
                           onDragOver={(e) => handleDragOver(e, index)}
                           onDrop={(e) => void handleDrop(e, index)}
@@ -1372,7 +1554,7 @@ export default function FormEditorPage() {
             </div>
 
             {/* Floating creation toolbar */}
-            <div className="editor-floating-toolbar">
+            <div className="editor-floating-toolbar" ref={toolbarRef} style={{ ["--toolbar-top" as string]: `${toolbarTop}px` }}>
               <button
                 className="editor-floating-btn"
                 type="button"
@@ -1756,6 +1938,7 @@ function QuestionCard({
   isQuizMode,
   isActive,
   onActivate,
+  onHover,
   onDragStart,
   onDragOver,
   onDrop,
@@ -1774,6 +1957,7 @@ function QuestionCard({
   isQuizMode: boolean;
   isActive: boolean;
   onActivate: () => void;
+  onHover: (hovering: boolean) => void;
   onDragStart: () => void;
   onDragOver: (e: DragEvent<HTMLElement>) => void;
   onDrop: (e: DragEvent<HTMLElement>) => void;
@@ -1815,23 +1999,40 @@ function QuestionCard({
       onDrop={onDrop}
       onDragEnd={onDragEnd}
       onClick={onActivate}
+      onMouseEnter={() => onHover(true)}
+      onMouseLeave={() => onHover(false)}
+      data-question-id={question.id}
       style={{ cursor: isDragging ? "grabbing" : isActive ? "default" : "pointer" }}
     >
-      {/* Drag handle + number */}
+      {/* Drag handle (the open card is only draggable from here) */}
       <div
-        className="editor-question-number"
+        className="editor-question-handle"
+        role="img"
         title="Drag to reorder"
-        style={{ cursor: "grab", userSelect: "none" }}
+        aria-label={`Drag to reorder question ${index + 1}`}
+        draggable={isActive}
+        onDragStart={(e) => {
+          if (!isActive) return;
+          e.dataTransfer.setData("text/plain", question.id);
+          const card = e.currentTarget.closest(".editor-question");
+          if (card) e.dataTransfer.setDragImage(card, 16, 16);
+        }}
+        onClick={(e) => e.stopPropagation()}
       >
-        <span style={{ fontSize: "0.7rem", color: "#94a3b8" }}>⠿</span>
-        <br />
-        <span style={{ fontSize: "0.8rem" }}>{index + 1}</span>
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+          <g fill="currentColor">
+            <circle cx="5.5" cy="3.5" r="1.4" /><circle cx="10.5" cy="3.5" r="1.4" />
+            <circle cx="5.5" cy="8" r="1.4" /><circle cx="10.5" cy="8" r="1.4" />
+            <circle cx="5.5" cy="12.5" r="1.4" /><circle cx="10.5" cy="12.5" r="1.4" />
+          </g>
+        </svg>
       </div>
 
       <div className="editor-question-body">
         {/* ── Inactive view: minimal info ── */}
         {!isActive ? (
           <div className="editor-question-meta" style={{ gap: 10 }}>
+            <span className="editor-question-index" aria-label={`Question ${index + 1}`}>{index + 1}</span>
             <span className="status-pill" style={{ fontSize: "0.7rem" }}>
               {QUESTION_TYPE_LABELS[question.type]}
             </span>
@@ -1849,6 +2050,7 @@ function QuestionCard({
           <>
             {/* Type selector + Meta */}
             <div className="editor-question-meta" style={{ marginBottom: 12, gap: 10 }}>
+              <span className="editor-question-index" aria-label={`Question ${index + 1}`}>{index + 1}</span>
               <select
                 value={question.type}
                 onChange={(e) => {

@@ -493,6 +493,7 @@ formRouter.post(
       const input = createSectionSchema.parse(req.body);
       const result = await createSection(formId, req.user.id, {
         ...(input.title !== undefined ? { title: input.title } : {}),
+        ...(input.afterQuestionId !== undefined ? { afterQuestionId: input.afterQuestionId } : {}),
       });
       res.status(201).json({ success: true, data: result });
     } catch (error) {

@@ -29,6 +29,7 @@ import EventsPage from "./pages/EventsPage";
 import AdminPanelPage from "./pages/AdminPanelPage";
 import AcceptInvitePage from "./pages/AcceptInvitePage";
 import { getToken } from "./lib/api";
+import { guestRedirectPath } from "./lib/guestRedirect";
 
 // Lazy-loaded pages (heavy dependencies like recharts)
 const FormReportsPage = lazy(() => import("./pages/FormReportsPage"));
@@ -43,18 +44,13 @@ function LazyFallback() {
   );
 }
 
-/** Redirects logged-in users away from auth pages */
+/** Redirects logged-in users away from the landing and auth pages */
 function GuestOnly({ children }: { children: React.ReactNode }) {
   const location = useLocation();
-  if (getToken()) {
-    const invite = new URLSearchParams(location.search).get("invite");
-    return (
-      <Navigate
-        to={invite ? `/accept-invite?token=${encodeURIComponent(invite)}` : "/dashboard"}
-        replace
-      />
-    );
-  }
+  // Auth is a synchronous token check, so there is no loading state and no
+  // flash of the guest page before the redirect.
+  const target = guestRedirectPath(!!getToken(), location.search);
+  if (target) return <Navigate to={target} replace />;
   return <>{children}</>;
 }
 
@@ -76,7 +72,7 @@ function App() {
     <BrowserRouter>
       <Routes>
         {/* Public routes */}
-        <Route path="/" element={<LandingPage />} />
+        <Route path="/" element={<GuestOnly><LandingPage /></GuestOnly>} />
         <Route path="/login" element={<GuestOnly><LoginPage /></GuestOnly>} />
         <Route path="/signup" element={<GuestOnly><SignupPage /></GuestOnly>} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
