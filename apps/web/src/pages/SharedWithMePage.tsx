@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, ApiRequestError } from "../lib/api";
+import { parseSharedWithMe } from "../lib/sharedWithMe";
 import type { SharedWithMeItem } from "../types";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -32,8 +33,9 @@ export default function SharedWithMePage() {
 
   async function loadSharedForms() {
     try {
-      const data = await api.get<SharedWithMeItem[]>("/api/forms/shared-with-me");
-      setItems(data);
+      // The API returns { shares: [...] } (api.get unwraps the outer `data`).
+      const data = await api.get<{ shares: SharedWithMeItem[] }>("/api/forms/shared-with-me");
+      setItems(parseSharedWithMe(data));
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : "Unable to load shared forms.");
     } finally {
