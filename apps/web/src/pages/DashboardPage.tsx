@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, ApiRequestError } from "../lib/api";
+import PopoverMenu from "../components/PopoverMenu";
 import type { FormRecord, WorkspaceRecord } from "../types";
 
 type FormWithCount = FormRecord & { responseCount?: number };
@@ -38,24 +39,44 @@ export default function DashboardPage() {
   const [folderFilter, setFolderFilter] = useState<string>(searchParams.get("folder") ?? "ALL");
   const [sortBy, setSortBy] = useState<SortOption>("updatedAt");
 
-  // Folder assignment popup
+  // Folder assignment dialog (opened from the card kebab menu)
   const [assigningFolderId, setAssigningFolderId] = useState<string | null>(null);
   const assignRef = useRef<HTMLDivElement>(null);
+  const assignReturnFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     void loadDashboard();
   }, []);
 
-  // Close folder popup on outside click
+  function openFolderDialog(formId: string) {
+    assignReturnFocusRef.current = document.activeElement as HTMLElement | null;
+    setAssigningFolderId(formId);
+  }
+
+  function closeFolderDialog() {
+    setAssigningFolderId(null);
+    assignReturnFocusRef.current?.focus();
+  }
+
+  // Folder dialog: focus first option, close on Escape or outside pointer down
   useEffect(() => {
-    function handleClick(e: MouseEvent) {
+    if (!assigningFolderId) return;
+    assignRef.current?.querySelector<HTMLElement>("button")?.focus();
+    function handlePointer(e: PointerEvent) {
       if (assignRef.current && !assignRef.current.contains(e.target as Node)) {
-        setAssigningFolderId(null);
+        closeFolderDialog();
       }
     }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") closeFolderDialog();
+    }
+    document.addEventListener("pointerdown", handlePointer);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointer);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [assigningFolderId]);
 
   async function loadDashboard(wsId?: string) {
     try {
@@ -136,7 +157,7 @@ export default function DashboardPage() {
       setForms((current) =>
         current.map((f) => f.id === formId ? { ...f, folderId } : f),
       );
-      setAssigningFolderId(null);
+      closeFolderDialog();
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : "Unable to move form.");
     }
@@ -347,121 +368,126 @@ export default function DashboardPage() {
                 <span className={`status-pill status-${form.status.toLowerCase()}`}>
                   {form.status.replace(/_/g, " ")}
                 </span>
-                <span className="muted" style={{ fontSize: "0.78rem" }}>
+                <span className="muted form-tile-counts">
                   {questionCount}Q
-                  {form.responseCount !== undefined ? ` · ${form.responseCount}R` : ""}
+                  {form.responseCount !== undefined ? ` \u00B7 ${form.responseCount}R` : ""}
                 </span>
+                {folderName ? (
+                  <span className="form-tile-badge" title="Folder">{"\uD83D\uDCC1"} {folderName}</span>
+                ) : null}
+                {eventName ? (
+                  <span className="form-tile-badge" title="Event">{"\uD83C\uDFAA"} {eventName}</span>
+                ) : null}
               </div>
 
-              {/* Folder badge */}
-              {folderName ? (
-                <p style={{ margin: "8px 0 0", fontSize: "0.75rem", color: "#2563eb", fontWeight: 700 }}>
-                  📁 {folderName}
-                </p>
-              ) : null}
+              <h2>
+                <Link className="form-tile-link" to={`/forms/${form.id}/edit`}>{form.title}</Link>
+              </h2>
 
-              {/* Event badge */}
-              {eventName ? (
-                <p style={{ margin: folderName ? "4px 0 0" : "8px 0 0", fontSize: "0.75rem", color: "#7c3aed", fontWeight: 700 }}>
-                  🎪 {eventName}
-                </p>
-              ) : null}
+              {form.description ? <p className="form-tile-description">{form.description}</p> : null}
 
-              <h2 style={{ marginTop: (folderName || eventName) ? 6 : 24 }}>{form.title}</h2>
-
-              <p className="form-tile-description">
-                {form.description || "No description provided."}
-              </p>
-
-              <p className="muted" style={{ fontSize: "0.8rem" }}>
+              <p className="muted form-tile-date">
                 Updated {new Date(form.updatedAt).toLocaleDateString()}
               </p>
 
-              <div className="form-tile-actions" style={{ flexWrap: "wrap", gap: 8 }}>
-                <Link className="secondary-link" to={`/forms/${form.id}/edit`}>Edit</Link>
-                <Link className="secondary-link" to={`/forms/${form.id}/responses`}>Responses</Link>
-                <Link className="secondary-link" to={`/forms/${form.id}/share`}>Share</Link>
-
-                {/* Folder assign button */}
-                {folders.length > 0 ? (
-                  <div style={{ position: "relative" }}>
-                    <button
-                      className="secondary-button compact"
-                      type="button"
-                      onClick={() => setAssigningFolderId(assigningFolderId === form.id ? null : form.id)}
-                    >
-                      📁 {folderName ?? "Move"}
-                    </button>
-
-                    {assigningFolderId === form.id ? (
-                      <div
-                        ref={assignRef}
-                        style={{
-                          position: "absolute",
-                          top: "110%",
-                          left: 0,
-                          zIndex: 20,
-                          background: "#fff",
-                          border: "1px solid #e2e8f0",
-                          borderRadius: 12,
-                          boxShadow: "0 8px 32px rgb(0 0 0 / 12%)",
-                          minWidth: 200,
-                          overflow: "hidden",
-                        }}
-                      >
-                        <button
-                          type="button"
-                          style={{ display: "block", width: "100%", padding: "10px 16px", textAlign: "left", border: "none", background: !form.folderId ? "#eff6ff" : "#fff", color: "#475569", fontSize: "0.88rem", cursor: "pointer", borderBottom: "1px solid #f1f5f9" }}
-                          onClick={() => void moveToFolder(form.id, null)}
-                        >
-                          No folder
-                        </button>
-                        {folders.map((folder) => (
-                          <button
-                            key={folder.id}
-                            type="button"
-                            style={{ display: "block", width: "100%", padding: "10px 16px", textAlign: "left", border: "none", background: form.folderId === folder.id ? "#eff6ff" : "#fff", color: "#475569", fontSize: "0.88rem", cursor: "pointer", borderBottom: "1px solid #f1f5f9" }}
-                            onClick={() => void moveToFolder(form.id, folder.id)}
-                          >
-                            📁 {folder.name}
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-
-                <button
-                  className="secondary-button compact"
-                  type="button"
-                  onClick={() => void duplicateForm(form.id)}
+              <div className="form-tile-actions">
+                <Link
+                  className="form-tile-icon-button"
+                  to={`/forms/${form.id}/responses`}
+                  aria-label={`Responses for ${form.title}`}
+                  title="Responses"
                 >
-                  Duplicate
-                </button>
-
-                <button
-                  className="secondary-button compact"
-                  type="button"
-                  onClick={() => void saveAsTemplate(form.id, form.title)}
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M3 3v18h18" />
+                    <path d="M8 16v-5M13 16V7M18 16v-8" />
+                  </svg>
+                </Link>
+                <Link
+                  className="form-tile-icon-button"
+                  to={`/forms/${form.id}/share`}
+                  aria-label={`Share ${form.title}`}
+                  title="Share"
                 >
-                  Save as template
-                </button>
-
-                {form.status === "PUBLISHED" ? (
-                  <a
-                    className="secondary-button compact"
-                    href={`/f/${form.slug}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Open ↗
-                  </a>
-                ) : null}
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <circle cx="18" cy="5" r="3" />
+                    <circle cx="6" cy="12" r="3" />
+                    <circle cx="18" cy="19" r="3" />
+                    <path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" />
+                  </svg>
+                </Link>
+                <span className="form-tile-menu">
+                  <PopoverMenu
+                    label={`More actions for ${form.title}`}
+                    triggerClassName="form-tile-icon-button"
+                    trigger={
+                      <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
+                        <circle cx="12" cy="5" r="1.8" />
+                        <circle cx="12" cy="12" r="1.8" />
+                        <circle cx="12" cy="19" r="1.8" />
+                      </svg>
+                    }
+                    items={[
+                      { id: "edit", label: "Edit", href: `/forms/${form.id}/edit` },
+                      {
+                        id: "open",
+                        label: "Open public form",
+                        href: `/f/${form.slug}`,
+                        external: true,
+                        hidden: form.status !== "PUBLISHED",
+                      },
+                      { id: "duplicate", label: "Duplicate", onSelect: () => void duplicateForm(form.id) },
+                      {
+                        id: "move",
+                        label: "Move to folder",
+                        hidden: folders.length === 0,
+                        onSelect: () => openFolderDialog(form.id),
+                      },
+                      {
+                        id: "template",
+                        label: "Save as template",
+                        onSelect: () => void saveAsTemplate(form.id, form.title),
+                      },
+                    ]}
+                  />
+                </span>
               </div>
             </article>
           );
         })}
       </section>
+      {assigningFolderId ? (
+        <div className="folder-dialog-backdrop">
+          <div ref={assignRef} className="folder-dialog" role="dialog" aria-modal="true" aria-label="Move to folder">
+            <p className="folder-dialog-title">Move to folder</p>
+            {(() => {
+              const target = forms.find((f) => f.id === assigningFolderId);
+              return (
+                <>
+                  <button
+                    type="button"
+                    className={`folder-dialog-option${!target?.folderId ? " is-current" : ""}`}
+                    aria-current={!target?.folderId ? "true" : undefined}
+                    onClick={() => void moveToFolder(assigningFolderId, null)}
+                  >
+                    No folder
+                  </button>
+                  {folders.map((folder) => (
+                    <button
+                      key={folder.id}
+                      type="button"
+                      className={`folder-dialog-option${target?.folderId === folder.id ? " is-current" : ""}`}
+                      aria-current={target?.folderId === folder.id ? "true" : undefined}
+                      onClick={() => void moveToFolder(assigningFolderId, folder.id)}
+                    >
+                      {"\uD83D\uDCC1"} {folder.name}
+                    </button>
+                  ))}
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }
