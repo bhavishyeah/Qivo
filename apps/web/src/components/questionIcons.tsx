@@ -73,6 +73,12 @@ export function TextBlockIcon(p: IconProps) {
 export function ImageIcon(p: IconProps) {
   return <Svg {...p}><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="9" cy="10" r="1.6" /><path d="m21 16-5-5-8 8" /></Svg>;
 }
+export function PlusIcon(p: IconProps) {
+  return <Svg {...p}><circle cx="12" cy="12" r="9" /><path d="M12 8v8M8 12h8" /></Svg>;
+}
+export function SectionIcon(p: IconProps) {
+  return <Svg {...p}><rect x="4" y="4" width="16" height="6" rx="1.5" /><rect x="4" y="14" width="16" height="6" rx="1.5" /></Svg>;
+}
 export function DuplicateIcon(p: IconProps) {
   return <Svg {...p}><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V6a2 2 0 0 1 2-2h9" /></Svg>;
 }

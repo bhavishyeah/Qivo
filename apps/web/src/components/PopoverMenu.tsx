@@ -22,6 +22,8 @@ export type PopoverMenuItem = {
   /** Internal route (react-router Link) or external URL when `external` is set. */
   href?: string;
   external?: boolean;
+  /** When defined the item is a radio-style menu item with aria-checked. */
+  checked?: boolean;
 };
 
 type PopoverMenuProps = {
@@ -63,7 +65,7 @@ export default function PopoverMenu({ label, trigger, items, triggerClassName }:
   useLayoutEffect(() => {
     if (!open) return;
     reposition();
-    const first = menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]:not([aria-disabled="true"])');
+    const first = menuRef.current?.querySelector<HTMLElement>('[role^="menuitem"]:not([aria-disabled="true"])');
     first?.focus();
   }, [open, reposition]);
 
@@ -85,7 +87,7 @@ export default function PopoverMenu({ label, trigger, items, triggerClassName }:
   }, [open, close, reposition]);
 
   function menuItems(): HTMLElement[] {
-    return Array.from(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []).filter(
+    return Array.from(menuRef.current?.querySelectorAll<HTMLElement>('[role^="menuitem"]') ?? []).filter(
       (el) => el.getAttribute("aria-disabled") !== "true",
     );
   }
@@ -192,7 +194,8 @@ export default function PopoverMenu({ label, trigger, items, triggerClassName }:
                   <button
                     key={item.id}
                     type="button"
-                    role="menuitem"
+                    role={item.checked === undefined ? "menuitem" : "menuitemradio"}
+                    aria-checked={item.checked}
                     tabIndex={-1}
                     className="popover-menu-item"
                     aria-disabled={item.disabled ? true : undefined}

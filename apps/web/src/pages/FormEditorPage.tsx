@@ -10,7 +10,7 @@ import { Link, useParams } from "react-router-dom";
 import { api, ApiRequestError } from "../lib/api";
 import { PIPING_TOKEN_RE } from "../lib/piping";
 import { computeToolbarTop, insertAfterId, moveItem, shouldCollapseOnPointerDown } from "../lib/editorSelection";
-import { uploadToCloudinary } from "../lib/upload";
+import { uploadEditorImage, validateImageFile } from "../lib/upload";
 import WebhooksTabPanel from "../components/WebhooksTabPanel";
 import { ManualPaymentCell, ManualPaymentSummaryBar } from "../components/ManualPaymentReview";
 import {
@@ -29,7 +29,10 @@ import {
   GripIcon,
   ImageIcon,
   KebabIcon,
+  PlusIcon,
   QuestionTypeIcon,
+  SectionIcon,
+  TextBlockIcon,
   TrashIcon,
 } from "../components/questionIcons";
 import {
@@ -92,6 +95,7 @@ const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
 
 const CHOICE_TYPES = new Set<QuestionType>(["SINGLE_CHOICE", "MULTIPLE_CHOICE"]);
 const RATING_TYPES = new Set<QuestionType>(["RATING", "LINEAR_SCALE"]);
+const IMAGE_ACCEPT = "image/png,image/jpeg,image/gif,image/webp";
 
 // Convert a datetime-local value (local wall-clock, no timezone) into a full
 // ISO instant (…Z) the backend's z.string().datetime() accepts. Empty or
@@ -200,6 +204,12 @@ export default function FormEditorPage() {
   const [fontFamily, setFontFamily] = useState("");
   const [uploadingCover, setUploadingCover] = useState(false);
   const [coverError, setCoverError] = useState("");
+  // Per-question image upload (one shared hidden file input).
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const coverInputRef = useRef<HTMLInputElement | null>(null);
+  const imageTargetId = useRef<string | null>(null);
+  const [imageUpload, setImageUpload] = useState<{ id: string; percent: number } | null>(null);
+  const [imageError, setImageError] = useState<{ id: string; message: string } | null>(null);
 
   // Approval workflow
   const [showReviewPanel, setShowReviewPanel] = useState(false);
@@ -620,6 +630,10 @@ export default function FormEditorPage() {
             options: question.options,
             settings: question.settings,
             conditions: question.conditions,
+            // null deletes the stored key on the server (image removed).
+            imageUrl: question.imageUrl ?? null,
+            imageCaption: question.imageUrl ? (question.imageCaption || null) : null,
+            ...(question.imageUrl && question.imageAlign ? { imageAlign: question.imageAlign } : {}),
           });
         } catch (err) {
           pendingSaves.current.set(question.id, question);
@@ -670,11 +684,9 @@ export default function FormEditorPage() {
 
   async function duplicateQuestion(question: Question) {
     if (!formId) return;
-    pushHistory(questions);
-    setSaving(true); setMessage(""); setError("");
+    setSaving(true);
     try {
-      const data = await api.post<{ question: Question }>(
-        `/api/forms/${formId}/questions`,
+      await createAfterSelected(
         {
           label: `${question.label} (copy)`,
           type: question.type,
@@ -682,44 +694,43 @@ export default function FormEditorPage() {
           ...(question.description ? { description: question.description } : {}),
           ...(question.options ? { options: question.options } : {}),
           ...(question.settings ? { settings: question.settings } : {}),
+          ...(question.imageUrl ? { imageUrl: question.imageUrl } : {}),
+          ...(question.imageUrl && question.imageAlign ? { imageAlign: question.imageAlign } : {}),
+          ...(question.imageUrl && question.imageCaption ? { imageCaption: question.imageCaption } : {}),
+        },
+        {
+          anchor: question,
+          done: "Question duplicated.",
+          misplaced: "Question duplicated, but could not be placed after the original. Drag it to reorder.",
+          failure: "Unable to duplicate.",
+          activate: false,
         },
       );
-      // Insert copy right after the original
-      setQuestions((current) => {
-        const idx = current.findIndex((q) => q.id === question.id);
-        const next = [...current];
-        next.splice(idx + 1, 0, data.question);
-        return next;
-      });
-      setMessage("Question duplicated.");
-    } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : "Unable to duplicate.");
     } finally {
       setSaving(false);
     }
   }
 
-  async function addEditorQuestion(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!formId || !newQuestionLabel.trim()) return;
-    setAddingQuestion(true); setMessage(""); setError("");
-    // Insert right after the selected question (in its section); append when nothing is selected.
-    const anchor = questions.find((q) => q.id === activeQuestionId) ?? null;
+  /**
+   * Create an item on the server and place it right after the anchor (the selected
+   * item by default; the end of the list when there is none). Returns the created
+   * item, or null when the create itself failed.
+   */
+  async function createAfterSelected(
+    payload: Record<string, unknown>,
+    opts: { anchor?: Question | null; done?: string; misplaced?: string; failure?: string; activate?: boolean } = {},
+  ): Promise<Question | null> {
+    if (!formId) return null;
+    setMessage(""); setError("");
+    // Insert right after the anchor (in its section); append when there is none.
+    const anchor = opts.anchor !== undefined ? opts.anchor : (questions.find((q) => q.id === activeQuestionId) ?? null);
     const anchorSectionId = anchor ? (anchor.sectionId ?? sections[0]?.id) : undefined;
     try {
       const data = await api.post<{ question: Question }>(
         `/api/forms/${formId}/questions`,
         {
           ...(anchorSectionId ? { sectionId: anchorSectionId } : {}),
-          label: newQuestionLabel.trim(),
-          type: newQuestionType,
-          required: false,
-          ...(RATING_TYPES.has(newQuestionType) ? { settings: { min: 1, max: 5 } } : {}),
-          ...(newQuestionType === "LINEAR_SCALE" ? { settings: { min: 1, max: 10, minLabel: "Low", maxLabel: "High" } } : {}),
-          ...(CHOICE_TYPES.has(newQuestionType)
-            ? { options: [{ value: "option_1", label: "Option 1" }] }
-            : {}),
-          ...(newQuestionType === "FILE_UPLOAD" ? { settings: { maxFileSizeMB: 5, allowedFileTypes: ["image/*", "application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.openxmlformats-officedocument.presentationml.presentation", "application/msword", "application/vnd.ms-excel", "application/vnd.ms-powerpoint"] } } : {}),
+          ...payload,
         },
       );
       const created: Question = anchorSectionId ? { ...data.question, sectionId: anchorSectionId } : data.question;
@@ -740,16 +751,99 @@ export default function FormEditorPage() {
         if (placed) pushHistory(questions);
       }
       setQuestions((current) => insertAfterId(current, created, placed && anchor ? anchor.id : null));
-      setActiveQuestionId(created.id);
-      setPendingScrollId(created.id);
-      setNewQuestionLabel("");
-      setNewQuestionType("SHORT_TEXT");
-      setShowAddQuestion(false);
-      setMessage(placed ? "Question added." : "Question added, but could not be placed after the selected one. Drag it to reorder.");
+      if (opts.activate !== false) {
+        setActiveQuestionId(created.id);
+        setPendingScrollId(created.id);
+      }
+      setMessage(
+        placed
+          ? (opts.done ?? "Question added.")
+          : (opts.misplaced ?? "Question added, but could not be placed after the selected one. Drag it to reorder."),
+      );
+      return created;
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : "Unable to add question.");
+      setError(err instanceof ApiRequestError ? err.message : (opts.failure ?? "Unable to add question."));
+      return null;
+    }
+  }
+
+  async function addEditorQuestion(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!formId || !newQuestionLabel.trim()) return;
+    setAddingQuestion(true);
+    try {
+      const created = await createAfterSelected({
+        label: newQuestionLabel.trim(),
+        type: newQuestionType,
+        required: false,
+        ...(RATING_TYPES.has(newQuestionType) ? { settings: { min: 1, max: 5 } } : {}),
+        ...(newQuestionType === "LINEAR_SCALE" ? { settings: { min: 1, max: 10, minLabel: "Low", maxLabel: "High" } } : {}),
+        ...(CHOICE_TYPES.has(newQuestionType)
+          ? { options: [{ value: "option_1", label: "Option 1" }] }
+          : {}),
+        ...(newQuestionType === "FILE_UPLOAD" ? { settings: { maxFileSizeMB: 5, allowedFileTypes: ["image/*", "application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.openxmlformats-officedocument.presentationml.presentation", "application/msword", "application/vnd.ms-excel", "application/vnd.ms-powerpoint"] } } : {}),
+      });
+      if (created) {
+        setNewQuestionLabel("");
+        setNewQuestionType("SHORT_TEXT");
+        setShowAddQuestion(false);
+      }
     } finally {
       setAddingQuestion(false);
+    }
+  }
+
+  // Toolbar actions: each inserts right after the selected item.
+  async function addToolbarQuestion() {
+    await createAfterSelected({
+      label: "Untitled question",
+      type: "SINGLE_CHOICE",
+      required: false,
+      options: [{ value: "option_1", label: "Option 1" }],
+    });
+  }
+
+  async function addTextBlock() {
+    await createAfterSelected(
+      { label: "Untitled title", type: "TEXT_BLOCK", required: false },
+      { done: "Title and description added.", misplaced: "Title and description added, but could not be placed after the selected item. Drag it to reorder." },
+    );
+  }
+
+  async function addImageBlock() {
+    const created = await createAfterSelected(
+      { label: "Image", type: "IMAGE_BLOCK", required: false },
+      { done: "Image added.", misplaced: "Image added, but could not be placed after the selected item. Drag it to reorder." },
+    );
+    if (created) pickImageFor(created.id);
+  }
+
+  // ─── Question images ──────────────────────────────────────────────────────
+
+  function pickImageFor(questionId: string) {
+    imageTargetId.current = questionId;
+    imageInputRef.current?.click();
+  }
+
+  async function handleQuestionImageFile(file: File) {
+    const id = imageTargetId.current;
+    imageTargetId.current = null;
+    if (!formId || !id) return;
+    const problem = validateImageFile(file);
+    if (problem) {
+      setImageError({ id, message: problem });
+      return;
+    }
+    setImageError(null);
+    setImageUpload({ id, percent: 0 });
+    try {
+      const url = await uploadEditorImage(formId, file, (percent) => setImageUpload({ id, percent }));
+      const current = questions.find((q) => q.id === id);
+      updateQuestionLocal(id, { imageUrl: url, imageAlign: current?.imageAlign ?? "LEFT" });
+    } catch (err) {
+      setImageError({ id, message: err instanceof Error ? err.message : "Upload failed. Please try again." });
+    } finally {
+      setImageUpload(null);
     }
   }
 
@@ -934,13 +1028,20 @@ export default function FormEditorPage() {
     } finally { setReviewing(false); }
   }
 
-  async function handleCoverUpload(file: File) {
-    if (!form) return;
+  /** `persist` saves the theme right away (header card); the Appearance tab leaves that to its Save button. */
+  async function handleCoverUpload(file: File, persist = false) {
+    if (!formId) return;
     setCoverError("");
+    const problem = validateImageFile(file);
+    if (problem) {
+      setCoverError(problem);
+      return;
+    }
     setUploadingCover(true);
     try {
-      const url = await uploadToCloudinary(form.slug, file);
+      const url = await uploadEditorImage(formId, file);
       setCoverImageUrl(url);
+      if (persist) await saveFormSettings({ preventDefault: () => {} }, { coverImageUrl: url });
     } catch (err) {
       setCoverError(
         err instanceof ApiRequestError
@@ -954,14 +1055,24 @@ export default function FormEditorPage() {
     }
   }
 
-  async function saveFormSettings(event: { preventDefault: () => void }) {
+  async function removeBanner() {
+    setCoverError("");
+    setCoverImageUrl("");
+    await saveFormSettings({ preventDefault: () => {} }, { coverImageUrl: "" });
+  }
+
+  async function saveFormSettings(
+    event: { preventDefault: () => void },
+    overrides?: { coverImageUrl?: string },
+  ) {
     event.preventDefault();
     if (!formId) return;
     setSavingSettings(true); setError(""); setMessage("");
     // Build the theme from set fields only. An empty object clears all theming
     // back to inherit/default (the API does a whole-object replace on `theme`).
     const theme: Record<string, string> = {};
-    if (coverImageUrl) theme.coverImageUrl = coverImageUrl;
+    const coverToSave = overrides?.coverImageUrl ?? coverImageUrl;
+    if (coverToSave) theme.coverImageUrl = coverToSave;
     if (accentColor) theme.accentColor = accentColor;
     if (backgroundColor) theme.backgroundColor = backgroundColor;
     if (fontFamily) theme.fontFamily = fontFamily;
@@ -1379,6 +1490,54 @@ export default function FormEditorPage() {
       {/* ── Form Header Card (accent-bordered) ── */}
       <section className="editor-form-header-card">
         <div className="editor-form-header-accent" />
+        {/* Hidden pickers: banner (header card) and per-question images. */}
+        <input
+          ref={coverInputRef}
+          type="file"
+          className="sr-only"
+          tabIndex={-1}
+          aria-hidden="true"
+          accept={IMAGE_ACCEPT}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) void handleCoverUpload(file, true);
+            e.target.value = "";
+          }}
+        />
+        <input
+          ref={imageInputRef}
+          type="file"
+          className="sr-only"
+          tabIndex={-1}
+          aria-hidden="true"
+          accept={IMAGE_ACCEPT}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) void handleQuestionImageFile(file);
+            e.target.value = "";
+          }}
+        />
+        <div className="editor-form-banner">
+          {coverImageUrl ? (
+            <>
+              <img className="editor-form-banner-img" src={coverImageUrl} alt="Form banner" />
+              <div className="editor-form-banner-actions">
+                <button type="button" className="editor-banner-btn" disabled={uploadingCover} onClick={() => coverInputRef.current?.click()}>
+                  Change
+                </button>
+                <button type="button" className="editor-banner-btn" disabled={uploadingCover} onClick={() => void removeBanner()}>
+                  Remove
+                </button>
+              </div>
+            </>
+          ) : (
+            <button type="button" className="editor-banner-add" disabled={uploadingCover} onClick={() => coverInputRef.current?.click()}>
+              <ImageIcon size={16} /> {uploadingCover ? "Uploading..." : "Add image"}
+            </button>
+          )}
+          {uploadingCover && coverImageUrl ? <small className="muted">Uploading...</small> : null}
+          {coverError ? <p className="submit-error" role="alert">{coverError}</p> : null}
+        </div>
         <div className="editor-form-header-content">
           <h2 className="editor-form-header-title">{form.title}</h2>
           {editingDesc ? (
@@ -1583,6 +1742,9 @@ export default function FormEditorPage() {
                           onChange={updateQuestionLocal}
                           onDelete={() => void deleteEditorQuestion(question.id)}
                           onDuplicate={() => void duplicateQuestion(question)}
+                          onAddImage={() => pickImageFor(question.id)}
+                          imageUploadPercent={imageUpload?.id === question.id ? imageUpload.percent : null}
+                          imageError={imageError?.id === question.id ? imageError.message : ""}
                         />
                       ))}
 
@@ -1603,25 +1765,25 @@ export default function FormEditorPage() {
             </div>
 
             {/* Floating creation toolbar */}
-            <div className="editor-floating-toolbar" ref={toolbarRef} style={{ ["--toolbar-top" as string]: `${toolbarTop}px` }}>
-              <button
-                className="editor-floating-btn"
-                type="button"
-                onClick={() => setShowAddQuestion(true)}
-                title="Add question"
-              >
-                <span>＋</span>
-                <span className="editor-floating-label">Question</span>
-              </button>
-              <button
-                className="editor-floating-btn"
-                type="button"
-                onClick={() => void addSection()}
-                title="Add section"
-              >
-                <span>§</span>
-                <span className="editor-floating-label">Section</span>
-              </button>
+            <div className="editor-floating-toolbar" role="toolbar" aria-orientation="vertical" aria-label="Add to form" ref={toolbarRef} style={{ ["--toolbar-top" as string]: `${toolbarTop}px` }}>
+              {([
+                { id: "question", label: "Add question", icon: <PlusIcon size={22} />, run: addToolbarQuestion },
+                { id: "text", label: "Add title and description", icon: <TextBlockIcon size={22} />, run: addTextBlock },
+                { id: "image", label: "Add image", icon: <ImageIcon size={22} />, run: addImageBlock },
+                { id: "section", label: "Add section", icon: <SectionIcon size={22} />, run: addSection },
+              ]).map((action) => (
+                <button
+                  key={action.id}
+                  className="editor-floating-btn"
+                  type="button"
+                  aria-label={action.label}
+                  title={action.label}
+                  data-tooltip={action.label}
+                  onClick={() => void action.run()}
+                >
+                  {action.icon}
+                </button>
+              ))}
             </div>
           </div>
         )}
@@ -2001,6 +2163,8 @@ function QuestionCard({
   onMove,
   onEditSectionLogic,
   onAddImage,
+  imageUploadPercent = null,
+  imageError = "",
 }: {
   question: Question;
   index: number;
@@ -2030,8 +2194,11 @@ function QuestionCard({
   onMove: (delta: -1 | 1) => void;
   /** Open the skip-logic editor of this question's section. */
   onEditSectionLogic: () => void;
-  /** When provided, an image button is shown (wired up by the image feature). */
+  /** Opens the image file picker for this card (add or change). */
   onAddImage?: () => void;
+  /** Upload progress (0-100) while this card's image uploads, else null. */
+  imageUploadPercent?: number | null;
+  imageError?: string;
 }) {
   const isChoice = CHOICE_TYPES.has(question.type);
   const isRating = RATING_TYPES.has(question.type);
@@ -2116,7 +2283,7 @@ function QuestionCard({
       onSelect: onEditSectionLogic,
       hidden: !answerable || sectionCount <= 1,
     },
-    { id: "image", label: "Add image", onSelect: onAddImage, hidden: !onAddImage },
+    { id: "image", label: question.imageUrl ? "Change image" : "Add image", onSelect: onAddImage, hidden: !onAddImage || !answerable },
   ];
 
   const titleText = previewLabelWithPlaceholders(question.label, allQuestions) || "Untitled question";
@@ -2178,9 +2345,12 @@ function QuestionCard({
               <span className="editor-question-badges">
                 {conditionCount > 0 ? <span className="editor-badge">Condition</span> : null}
                 {sectionRuleCount > 0 ? <span className="editor-badge">Logic</span> : null}
-                {question.imageUrl ? <span className="editor-badge">Image</span> : null}
+                {question.imageUrl && question.type !== "IMAGE_BLOCK" ? <span className="editor-badge">Image</span> : null}
               </span>
             </span>
+            {question.imageUrl ? (
+              <img className="editor-summary-thumb" src={question.imageUrl} alt="" loading="lazy" />
+            ) : null}
             {isChoice ? (
               <span className="editor-question-summary-options">
                 {optionPreview.map((o) => (
@@ -2216,12 +2386,12 @@ function QuestionCard({
                 onClick={(e) => e.stopPropagation()}
                 autoFocus
               />
-              {onAddImage ? (
+              {onAddImage && answerable ? (
                 <button
                   type="button"
                   className="editor-icon-btn"
-                  aria-label="Add image"
-                  title="Add image"
+                  aria-label={question.imageUrl ? "Change image" : "Add image"}
+                  title={question.imageUrl ? "Change image" : "Add image"}
                   onClick={(e) => { e.stopPropagation(); onAddImage(); }}
                 >
                   <ImageIcon />
@@ -2264,6 +2434,37 @@ function QuestionCard({
                 placeholder="Description (optional)"
                 onClick={(e) => e.stopPropagation()}
               />
+            ) : null}
+
+            {/* Inline image (questions) or the image itself (image blocks) */}
+            {question.type !== "TEXT_BLOCK" && onAddImage ? (
+              question.imageUrl ? (
+                <QuestionImageEditor
+                  question={question}
+                  onChange={onChange}
+                  onPick={onAddImage}
+                  uploadPercent={imageUploadPercent}
+                  error={imageError}
+                />
+              ) : question.type === "IMAGE_BLOCK" ? (
+                <div className="editor-image-drop">
+                  <button
+                    type="button"
+                    className="secondary-button compact"
+                    disabled={imageUploadPercent !== null}
+                    onClick={(e) => { e.stopPropagation(); onAddImage(); }}
+                  >
+                    <ImageIcon size={16} /> {imageUploadPercent !== null ? `Uploading... ${imageUploadPercent}%` : "Upload image"}
+                  </button>
+                  <small className="muted">PNG, JPG, GIF or WebP, up to 5 MB.</small>
+                  {imageError ? <p className="submit-error" role="alert">{imageError}</p> : null}
+                </div>
+              ) : imageUploadPercent !== null || imageError ? (
+                <div className="editor-image-status">
+                  {imageUploadPercent !== null ? <small className="muted">Uploading... {imageUploadPercent}%</small> : null}
+                  {imageError ? <p className="submit-error" role="alert">{imageError}</p> : null}
+                </div>
+              ) : null
             ) : null}
 
             {/* Answer piping: insert a reference to an EARLIER question's answer */}
@@ -2614,6 +2815,66 @@ function QuestionCard({
         ) : null}
       </div>
     </article>
+  );
+}
+
+// ─── Question image editor ────────────────────────────────────────────────────
+
+/** Image of a question or image block with its align/change/remove/caption menu. */
+function QuestionImageEditor({
+  question,
+  onChange,
+  onPick,
+  uploadPercent,
+  error,
+}: {
+  question: Question;
+  onChange: (id: string, patch: Partial<Question>) => void;
+  onPick: () => void;
+  uploadPercent: number | null;
+  error: string;
+}) {
+  const [showCaption, setShowCaption] = useState(Boolean(question.imageCaption));
+  const align = question.imageAlign ?? "LEFT";
+  const items: PopoverMenuItem[] = [
+    { id: "left", label: "Left align", checked: align === "LEFT", onSelect: () => onChange(question.id, { imageAlign: "LEFT" }) },
+    { id: "center", label: "Center align", checked: align === "CENTER", onSelect: () => onChange(question.id, { imageAlign: "CENTER" }) },
+    { id: "right", label: "Right align", checked: align === "RIGHT", onSelect: () => onChange(question.id, { imageAlign: "RIGHT" }) },
+    { id: "change", label: "Change", onSelect: onPick },
+    {
+      id: "remove",
+      label: "Remove",
+      onSelect: () => {
+        setShowCaption(false);
+        onChange(question.id, { imageUrl: null, imageAlign: undefined, imageCaption: null });
+      },
+    },
+    { id: "caption", label: "Add a caption", onSelect: () => setShowCaption(true), hidden: showCaption },
+  ];
+  return (
+    <div className="editor-image" data-align={align} onClick={(e) => e.stopPropagation()}>
+      <div className="editor-image-frame">
+        <PopoverMenu
+          label="Image options"
+          trigger={<img src={question.imageUrl ?? ""} alt={question.imageCaption || question.label || "Question image"} />}
+          items={items}
+          triggerClassName="editor-image-trigger"
+        />
+      </div>
+      {uploadPercent !== null ? <small className="muted">Uploading... {uploadPercent}%</small> : null}
+      {showCaption || question.imageCaption ? (
+        <input
+          type="text"
+          className="editor-image-caption"
+          aria-label="Image caption"
+          placeholder="Caption"
+          maxLength={300}
+          value={question.imageCaption ?? ""}
+          onChange={(e) => onChange(question.id, { imageCaption: e.target.value })}
+        />
+      ) : null}
+      {error ? <p className="submit-error" role="alert">{error}</p> : null}
+    </div>
   );
 }
 

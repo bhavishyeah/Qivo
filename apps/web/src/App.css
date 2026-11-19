@@ -4338,3 +4338,182 @@ form {
   .question-type-select { flex: 1; min-width: 0; }
   .editor-question-footer { margin: 16px -14px 0; padding-left: 14px; flex-wrap: wrap; }
 }
+
+/* ── Inline images, banner, blocks, vertical toolbar (FEAT-004) ── */
+
+/* Question / block image with its options menu */
+.editor-image { margin: 10px 0 4px; display: grid; gap: 6px; }
+.editor-image[data-align="CENTER"] { justify-items: center; }
+.editor-image[data-align="RIGHT"] { justify-items: end; }
+.editor-image[data-align="LEFT"] { justify-items: start; }
+
+.editor-image-frame { max-width: 100%; }
+
+.editor-image-trigger {
+  display: block;
+  max-width: 100%;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--qivo-radius-control);
+  background: none;
+  cursor: pointer;
+  line-height: 0;
+}
+
+.editor-image-trigger img {
+  max-width: 100%;
+  max-height: 280px;
+  height: auto;
+  border-radius: var(--qivo-radius-control);
+}
+
+.editor-image-trigger:hover,
+.editor-image-trigger[aria-expanded="true"] { border-color: var(--editor-accent, var(--qivo-primary)); }
+
+.editor-image-trigger:focus-visible {
+  outline: 2px solid var(--editor-accent, var(--qivo-primary));
+  outline-offset: 2px;
+}
+
+.editor-image-caption {
+  width: 100%;
+  max-width: 420px;
+  border: 0;
+  border-bottom: 1px solid var(--qivo-input-border);
+  background: transparent;
+  color: var(--qivo-text);
+  padding: 4px 2px;
+  font-size: 0.85rem;
+}
+
+.editor-image-caption:focus {
+  outline: none;
+  border-bottom-color: var(--editor-accent, var(--qivo-primary));
+}
+
+.editor-image-drop,
+.editor-image-status {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  margin: 10px 0 4px;
+}
+
+.editor-image-drop {
+  padding: 18px 14px;
+  border: 2px dashed var(--qivo-border-strong);
+  border-radius: var(--qivo-radius-control);
+  background: var(--qivo-surface);
+}
+
+.editor-summary-thumb {
+  display: block;
+  max-width: 96px;
+  max-height: 48px;
+  margin-top: 6px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+/* Banner in the header card */
+.editor-form-banner { position: relative; }
+
+.editor-form-banner-img {
+  display: block;
+  width: 100%;
+  max-height: 160px;
+  object-fit: cover;
+}
+
+.editor-form-banner-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 6px;
+}
+
+.editor-banner-btn,
+.editor-banner-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--qivo-border);
+  border-radius: var(--qivo-radius-control);
+  background: var(--qivo-card-bg);
+  color: var(--qivo-text);
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.editor-banner-btn:hover:not(:disabled),
+.editor-banner-add:hover:not(:disabled) { background: var(--qivo-surface-2); }
+.editor-banner-btn:disabled,
+.editor-banner-add:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.editor-form-banner > .editor-banner-add { margin: 10px 0 0 28px; }
+.editor-form-banner > small,
+.editor-form-banner > .submit-error { display: block; margin: 6px 28px 0; }
+
+/* Vertical icon toolbar with tooltips */
+.editor-floating-toolbar .editor-floating-btn {
+  position: relative;
+  background: var(--qivo-card-bg);
+  border-color: var(--qivo-border);
+  color: var(--qivo-text-secondary);
+}
+
+.editor-floating-toolbar .editor-floating-btn:hover {
+  background: var(--qivo-surface-2);
+  border-color: var(--editor-accent, var(--qivo-primary));
+  color: var(--editor-accent, var(--qivo-primary));
+}
+
+.editor-floating-toolbar .editor-floating-btn:focus-visible {
+  outline: 2px solid var(--editor-accent, var(--qivo-primary));
+  outline-offset: 2px;
+}
+
+.editor-floating-btn[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  right: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: #1e293b;
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  z-index: 40;
+}
+
+.editor-floating-btn[data-tooltip]:hover::after,
+.editor-floating-btn[data-tooltip]:focus-visible::after { opacity: 1; }
+
+@media (max-width: 768px) {
+  .editor-floating-btn[data-tooltip]::after {
+    right: auto;
+    left: 50%;
+    top: auto;
+    bottom: calc(100% + 8px);
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .editor-floating-btn[data-tooltip]::after { transition: none; }
+}
+
+[data-color-scheme="dark"] .editor-floating-btn[data-tooltip]::after {
+  background: var(--qivo-surface-2);
+  color: var(--qivo-text);
+  border: 1px solid var(--qivo-border);
+}
