@@ -7,6 +7,7 @@ import {
   isValidUtr,
 } from "./manualPayment.js";
 import { validateQuestionImageUrl } from "./questionImage.js";
+import { validateQuestionSettings } from "./questionTypes.js";
 
 // Curated Google Fonts allow-list. This is the AUTHORITATIVE copy; it is
 // enforced server-side via z.enum below (the only injection surface, since
@@ -222,6 +223,9 @@ const questionTypeSchema = z.enum([
   "SIGNATURE",
   "LINEAR_SCALE",
   "MULTI_ENTRY",
+  "TIME",
+  "MULTIPLE_CHOICE_GRID",
+  "CHECKBOX_GRID",
   "TEXT_BLOCK",
   "IMAGE_BLOCK",
 ]);
@@ -234,11 +238,24 @@ const questionImageUrlSchema = z
     message: "must be an image uploaded through the form editor",
   });
 const imageAlignSchema = z.enum(["LEFT", "CENTER", "RIGHT"]);
+// Optional display width of a question image, as a percent of the form width.
+const imageWidthSchema = z.number().int().min(10).max(100);
 
 const questionOptionSchema = z.object({
   value: z.string().trim().min(1).max(100),
   label: z.string().trim().min(1).max(200),
 });
+
+// Scale/rating bounds and grid rows/columns are checked whenever a question that
+// carries both a type and settings is written.
+function refineQuestionSettings(
+  q: { type?: string | undefined; settings?: Record<string, unknown> | undefined },
+  ctx: z.RefinementCtx,
+) {
+  if (!q.type || !q.settings) return;
+  const problem = validateQuestionSettings(q.type, q.settings);
+  if (problem) ctx.addIssue({ code: "custom", message: problem, path: ["settings"] });
+}
 
 export const createQuestionSchema = z.object({
   label: z.string().trim().min(1).max(500),
@@ -250,8 +267,9 @@ export const createQuestionSchema = z.object({
   sectionId: z.string().min(1).optional(),
   imageUrl: questionImageUrlSchema.optional(),
   imageAlign: imageAlignSchema.optional(),
+  imageWidth: imageWidthSchema.optional(),
   imageCaption: z.string().trim().max(300).optional(),
-});
+}).superRefine(refineQuestionSettings);
 
 export const createSectionSchema = z.object({
   title: z.string().trim().min(1).max(200).optional(),
@@ -287,8 +305,9 @@ export const updateQuestionSchema = z.object({
   })).max(10).nullable().optional(),
   imageUrl: questionImageUrlSchema.nullable().optional(),
   imageAlign: imageAlignSchema.optional(),
+  imageWidth: imageWidthSchema.nullable().optional(),
   imageCaption: z.string().trim().max(300).nullable().optional(),
-});
+}).superRefine(refineQuestionSettings);
 
 export const reorderQuestionsSchema = z.object({
   questionIds: z.array(z.string().min(1)).min(1).max(200),

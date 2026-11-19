@@ -59,6 +59,16 @@ import {
 import { TEMPLATES } from "./templates.js";
 import { CLOUDINARY_DELIVERY_HOSTS } from "./questionImage.js";
 import { answerableQuestions, isAnswerableQuestion } from "./questionKinds.js";
+import {
+  isGridAnswerMissing,
+  isGridType,
+  isValidScaleAnswer,
+  isValidTime,
+  parseGridConfig,
+  scaleBounds,
+  validateGridAnswer,
+  validateQuestionSettings,
+} from "./questionTypes.js";
 import type {
   UpdateFormSettingsInput,
   SaveDraftInput,
@@ -80,6 +90,9 @@ export type QuestionType =
   | "SIGNATURE"
   | "LINEAR_SCALE"
   | "MULTI_ENTRY"
+  | "TIME"
+  | "MULTIPLE_CHOICE_GRID"
+  | "CHECKBOX_GRID"
   | "TEXT_BLOCK"
   | "IMAGE_BLOCK";
 
@@ -99,6 +112,7 @@ type FormQuestion = {
   conditions?: Array<{ questionId: string; operator: string; value?: string | undefined }>;
   imageUrl?: string | null;
   imageAlign?: "LEFT" | "CENTER" | "RIGHT";
+  imageWidth?: number;
   imageCaption?: string | null;
 };
 
@@ -1133,6 +1147,7 @@ export async function createQuestion(
     sectionId?: string | undefined;
     imageUrl?: string | undefined;
     imageAlign?: "LEFT" | "CENTER" | "RIGHT" | undefined;
+    imageWidth?: number | undefined;
     imageCaption?: string | undefined;
   },
 ) {
@@ -1184,6 +1199,7 @@ export async function createQuestion(
       : {}),
     ...(input.imageUrl !== undefined ? { imageUrl: input.imageUrl } : {}),
     ...(input.imageAlign !== undefined ? { imageAlign: input.imageAlign } : {}),
+    ...(input.imageWidth !== undefined ? { imageWidth: input.imageWidth } : {}),
     ...(input.imageCaption !== undefined
       ? { imageCaption: input.imageCaption.trim() }
       : {}),
@@ -1316,19 +1332,21 @@ export async function deleteSection(
 
 /**
  * Apply image fields from an update to a stored question. Removing the image
- * (imageUrl: null) also drops imageAlign/imageCaption so they can't go stale.
+ * (imageUrl: null) also drops imageAlign/imageWidth/imageCaption so they can't go stale.
  */
 export function applyImageFieldUpdates(
   question: FormQuestion,
   input: {
     imageUrl?: string | null | undefined;
     imageAlign?: "LEFT" | "CENTER" | "RIGHT" | undefined;
+    imageWidth?: number | null | undefined;
     imageCaption?: string | null | undefined;
   },
 ): void {
   if (input.imageUrl === null) {
     delete question.imageUrl;
     delete question.imageAlign;
+    delete question.imageWidth;
     delete question.imageCaption;
     return;
   }
@@ -1339,6 +1357,14 @@ export function applyImageFieldUpdates(
 
   if (input.imageAlign !== undefined) {
     question.imageAlign = input.imageAlign;
+  }
+
+  if (input.imageWidth !== undefined) {
+    if (input.imageWidth === null) {
+      delete question.imageWidth;
+    } else {
+      question.imageWidth = input.imageWidth;
+    }
   }
 
   if (input.imageCaption !== undefined) {
@@ -1375,6 +1401,7 @@ export async function updateQuestion(
       | undefined;
     imageUrl?: string | null | undefined;
     imageAlign?: "LEFT" | "CENTER" | "RIGHT" | undefined;
+    imageWidth?: number | null | undefined;
     imageCaption?: string | null | undefined;
   },
 ) {
@@ -1623,6 +1650,25 @@ export async function publishForm(
     );
     error.name = "FORM_NOT_READY";
     throw error;
+  }
+  for (const question of questions) {
+    const problem = validateQuestionSettings(question.type, question.settings);
+    if (problem) {
+      const error = new Error(`Question "${question.label}": ${problem}`);
+      error.name = "FORM_NOT_READY";
+      throw error;
+    }
+  }
+  // Reopening a closed form whose scheduled close date has already passed
+  // would be closed again by the next sweep, so ask the owner to fix it first.
+  if (form.status === "CLOSED" && schema.settings.scheduledCloseAt) {
+    if (new Date(schema.settings.scheduledCloseAt) <= new Date()) {
+      const error = new Error(
+        "The scheduled close date has passed. Update or clear it in Settings before reopening.",
+      );
+      error.name = "FORM_NOT_READY";
+      throw error;
+    }
   }
 
   // Snapshot the version and flip status to PUBLISHED atomically, so we can
@@ -2390,12 +2436,27 @@ function validateAnswerAgainstQuestion(
         return "invalid URL";
       }
 
-    case "NUMBER":
-    case "RATING":
-    case "LINEAR_SCALE": {
+    case "NUMBER": {
       const num = typeof value === "number" ? value : Number(value);
       if (Number.isNaN(num)) return "expected a number";
       return null;
+    }
+    case "RATING":
+    case "LINEAR_SCALE": {
+      if (!isValidScaleAnswer(question.type, question.settings, value)) {
+        const { min, max } = scaleBounds(question.type, question.settings);
+        return `expected a whole number from ${min} to ${max}`;
+      }
+      return null;
+    }
+    case "TIME":
+      if (!isValidTime(value)) return "invalid time (expected HH:MM)";
+      return null;
+    case "MULTIPLE_CHOICE_GRID":
+    case "CHECKBOX_GRID": {
+      const config = parseGridConfig(question.settings);
+      if (!config) return "grid is not configured";
+      return validateGridAnswer(question.type, config, value);
     }
 
     case "DATE":
@@ -2579,6 +2640,8 @@ export function validateSubmission(
             (answer as unknown[]).every(
               (v) => v === "" || v === null || v === undefined,
             )
+          : isGridType(question.type)
+          ? isGridAnswerMissing(parseGridConfig(question.settings), answer)
           : answer === undefined || answer === null || answer === "";
       if (isMissing) {
         missingRequiredQuestion = question;
@@ -4669,13 +4732,17 @@ type TextReport = {
   sample: string[]; // up to 20 non-empty answers
 };
 
+type GridReport = {
+  kind: "grid";
+  rows: Array<{ row: string; cells: Array<{ column: string; count: number }> }>;
+};
 type QuestionReport = {
   questionId: string;
   label: string;
   type: QuestionType;
   answered: number;
   skipped: number;
-} & (ChoiceReport | RatingReport | NumberReport | TextReport);
+} & (ChoiceReport | RatingReport | NumberReport | TextReport | GridReport);
 
 function isAnswered(value: unknown): boolean {
   if (value === undefined || value === null || value === "") return false;
@@ -4992,6 +5059,20 @@ export async function getFormReport(
       return { ...base, kind: "choice", options };
     }
 
+    if (isGridType(question.type)) {
+      const config = parseGridConfig(question.settings);
+      const rows = (config?.rows ?? []).map((row) => ({
+        row: row.label,
+        cells: (config?.columns ?? []).map((col) => ({
+          column: col.label,
+          count: answers.filter((answer) => {
+            const cell = (answer as Record<string, unknown> | null)?.[row.value];
+            return Array.isArray(cell) ? cell.includes(col.value) : cell === col.value;
+          }).length,
+        })),
+      }));
+      return { ...base, kind: "grid", rows };
+    }
     if (question.type === "RATING" || question.type === "LINEAR_SCALE") {
       const min = Number(question.settings?.["min"] ?? 1);
       const max = Number(question.settings?.["max"] ?? 5);

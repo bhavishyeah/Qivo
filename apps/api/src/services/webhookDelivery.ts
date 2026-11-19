@@ -20,6 +20,7 @@ import { isIP } from "node:net";
 
 import prisma from "../db/prisma.js";
 import { WebhookDeliveryStatus } from "../generated/prisma/client.js";
+import { parseGridConfig } from "../modules/forms/questionTypes.js";
 
 // ── Constants (module-level; no new env vars) ────────────────────────────────
 
@@ -84,6 +85,7 @@ export type PayloadQuestion = {
   label: string;
   type?: string;
   options?: PayloadQuestionOption[];
+  settings?: Record<string, unknown> | undefined;
 };
 
 export type ResponseCreatedPayload = {
@@ -133,8 +135,23 @@ function renderAnswerLabel(
       if (raw === "yes" || raw === true) return "Yes";
       if (raw === "no" || raw === false) return "No";
       return raw;
+    case "MULTIPLE_CHOICE_GRID":
+    case "CHECKBOX_GRID": {
+      // Grid answers are { rowValue: colValue | colValue[] }; render both sides
+      // as labels so receivers get { "Row label": "Column label" }.
+      const config = parseGridConfig(question.settings);
+      if (!config || typeof raw !== "object" || raw === null || Array.isArray(raw)) return raw;
+      const out: Record<string, unknown> = {};
+      for (const [row, cell] of Object.entries(raw as Record<string, unknown>)) {
+        const rowLabel = config.rows.find((r) => r.value === row)?.label ?? row;
+        const colLabel = (v: unknown) =>
+          config.columns.find((c) => c.value === v)?.label ?? v;
+        out[rowLabel] = Array.isArray(cell) ? cell.map(colLabel) : colLabel(cell);
+      }
+      return out;
+    }
     default:
-      // Text/number/date/MULTI_ENTRY/FILE_UPLOAD/SIGNATURE: pass through.
+      // Text/number/date/time/MULTI_ENTRY/FILE_UPLOAD/SIGNATURE: pass through.
       return raw;
   }
 }

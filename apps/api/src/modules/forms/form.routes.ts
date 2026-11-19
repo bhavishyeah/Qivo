@@ -468,6 +468,9 @@ formRouter.post(
           ...(input.imageAlign !== undefined
             ? { imageAlign: input.imageAlign }
             : {}),
+          ...(input.imageWidth !== undefined
+            ? { imageWidth: input.imageWidth }
+            : {}),
           ...(input.imageCaption !== undefined
             ? { imageCaption: input.imageCaption }
             : {}),
@@ -673,6 +676,9 @@ formRouter.patch(
             : {}),
           ...(input.imageAlign !== undefined
             ? { imageAlign: input.imageAlign }
+            : {}),
+          ...(input.imageWidth !== undefined
+            ? { imageWidth: input.imageWidth }
             : {}),
           ...(input.imageCaption !== undefined
             ? { imageCaption: input.imageCaption }
