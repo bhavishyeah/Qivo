@@ -4517,3 +4517,57 @@ form {
   color: var(--qivo-text);
   border: 1px solid var(--qivo-border);
 }
+
+/* ── Appearance theme applied to the Builder canvas (FEAT-005) ───────── */
+
+.editor-themed {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--editor-bg, transparent);
+  font-family: var(--editor-font, inherit);
+}
+
+.editor-themed button,
+.editor-themed input,
+.editor-themed textarea,
+.editor-themed select {
+  font-family: inherit;
+}
+
+.editor-themed .editor-form-header-accent {
+  background: linear-gradient(90deg, var(--editor-accent, #2563eb), var(--editor-accent-soft, #7c3aed));
+}
+
+.editor-themed .editor-form-header-desc-btn:focus-visible {
+  outline-color: var(--editor-accent, var(--qivo-primary));
+}
+
+.editor-themed .primary-button,
+.editor-themed .submit-button {
+  background: var(--editor-accent, #2563eb);
+  color: var(--editor-accent-contrast, #fff);
+}
+
+.editor-themed .primary-button:hover,
+.editor-themed .submit-button:hover:not(:disabled) {
+  background: var(--editor-accent, #1d4ed8);
+  filter: brightness(0.92);
+}
+
+.editor-themed .editor-checkbox input,
+.editor-themed .choice-item input {
+  accent-color: var(--editor-accent, #2563eb);
+}
+
+/* Dark mode: a light custom background never applies, and the accent is
+   lifted for contrast. Consumers all read --editor-accent, so it is
+   overridden here (important beats the inline custom property). When no
+   accent is set --editor-accent-dark is undefined and consumers fall back
+   to --qivo-primary. */
+[data-color-scheme="dark"] .editor-themed {
+  --editor-bg: var(--qivo-page-bg) !important;
+  --editor-accent: var(--editor-accent-dark) !important;
+  --editor-accent-soft: var(--editor-accent-dark) !important;
+}

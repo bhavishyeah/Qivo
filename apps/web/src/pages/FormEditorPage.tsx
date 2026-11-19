@@ -1,14 +1,17 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type DragEvent,
   type FormEvent,
 } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, ApiRequestError } from "../lib/api";
 import { PIPING_TOKEN_RE } from "../lib/piping";
+import { buildEditorThemeVars } from "../lib/editorTheme";
 import { computeToolbarTop, insertAfterId, moveItem, shouldCollapseOnPointerDown } from "../lib/editorSelection";
 import { uploadEditorImage, validateImageFile } from "../lib/upload";
 import WebhooksTabPanel from "../components/WebhooksTabPanel";
@@ -204,6 +207,14 @@ export default function FormEditorPage() {
   const [fontFamily, setFontFamily] = useState("");
   const [uploadingCover, setUploadingCover] = useState(false);
   const [coverError, setCoverError] = useState("");
+  // Live Appearance values -> CSS vars scoped to the Builder canvas.
+  const editorThemeVars = useMemo(
+    () => buildEditorThemeVars({ accent: accentColor, background: backgroundColor, fontFamily }),
+    [accentColor, backgroundColor, fontFamily],
+  );
+  useEffect(() => {
+    ensureFontLoaded(fontFamily || undefined);
+  }, [fontFamily]);
   // Per-question image upload (one shared hidden file input).
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const coverInputRef = useRef<HTMLInputElement | null>(null);
@@ -1427,7 +1438,7 @@ export default function FormEditorPage() {
 
       {/* ── TAB: Builder ── */}
       {activeTab === "builder" ? (
-        <>
+        <div className="editor-themed" style={editorThemeVars as CSSProperties}>
 
       {/* ── Review panel (admin) ── */}
       {canReview ? (
@@ -1792,7 +1803,7 @@ export default function FormEditorPage() {
       {/* ── Version history ── */}
       <VersionHistory formId={formId!} />
 
-        </>
+        </div>
       ) : null}
 
       {/* ── TAB: Responses ── */}
