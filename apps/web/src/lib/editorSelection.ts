@@ -71,3 +71,25 @@ export function computeToolbarTop(args: {
   }
   return Math.round(Math.min(Math.max(0, top), maxTop));
 }
+/**
+ * Delays `action` by `ms` and lets a later `cancel()` stop it. Used so the
+ * floating toolbar only resets when the pointer has really left the builder
+ * area (cards + toolbar), not while crossing the gap between a card and it.
+ */
+export function createLeaveDelay(action: () => void, ms: number) {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const cancel = () => {
+    if (timer !== null) {
+      clearTimeout(timer);
+      timer = null;
+    }
+  };
+  const schedule = () => {
+    cancel();
+    timer = setTimeout(() => {
+      timer = null;
+      action();
+    }, ms);
+  };
+  return { schedule, cancel };
+}

@@ -12,7 +12,7 @@ import { Link, useParams } from "react-router-dom";
 import { api, ApiRequestError } from "../lib/api";
 import { PIPING_TOKEN_RE } from "../lib/piping";
 import { buildEditorThemeVars } from "../lib/editorTheme";
-import { computeToolbarTop, insertAfterId, moveItem, shouldCollapseOnPointerDown } from "../lib/editorSelection";
+import { computeToolbarTop, createLeaveDelay, insertAfterId, moveItem, shouldCollapseOnPointerDown } from "../lib/editorSelection";
 import { uploadEditorImage, validateImageFile } from "../lib/upload";
 import WebhooksTabPanel from "../components/WebhooksTabPanel";
 import { ManualPaymentCell, ManualPaymentSummaryBar } from "../components/ManualPaymentReview";
@@ -28,12 +28,19 @@ import { answerableQuestions, displayNumber, isAnswerable } from "../lib/questio
 import PopoverMenu, { type PopoverMenuItem } from "../components/PopoverMenu";
 import QuestionTypeSelect from "../components/QuestionTypeSelect";
 import { GridEditor } from "../components/GridEditor";
+import { IMAGE_SIZES } from "../components/QuestionImage";
+import Modal from "../components/Modal";
+import { InvitePeople } from "../components/InvitePeople";
 import { defaultSettingsFor, isGridType } from "../lib/questionTypes";
 import {
   DuplicateIcon,
   GripIcon,
   ImageIcon,
   KebabIcon,
+  InviteIcon,
+  LinkIcon,
+  LockIcon,
+  UnlockIcon,
   PlusIcon,
   QuestionTypeIcon,
   SectionIcon,
@@ -253,6 +260,13 @@ export default function FormEditorPage() {
   const [toolbarTop, setToolbarTop] = useState(0);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
+  const [confirmClose, setConfirmClose] = useState(false);
+  const [showInvite, setShowInvite] = useState(false);
+  const [showPublished, setShowPublished] = useState(false);
+  // The toolbar stays on the last hovered card while the pointer is anywhere in
+  // the builder area (cards, gaps, toolbar); it resets ~150ms after leaving it.
+  const toolbarLeave = useMemo(() => createLeaveDelay(() => setHoveredQuestionId(null), 150), []);
+  useEffect(() => () => toolbarLeave.cancel(), [toolbarLeave]);
   // Newly inserted card to scroll into view once it has rendered.
   const [pendingScrollId, setPendingScrollId] = useState<string | null>(null);
   const [pendingSectionScroll, setPendingSectionScroll] = useState<string | null>(null);
@@ -650,6 +664,7 @@ export default function FormEditorPage() {
             imageUrl: question.imageUrl ?? null,
             imageCaption: question.imageUrl ? (question.imageCaption || null) : null,
             ...(question.imageUrl && question.imageAlign ? { imageAlign: question.imageAlign } : {}),
+            imageWidth: question.imageUrl ? (question.imageWidth ?? null) : null,
           });
         } catch (err) {
           pendingSaves.current.set(question.id, question);
@@ -712,6 +727,7 @@ export default function FormEditorPage() {
           ...(question.settings ? { settings: question.settings } : {}),
           ...(question.imageUrl ? { imageUrl: question.imageUrl } : {}),
           ...(question.imageUrl && question.imageAlign ? { imageAlign: question.imageAlign } : {}),
+          ...(question.imageUrl && question.imageWidth ? { imageWidth: question.imageWidth } : {}),
           ...(question.imageUrl && question.imageCaption ? { imageCaption: question.imageCaption } : {}),
         },
         {
@@ -1281,24 +1297,40 @@ export default function FormEditorPage() {
     } finally { setSavingSettings(false); }
   }
 
+  // Publishes a draft/approved form, or reopens a closed one (same endpoint, same
+  // validation, and a fresh version snapshot).
   async function publishEditorForm() {
     if (!formId) return;
+    const reopening = form?.status === "CLOSED";
     setSaving(true); setMessage(""); setError("");
     try {
+      // Flush pending autosaves first so the published version has the latest edits.
+      await flushAutosaves();
       await api.post(`/api/forms/${formId}/publish`);
       setForm((f) => f ? { ...f, status: "PUBLISHED" } : f);
-      setMessage("Form published! Share it from the Share page.");
+      if (reopening) setMessage("Form reopened. It is accepting responses again.");
+      else setShowPublished(true);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : "Unable to publish.");
     } finally { setSaving(false); }
   }
 
+  async function copyFormLink() {
+    if (!form) return;
+    try {
+      await navigator.clipboard.writeText(`${window.location.origin}/f/${form.slug}`);
+      setMessage("Link copied.");
+    } catch {
+      setError("Unable to copy the link. Copy it from the Share page.");
+    }
+  }
   async function closeEditorForm() {
     if (!formId) return;
     setSaving(true); setMessage(""); setError("");
     try {
       await api.post(`/api/forms/${formId}/close`);
       setForm((f) => f ? { ...f, status: "CLOSED" } : f);
+      setConfirmClose(false);
       setMessage("Form closed. No longer accepting responses.");
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : "Unable to close.");
@@ -1341,6 +1373,7 @@ export default function FormEditorPage() {
   const canReview = form.status === "PENDING_REVIEW";
   const canPublish = form.status === "APPROVED" || form.status === "DRAFT";
   const isPublished = form.status === "PUBLISHED";
+  const isClosed = form.status === "CLOSED";
 
   return (
     <main className="editor-shell">
@@ -1394,32 +1427,99 @@ export default function FormEditorPage() {
 
             <Link className="editor-topnav-btn" to={`/forms/${formId}/preview`} title="Preview">👁</Link>
 
+            <button
+              className="editor-topnav-btn hide-narrow"
+              type="button"
+              onClick={() => setShowInvite(true)}
+              aria-label="Invite people"
+              title="Invite people"
+              data-tooltip="Invite people"
+            >
+              <InviteIcon size={18} />
+            </button>
             {isPublished ? (
-              <Link className="editor-topnav-btn" to={`/forms/${formId}/share`} title="Share / QR">🔗</Link>
+              <button className="editor-topnav-btn hide-narrow" type="button" onClick={() => void copyFormLink()} aria-label="Copy link" title="Copy link">
+                <LinkIcon size={18} />
+              </button>
             ) : null}
-
             {isPublished ? (
-              <button className="editor-topnav-btn danger" type="button" disabled={saving} onClick={closeEditorForm} title="Close form">🔒</button>
+              <button className="editor-topnav-btn danger hide-narrow" type="button" disabled={saving} onClick={() => setConfirmClose(true)} aria-label="Close form" title="Close form">
+                <LockIcon size={18} />
+              </button>
             ) : null}
-
+            {isClosed ? (
+              <button className="editor-topnav-btn hide-narrow" type="button" disabled={saving} onClick={() => void publishEditorForm()} aria-label="Reopen form" title="Reopen form">
+                <UnlockIcon size={18} />
+              </button>
+            ) : null}
             {canSubmitForReview ? (
-              <button className="editor-topnav-btn" type="button" disabled={saving} onClick={() => void openReviewPanel()} title="Submit for review">📋</button>
+              <button className="editor-topnav-btn hide-narrow" type="button" disabled={saving} onClick={() => void openReviewPanel()} title="Submit for review" aria-label="Submit for review">{"\u{1F4CB}"}</button>
             ) : null}
-
             {canPublish ? (
               <button
                 className="editor-topnav-publish"
                 type="button"
                 disabled={saving}
-                onClick={publishEditorForm}
+                onClick={() => void publishEditorForm()}
               >
-                {form.status === "APPROVED" ? "Publish ✓" : "Publish"}
+                {saving ? "Publishing..." : form.status === "APPROVED" ? "Publish \u2713" : "Publish"}
               </button>
             ) : null}
-          </div>
+            {isClosed ? (
+              <button className="editor-topnav-publish" type="button" disabled={saving} onClick={() => void publishEditorForm()}>
+                {saving ? "Reopening..." : "Reopen"}
+              </button>
+            ) : null}
+            {isPublished ? (
+              <span className="editor-topnav-state" role="status">Published</span>
+            ) : null}
+            <PopoverMenu
+              label="More actions"
+              trigger={<KebabIcon size={18} />}
+              triggerClassName="editor-topnav-btn"
+              items={[
+                { id: "invite", label: "Invite people", onSelect: () => setShowInvite(true) },
+                { id: "copy", label: "Copy link", onSelect: () => void copyFormLink(), hidden: !isPublished },
+                { id: "share", label: "Share / QR code", href: `/forms/${formId}/share`, hidden: !isPublished },
+                { id: "close", label: "Close form", onSelect: () => setConfirmClose(true), hidden: !isPublished },
+                { id: "reopen", label: "Reopen form", onSelect: () => void publishEditorForm(), hidden: !isClosed },
+                { id: "review", label: "Submit for review", onSelect: () => void openReviewPanel(), hidden: !canSubmitForReview },
+              ]}
+            />          </div>
         </div>
       </nav>
 
+      {confirmClose ? (
+        <Modal title="Close this form?" role="alertdialog" onClose={() => { if (!saving) setConfirmClose(false); }}>
+          <p className="muted">Responders will no longer be able to submit. You can reopen it any time.</p>
+          <div className="modal-actions">
+            <button type="button" className="secondary-button" onClick={() => setConfirmClose(false)} disabled={saving} data-autofocus>Cancel</button>
+            <button type="button" className="danger-button" onClick={() => void closeEditorForm()} disabled={saving}>{saving ? "Closing..." : "Close form"}</button>
+          </div>
+        </Modal>
+      ) : null}
+      {showInvite && formId ? (
+        <Modal title="Invite people" onClose={() => setShowInvite(false)} wide>
+          <InvitePeople formId={formId} embedded />
+        </Modal>
+      ) : null}
+      {showPublished ? (
+        <Modal title="Your form is published" onClose={() => setShowPublished(false)}>
+          <p className="muted">Anyone with this link can respond.</p>
+          <input
+            className="modal-link"
+            type="text"
+            readOnly
+            aria-label="Form link"
+            value={`${window.location.origin}/f/${form.slug}`}
+            onFocus={(e) => e.currentTarget.select()}
+          />
+          <div className="modal-actions">
+            <button type="button" className="secondary-button" onClick={() => { setShowPublished(false); setShowInvite(true); }}>Invite people</button>
+            <button type="button" className="primary-button" data-autofocus onClick={() => void copyFormLink()}>Copy link</button>
+          </div>
+        </Modal>
+      ) : null}
       {message ? <p className="editor-message" role="status">{message}</p> : null}
       {error ? <p className="submit-error" role="alert">{error}</p> : null}
 
@@ -1651,7 +1751,7 @@ export default function FormEditorPage() {
             <p className="muted">No questions yet. Click "+ Add question" to start.</p>
           </div>
         ) : (
-          <div className="editor-canvas-with-toolbar" ref={canvasRef}>
+          <div className="editor-canvas-with-toolbar" ref={canvasRef} onPointerEnter={() => toolbarLeave.cancel()} onPointerLeave={() => toolbarLeave.schedule()}>
             <div className="sr-only" role="status" aria-live="polite">{reorderNote}</div>
             <div className="editor-question-list">
               {(() => {
@@ -1751,7 +1851,7 @@ export default function FormEditorPage() {
                           isQuizMode={quizMode}
                           isActive={activeQuestionId === question.id}
                           onActivate={() => setActiveQuestionId(question.id)}
-                          onHover={(hovering) => setHoveredQuestionId((cur) => (hovering ? question.id : cur === question.id ? null : cur))}
+                          onHover={(hovering) => { if (hovering) { toolbarLeave.cancel(); setHoveredQuestionId(question.id); } }}
                           onDragStart={() => handleDragStart(index)}
                           onDragOver={(e) => handleDragOver(e, index)}
                           onDrop={(e) => void handleDrop(e, index)}
@@ -2883,13 +2983,19 @@ function QuestionImageEditor({
     { id: "left", label: "Left align", checked: align === "LEFT", onSelect: () => onChange(question.id, { imageAlign: "LEFT" }) },
     { id: "center", label: "Center align", checked: align === "CENTER", onSelect: () => onChange(question.id, { imageAlign: "CENTER" }) },
     { id: "right", label: "Right align", checked: align === "RIGHT", onSelect: () => onChange(question.id, { imageAlign: "RIGHT" }) },
+    ...IMAGE_SIZES.map((size): PopoverMenuItem => ({
+      id: `size-${size.id}`,
+      label: `Size: ${size.label}`,
+      checked: (question.imageWidth ?? null) === size.width,
+      onSelect: () => onChange(question.id, { imageWidth: size.width ?? undefined }),
+    })),
     { id: "change", label: "Change", onSelect: onPick },
     {
       id: "remove",
       label: "Remove",
       onSelect: () => {
         setShowCaption(false);
-        onChange(question.id, { imageUrl: null, imageAlign: undefined, imageCaption: null });
+        onChange(question.id, { imageUrl: null, imageAlign: undefined, imageWidth: undefined, imageCaption: null });
       },
     },
     { id: "caption", label: "Add a caption", onSelect: () => setShowCaption(true), hidden: showCaption },
@@ -2903,6 +3009,14 @@ function QuestionImageEditor({
           items={items}
           triggerClassName="editor-image-trigger"
         />
+        <div className="editor-image-kebab">
+          <PopoverMenu
+            label="Image menu"
+            trigger={<KebabIcon size={18} />}
+            items={items}
+            triggerClassName="editor-image-kebab-btn"
+          />
+        </div>
       </div>
       {uploadPercent !== null ? <small className="muted">Uploading... {uploadPercent}%</small> : null}
       {showCaption || question.imageCaption ? (

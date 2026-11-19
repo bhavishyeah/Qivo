@@ -4367,7 +4367,19 @@ form {
 .editor-image[data-align="RIGHT"] { justify-items: end; }
 .editor-image[data-align="LEFT"] { justify-items: start; }
 
-.editor-image-frame { max-width: 100%; }
+.editor-image-frame { max-width: 100%; position: relative; display: inline-block; }
+.editor-image-kebab { position: absolute; top: 6px; right: 6px; opacity: 0; transition: opacity 0.12s; }
+.editor-image-frame:hover .editor-image-kebab,
+.editor-image-frame:focus-within .editor-image-kebab,
+.editor-question.active-card .editor-image-kebab { opacity: 1; }
+@media (hover: none) { .editor-image-kebab { opacity: 1; } }
+.editor-image-kebab-btn {
+  display: grid; place-items: center; width: 32px; height: 32px; padding: 0;
+  border: 0; border-radius: 50%; cursor: pointer;
+  background: rgba(17, 24, 39, 0.72); color: #fff;
+}
+.editor-image-kebab-btn:hover, .editor-image-kebab-btn[aria-expanded="true"] { background: rgba(17, 24, 39, 0.9); }
+.editor-image-kebab-btn:focus-visible { outline: 2px solid #fff; outline-offset: 1px; box-shadow: 0 0 0 4px var(--editor-accent, var(--qivo-primary)); }
 
 .editor-image-trigger {
   display: block;
@@ -4590,4 +4602,20 @@ form {
   --editor-bg: var(--qivo-page-bg) !important;
   --editor-accent: var(--editor-accent-dark) !important;
   --editor-accent-soft: var(--editor-accent-dark) !important;
+}
+/* Modal dialog + editor header extras */
+.modal-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 16px; background: rgba(15, 23, 42, 0.5); }
+.modal-panel { width: min(440px, 100%); max-height: 90vh; overflow: auto; background: var(--qivo-surface, #fff); color: var(--qivo-text, #111827); border-radius: 16px; padding: 20px 22px; box-shadow: 0 24px 60px rgba(15, 23, 42, 0.3); }
+.modal-panel.is-wide { width: min(680px, 100%); }
+.modal-panel:focus { outline: none; }
+.modal-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.modal-header h2 { margin: 0; font-size: 1.15rem; }
+.modal-close { border: 0; background: transparent; font-size: 1.6rem; line-height: 1; cursor: pointer; color: inherit; padding: 2px 8px; border-radius: 8px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
+.modal-link { width: 100%; margin-top: 10px; border: 1px solid var(--qivo-border, #cbd5e1); border-radius: 10px; padding: 10px 12px; }
+.invite-people.is-embedded { padding: 0; }
+.editor-topnav-state { font-size: 0.82rem; font-weight: 700; color: #166534; background: #dcfce7; border-radius: 999px; padding: 4px 10px; white-space: nowrap; }
+@media (max-width: 720px) {
+  .editor-topnav-btn.hide-narrow { display: none; }
+  .editor-topnav-state { display: none; }
 }
