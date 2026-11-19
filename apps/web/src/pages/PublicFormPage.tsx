@@ -42,6 +42,9 @@ import { formatInr, normalizeUtr, validateManualPayment } from "../lib/manualUpi
 import { ensureFontLoaded, resolveTheme } from "../lib/theme";
 import type { AnswerValue, PublicForm, Question, Section } from "../types";
 import { QuestionImage } from "../components/QuestionImage";
+import { GridQuestion } from "../components/GridQuestion";
+import { StarRating } from "../components/StarRating";
+import { isAnswerMissing } from "../lib/questionTypes";
 import { answerableQuestions } from "../lib/questionKinds";
 
 // ─── Razorpay Checkout (lazy-loaded) ───────────────────────────────────────
@@ -443,12 +446,7 @@ export default function PublicFormPage() {
       if (!q.required) return false;
       // Skip questions hidden by conditional logic
       if (!evaluateConditions(q.conditions, answers)) return false;
-      const answer = answers[q.id];
-      if (Array.isArray(answer)) {
-        return answer.length === 0 ||
-          (answer as string[]).every((e) => !e.trim());
-      }
-      return answer === undefined || answer === null || answer === "";
+      return isAnswerMissing(q, answers[q.id]);
     });
     if (missing) return `Please answer: ${missing.label}`;
     return "";
@@ -474,12 +472,7 @@ export default function PublicFormPage() {
         if (!q.required) continue;
         // Skip questions hidden by conditional logic
         if (!evaluateConditions(q.conditions, answers)) continue;
-        const answer = answers[q.id];
-        if (
-          Array.isArray(answer) &&
-          (answer.length === 0 || (answer as string[]).every((e) => !e.trim()))
-        ) return `Please answer: ${q.label}`;
-        if (answer === undefined || answer === null || answer === "") return `Please answer: ${q.label}`;
+        if (isAnswerMissing(q, answers[q.id])) return `Please answer: ${q.label}`;
       }
     }
     return "";
@@ -1699,6 +1692,7 @@ export function QuestionField({
           <QuestionImage
             url={question.imageUrl}
             align={question.imageAlign}
+            width={question.imageWidth}
             caption={question.imageCaption}
             label={question.label}
           />
@@ -1719,6 +1713,7 @@ export function QuestionField({
           <QuestionImage
             url={question.imageUrl}
             align={question.imageAlign}
+            width={question.imageWidth}
             caption={question.imageCaption}
             label={question.label}
           />
@@ -1813,49 +1808,49 @@ export function QuestionField({
     const min = question.settings?.min ?? 1;
     const max = question.settings?.max ?? 5;
     const current = typeof value === "number" ? value : null;
-    const range = Array.from({ length: max - min + 1 }, (_, i) => min + i);
-
     return (
       <fieldset className="question-field">
         <legend id={`${inputId}-legend`}>{label}</legend>
         {descriptionElement}
-        <div
-          className="rating-list"
-          role="radiogroup"
-          aria-labelledby={`${inputId}-legend`}
-          aria-required={question.required ? true : undefined}
-          aria-invalid={error ? true : undefined}
-          aria-describedby={
+        <StarRating
+          name={question.id}
+          min={min}
+          max={max}
+          value={current}
+          onChange={(n) => onChange(question.id, n)}
+          labelledBy={`${inputId}-legend`}
+          describedBy={
             [description ? descriptionId : null, error ? errorId : null]
               .filter(Boolean)
               .join(" ") || undefined
           }
-        >
-          {range.map((rating) => (
-            <label className="rating-item" key={rating}>
-              <input
-                type="radio"
-                name={question.id}
-                value={rating}
-                checked={current === rating}
-                onChange={() => onChange(question.id, rating)}
-              />
-              <span>{rating}</span>
-            </label>
-          ))}
-        </div>
-        {range.length > 2 ? (
-          <div className="rating-labels">
-            <span>Low</span>
-            <span>High</span>
-          </div>
-        ) : null}
+          required={question.required}
+          invalid={Boolean(error)}
+        />
         {errorElement}
       </fieldset>
     );
   }
-
-  if (question.type === "LONG_TEXT") {
+  if (question.type === "MULTIPLE_CHOICE_GRID" || question.type === "CHECKBOX_GRID") {
+    return (
+      <fieldset className="question-field">
+        <legend id={`${inputId}-legend`}>{label}</legend>
+        {descriptionElement}
+        <GridQuestion
+          question={question}
+          value={value}
+          onChange={onChange}
+          describedBy={
+            [description ? descriptionId : null, error ? errorId : null]
+              .filter(Boolean)
+              .join(" ") || undefined
+          }
+          invalid={Boolean(error)}
+        />
+        {errorElement}
+      </fieldset>
+    );
+  }  if (question.type === "LONG_TEXT") {
     return (
       <div className="question-field">
         <label htmlFor={inputId}>{label}</label>
@@ -2259,6 +2254,7 @@ export function QuestionField({
     question.type === "EMAIL" ? "email"
     : question.type === "NUMBER" ? "number"
     : question.type === "DATE" ? "date"
+    : question.type === "TIME" ? "time"
     : question.type === "URL" ? "url"
     : question.type === "PHONE" ? "tel"
     : "text";
@@ -2268,7 +2264,7 @@ export function QuestionField({
     : question.type === "NUMBER" ? "Enter a number"
     : question.type === "URL" ? "https://example.com"
     : question.type === "PHONE" ? "+91 98765 43210"
-    : question.type === "DATE" ? ""
+    : question.type === "DATE" || question.type === "TIME" ? ""
     : "Your answer...";
 
   return (

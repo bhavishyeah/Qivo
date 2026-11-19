@@ -15,6 +15,8 @@ import { resolvePipedLabel } from "../lib/piping";
 import { DEFAULT_ACCENT, ensureFontLoaded, resolveTheme } from "../lib/theme";
 import SignaturePad from "../components/SignaturePad";
 import { QuestionImage } from "../components/QuestionImage";
+import { GridQuestion } from "../components/GridQuestion";
+import { StarRating } from "../components/StarRating";
 import { answerableQuestions } from "../lib/questionKinds";
 import ManualUpiPayment from "../components/ManualUpiPayment";
 import { toPublicManualUpi } from "../lib/manualUpi";
@@ -405,6 +407,7 @@ function PreviewQuestion({
           <QuestionImage
             url={question.imageUrl}
             align={question.imageAlign}
+            width={question.imageWidth}
             caption={question.imageCaption}
             label={question.label}
           />
@@ -422,6 +425,7 @@ function PreviewQuestion({
         <QuestionImage
           url={question.imageUrl}
           align={question.imageAlign}
+          width={question.imageWidth}
           caption={question.imageCaption}
           label={question.label}
         />
@@ -502,31 +506,45 @@ function PreviewQuestion({
       <fieldset className="question-field">
         <legend id={`${previewId}-legend`}>{label}</legend>
         {desc}
-        <div
-          className="rating-list"
-          role="radiogroup"
-          aria-labelledby={`${previewId}-legend`}
-          aria-required={question.required ? true : undefined}
-          aria-invalid={error ? true : undefined}
-          aria-describedby={
+        <StarRating
+          name={question.id}
+          min={min}
+          max={max}
+          value={current}
+          onChange={(n) => onChange(question.id, n)}
+          labelledBy={`${previewId}-legend`}
+          describedBy={
             [question.description ? descriptionId : null, error ? errorId : null]
               .filter(Boolean)
               .join(" ") || undefined
           }
-        >
-          {Array.from({ length: max - min + 1 }, (_, i) => min + i).map((r) => (
-            <label className="rating-item" key={r}>
-              <input type="radio" name={question.id} checked={current === r} onChange={() => onChange(question.id, r)} />
-              <span>{r}</span>
-            </label>
-          ))}
-        </div>
+          required={question.required}
+          invalid={Boolean(error)}
+        />
         {errorElement}
       </fieldset>
     );
   }
-
-  if (question.type === "LONG_TEXT") {
+  if (question.type === "MULTIPLE_CHOICE_GRID" || question.type === "CHECKBOX_GRID") {
+    return (
+      <fieldset className="question-field">
+        <legend id={`${previewId}-legend`}>{label}</legend>
+        {desc}
+        <GridQuestion
+          question={question}
+          value={value}
+          onChange={onChange}
+          describedBy={
+            [question.description ? descriptionId : null, error ? errorId : null]
+              .filter(Boolean)
+              .join(" ") || undefined
+          }
+          invalid={Boolean(error)}
+        />
+        {errorElement}
+      </fieldset>
+    );
+  }  if (question.type === "LONG_TEXT") {
     return (
       <div className="question-field">
         <label htmlFor={previewId}>{label}</label>
@@ -673,7 +691,7 @@ function PreviewQuestion({
     );
   }
 
-  const inputType = question.type === "EMAIL" ? "email" : question.type === "NUMBER" ? "number" : question.type === "DATE" ? "date" : question.type === "URL" ? "url" : question.type === "PHONE" ? "tel" : "text";
+  const inputType = question.type === "EMAIL" ? "email" : question.type === "NUMBER" ? "number" : question.type === "DATE" ? "date" : question.type === "TIME" ? "time" : question.type === "URL" ? "url" : question.type === "PHONE" ? "tel" : "text";
   const placeholder = question.type === "PHONE" ? "+91 98765 43210" : question.type === "URL" ? "https://example.com" : "Your answer...";
   return (
     <div className="question-field">

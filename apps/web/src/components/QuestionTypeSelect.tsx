@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useCallback,
   useEffect,
   useId,
@@ -10,6 +11,7 @@ import {
 import { createPortal } from "react-dom";
 import { computeMenuPosition, nextMenuIndex, type MenuKey } from "../lib/menuNav";
 import type { QuestionType } from "../types";
+import { groupQuestionTypes } from "../lib/questionTypes";
 import { CaretIcon, QuestionTypeIcon } from "./questionIcons";
 
 type QuestionTypeSelectProps = {
@@ -140,7 +142,10 @@ export default function QuestionTypeSelect({ value, types, labels, onChange }: Q
               }}
               onKeyDown={onListKeyDown}
             >
-              {types.map((type) => (
+              {groupQuestionTypes(types).map((group, gi) => (
+                <Fragment key={group[0]}>
+                  {gi > 0 ? <div role="separator" className="popover-menu-divider" /> : null}
+                  {group.map((type) => (
                 <div
                   key={type}
                   role="option"
@@ -158,6 +163,8 @@ export default function QuestionTypeSelect({ value, types, labels, onChange }: Q
                   <span className="popover-menu-icon" aria-hidden="true"><QuestionTypeIcon type={type} /></span>
                   <span>{labels[type]}</span>
                 </div>
+                  ))}
+                </Fragment>
               ))}
             </div>,
             document.body,

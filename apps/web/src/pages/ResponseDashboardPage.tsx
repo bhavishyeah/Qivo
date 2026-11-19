@@ -12,6 +12,7 @@ import {
 import { getManualPayment, neutralizeFormula } from "../lib/manualUpi";
 import { useManualPaymentReview } from "../lib/useManualPaymentReview";
 import { answerableQuestions } from "../lib/questionKinds";
+import { formatGridAnswer, isGridType } from "../lib/questionTypes";
 import type {
   FormRecord,
   ManualPaymentStatus,
@@ -29,8 +30,9 @@ function questionHeaderLabel(question: Question, questions: Question[]): string 
   return stripPipingTokens(question.label, questions);
 }
 
-function formatResponseValue(value: unknown): string {
-  if (value === null || value === undefined) return "—";
+function formatResponseValue(value: unknown, question?: Question): string {
+  if (value === null || value === undefined) return "—"; 
+  if (question && isGridType(question.type)) return formatGridAnswer(question, value);
   if (Array.isArray(value)) return value.join(", ");
   if (typeof value === "object") return JSON.stringify(value);
   return String(value);
@@ -43,7 +45,8 @@ function escapeCsvValue(value: unknown): string {
 
 // Render an answer value; uploaded-file answers are https URLs. Images render
 // as a clickable thumbnail; other files fall back to a "View file" link.
-function renderAnswerValue(value: unknown) {
+function renderAnswerValue(value: unknown, question?: Question) {
+  if (question && isGridType(question.type)) return formatGridAnswer(question, value);
   if (Array.isArray(value)) {
     const items = value.map((v) => String(v).trim()).filter(Boolean);
     return <Chips items={items} />;
@@ -107,7 +110,7 @@ function downloadResponsesCsv(
     return [
       response.submittedAt,
       email,
-      ...questions.map((q) => formatResponseValue(response.answers[q.id])),
+      ...questions.map((q) => formatResponseValue(response.answers[q.id], q)),
       ...(includeUpi ? upiExportCells(response) : []),
     ];
   });
@@ -146,7 +149,7 @@ function downloadResponsesExcel(
     return [
       new Date(response.submittedAt).toLocaleString(),
       email,
-      ...questions.map((q) => formatResponseValue(response.answers[q.id])),
+      ...questions.map((q) => formatResponseValue(response.answers[q.id], q)),
       ...(includeUpi ? upiExportCells(response) : []),
     ];
   });
@@ -593,7 +596,7 @@ function ResponseDetail({
               <span className="answer-question-label">
                 {questionLabels.get(questionId) ?? questionId}
               </span>
-              <strong>{renderAnswerValue(answer)}</strong>
+              <strong>{renderAnswerValue(answer, questions.find((q) => q.id === questionId))}</strong>
             </div>
           ))}
         </div>

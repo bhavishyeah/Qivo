@@ -63,7 +63,8 @@ function renderSampleAnswer(answer: string) {
 type QuestionType =
   | "SHORT_TEXT" | "LONG_TEXT" | "EMAIL" | "NUMBER" | "DATE"
   | "SINGLE_CHOICE" | "MULTIPLE_CHOICE" | "RATING" | "YES_NO"
-  | "PHONE" | "URL" | "FILE_UPLOAD" | "SIGNATURE" | "LINEAR_SCALE" | "MULTI_ENTRY";
+  | "PHONE" | "URL" | "FILE_UPLOAD" | "SIGNATURE" | "LINEAR_SCALE" | "MULTI_ENTRY"
+  | "TIME" | "MULTIPLE_CHOICE_GRID" | "CHECKBOX_GRID";
 
 type BaseReport = {
   questionId: string;
@@ -93,7 +94,11 @@ type NumberReport = BaseReport & {
 };
 type TextReport = BaseReport & { kind: "text"; sample: string[] };
 
-type QuestionReport = ChoiceReport | RatingReport | NumberReport | TextReport;
+type GridReport = BaseReport & {
+  kind: "grid";
+  rows: Array<{ row: string; cells: Array<{ column: string; count: number }> }>;
+};
+type QuestionReport = ChoiceReport | RatingReport | NumberReport | TextReport | GridReport;
 
 type TimeSeriesPoint = { date: string; views: number; submissions: number };
 
@@ -595,6 +600,7 @@ function QuestionAnalytics({ report }: { report: QuestionReport }) {
   if (report.kind === "choice") return <ChoiceChart report={report} />;
   if (report.kind === "rating") return <RatingChart report={report} />;
   if (report.kind === "number") return <NumberSummary report={report} />;
+  if (report.kind === "grid") return <GridSummary report={report} />;
   return <TextSummary report={report} />;
 }
 
@@ -701,6 +707,35 @@ function RatingChart({ report }: { report: RatingReport }) {
   );
 }
 
+function GridSummary({ report }: { report: GridReport }) {
+  const columns = report.rows[0]?.cells.map((c) => c.column) ?? [];
+  return (
+    <section className="editor-card" style={{ maxWidth: 980, margin: "0 auto 18px" }}>
+      <CardHeader report={report} />
+      <p className="muted" style={{ marginBottom: 16 }}>
+        {report.answered} answer{report.answered === 1 ? "" : "s"} {"\u00b7"} {report.skipped} skipped
+      </p>
+      <div className="grid-question-scroll">
+        <table className="grid-question">
+          <thead>
+            <tr>
+              <td />
+              {columns.map((c, i) => <th key={i} scope="col">{c}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {report.rows.map((r, ri) => (
+              <tr key={ri}>
+                <th scope="row">{r.row}</th>
+                {r.cells.map((cell, ci) => <td key={ci}>{cell.count}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
 function NumberSummary({ report }: { report: NumberReport }) {
   return (
     <section className="editor-card" style={{ maxWidth: 980, margin: "0 auto 18px" }}>

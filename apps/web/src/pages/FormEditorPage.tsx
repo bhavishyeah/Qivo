@@ -27,6 +27,8 @@ import { useManualPaymentReview } from "../lib/useManualPaymentReview";
 import { answerableQuestions, displayNumber, isAnswerable } from "../lib/questionKinds";
 import PopoverMenu, { type PopoverMenuItem } from "../components/PopoverMenu";
 import QuestionTypeSelect from "../components/QuestionTypeSelect";
+import { GridEditor } from "../components/GridEditor";
+import { defaultSettingsFor, isGridType } from "../lib/questionTypes";
 import {
   DuplicateIcon,
   GripIcon,
@@ -77,13 +79,13 @@ type HistoryEntry = {
 };
 
 const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
-  SHORT_TEXT: "Short text",
-  LONG_TEXT: "Long text",
+  SHORT_TEXT: "Short answer",
+  LONG_TEXT: "Paragraph",
   EMAIL: "Email",
   NUMBER: "Number",
   DATE: "Date",
-  SINGLE_CHOICE: "Single choice",
-  MULTIPLE_CHOICE: "Multiple choice",
+  SINGLE_CHOICE: "Multiple choice",
+  MULTIPLE_CHOICE: "Checkboxes",
   RATING: "Rating",
   YES_NO: "Yes / No",
   PHONE: "Phone number",
@@ -92,6 +94,9 @@ const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
   SIGNATURE: "Signature",
   LINEAR_SCALE: "Linear scale",
   MULTI_ENTRY: "Multi-Entry",
+  TIME: "Time",
+  MULTIPLE_CHOICE_GRID: "Multiple choice grid",
+  CHECKBOX_GRID: "Checkbox grid",
   TEXT_BLOCK: "Title and description",
   IMAGE_BLOCK: "Image",
 };
@@ -788,6 +793,7 @@ export default function FormEditorPage() {
         type: newQuestionType,
         required: false,
         ...(RATING_TYPES.has(newQuestionType) ? { settings: { min: 1, max: 5 } } : {}),
+        ...(isGridType(newQuestionType) ? { settings: defaultSettingsFor(newQuestionType) } : {}),
         ...(newQuestionType === "LINEAR_SCALE" ? { settings: { min: 1, max: 10, minLabel: "Low", maxLabel: "High" } } : {}),
         ...(CHOICE_TYPES.has(newQuestionType)
           ? { options: [{ value: "option_1", label: "Option 1" }] }
@@ -1668,7 +1674,7 @@ export default function FormEditorPage() {
                   // In-section questions (the real Question objects) — the
                   // trigger-question source for the jump editor.
                   const inSectionQuestions = answerableQuestions(questions).filter(
-                    (q) => (q.sectionId ?? sections[0]?.id) === section.id,
+                    (q) => !isGridType(q.type) && (q.sectionId ?? sections[0]?.id) === section.id,
                   );
                   // Sections strictly AFTER this one in document order are the
                   // only valid forward jump targets.
@@ -2224,7 +2230,7 @@ function QuestionCard({
   const answerableAll = answerableQuestions(allQuestions);
   // Only questions BEFORE this one can be piped or used in conditions.
   const earlierQuestions = answerableAll.filter(
-    (q) => q.id !== question.id && allQuestions.indexOf(q) < allQuestions.indexOf(question),
+    (q) => q.id !== question.id && !isGridType(q.type) && allQuestions.indexOf(q) < allQuestions.indexOf(question),
   );
   const conditionCount = question.conditions?.length ?? 0;
 
@@ -2261,8 +2267,11 @@ function QuestionCard({
       patch.options = [{ value: "option_1", label: "Option 1" }];
     }
     // Reset settings for rating/scale
-    if (RATING_TYPES.has(newType) && !question.settings?.min) {
+    if (RATING_TYPES.has(newType) && question.settings?.min === undefined) {
       patch.settings = { ...question.settings, min: 1, max: newType === "LINEAR_SCALE" ? 10 : 5 };
+    }
+    if (isGridType(newType) && !question.settings?.rows?.length) {
+      patch.settings = { ...question.settings, ...defaultSettingsFor(newType) };
     }
     // SIGNATURE reads no settings; clear any leftover FILE_UPLOAD
     // settings for tidiness (they would be inert otherwise).
@@ -2553,38 +2562,40 @@ function QuestionCard({
               </div>
             ) : null}
 
-            {/* Rating range editor */}
+            {/* Scale / rating settings */}
             {isRating ? (
-              <div style={{ display: "flex", gap: 16, marginTop: 14, alignItems: "center", flexWrap: "wrap" }}>
-                <div>
-                  <label style={{ display: "block", fontSize: "0.82rem", fontWeight: 750, marginBottom: 4 }}>Min</label>
-                  <input
-                    type="number"
-                    value={question.settings?.min ?? 1}
-                    min={0}
-                    max={9}
-                    onChange={(e) => onChange(question.id, { settings: { ...question.settings, min: Number(e.target.value) } })}
-                    style={{ width: 64, border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px", textAlign: "center" }}
-                  />
-                </div>
-                <div>
-                  <label style={{ display: "block", fontSize: "0.82rem", fontWeight: 750, marginBottom: 4 }}>Max</label>
-                  <input
-                    type="number"
-                    value={question.settings?.max ?? 5}
-                    min={2}
-                    max={10}
-                    onChange={(e) => onChange(question.id, { settings: { ...question.settings, max: Number(e.target.value) } })}
-                    style={{ width: 64, border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px", textAlign: "center" }}
-                  />
-                </div>
+              <div style={{ display: "flex", gap: 16, marginTop: 14, alignItems: "center", flexWrap: "wrap" }} onClick={(e) => e.stopPropagation()}>
                 {question.type === "LINEAR_SCALE" ? (
                   <>
+                    <div>
+                      <label htmlFor={`${question.id}-scale-min`} style={{ display: "block", fontSize: "0.82rem", fontWeight: 750, marginBottom: 4 }}>From</label>
+                      <select
+                        id={`${question.id}-scale-min`}
+                        value={question.settings?.min ?? 1}
+                        onChange={(e) => onChange(question.id, { settings: { ...question.settings, min: Number(e.target.value) } })}
+                        style={{ border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px" }}
+                      >
+                        <option value={0}>0</option>
+                        <option value={1}>1</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label htmlFor={`${question.id}-scale-max`} style={{ display: "block", fontSize: "0.82rem", fontWeight: 750, marginBottom: 4 }}>To</label>
+                      <select
+                        id={`${question.id}-scale-max`}
+                        value={question.settings?.max ?? 10}
+                        onChange={(e) => onChange(question.id, { settings: { ...question.settings, max: Number(e.target.value) } })}
+                        style={{ border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px" }}
+                      >
+                        {[2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => <option key={n} value={n}>{n}</option>)}
+                      </select>
+                    </div>
                     <div>
                       <label style={{ display: "block", fontSize: "0.82rem", fontWeight: 750, marginBottom: 4 }}>Low label</label>
                       <input
                         type="text"
                         value={question.settings?.minLabel ?? ""}
+                        maxLength={100}
                         onChange={(e) => onChange(question.id, { settings: { ...question.settings, minLabel: e.target.value } })}
                         placeholder="e.g. Not at all"
                         style={{ width: 120, border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px" }}
@@ -2595,16 +2606,37 @@ function QuestionCard({
                       <input
                         type="text"
                         value={question.settings?.maxLabel ?? ""}
+                        maxLength={100}
                         onChange={(e) => onChange(question.id, { settings: { ...question.settings, maxLabel: e.target.value } })}
                         placeholder="e.g. Extremely"
                         style={{ width: 120, border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px" }}
                       />
                     </div>
                   </>
-                ) : null}
+                ) : (
+                  <div>
+                    <label htmlFor={`${question.id}-stars`} style={{ display: "block", fontSize: "0.82rem", fontWeight: 750, marginBottom: 4 }}>Stars</label>
+                    <select
+                      id={`${question.id}-stars`}
+                      value={question.settings?.max ?? 5}
+                      onChange={(e) => onChange(question.id, { settings: { ...question.settings, min: 1, max: Number(e.target.value) } })}
+                      style={{ border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px" }}
+                    >
+                      {[3, 4, 5, 6, 7, 8, 9, 10].map((n) => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                    <span className="muted" aria-hidden="true" style={{ marginLeft: 10, color: "#f59e0b", letterSpacing: 2 }}>
+                      {"\u2605".repeat(Math.min(10, Math.max(3, question.settings?.max ?? 5)))}
+                    </span>
+                  </div>
+                )}
               </div>
             ) : null}
-
+            {question.type === "TIME" ? (
+              <div style={{ marginTop: 14 }}>
+                <input type="time" disabled aria-label="Time answer preview" style={{ border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px", background: "#f8fafc", color: "#94a3b8" }} />
+              </div>
+            ) : null}
+            {isGridType(question.type) ? <GridEditor question={question} onChange={onChange} /> : null}
             {/* File upload settings */}
             {question.type === "FILE_UPLOAD" ? (
               <div style={{marginTop: 14}}>
@@ -2759,7 +2791,7 @@ function QuestionCard({
             {answerable ? (
               <ConditionEditor
                 question={question}
-                allQuestions={answerableAll}
+                allQuestions={answerableAll.filter((q) => !isGridType(q.type))}
                 onChange={onChange}
                 openSignal={conditionSignal}
               />

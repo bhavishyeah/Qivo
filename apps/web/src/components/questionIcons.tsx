@@ -67,6 +67,15 @@ export function ScaleIcon(p: IconProps) {
 export function MultiEntryIcon(p: IconProps) {
   return <Svg {...p}><rect x="4" y="4" width="16" height="6" rx="1.5" /><rect x="4" y="14" width="16" height="6" rx="1.5" /></Svg>;
 }
+export function ClockIcon(p: IconProps) {
+  return <Svg {...p}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></Svg>;
+}
+export function GridIcon(p: IconProps) {
+  return <Svg {...p}><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M4 12h16M12 4v16" /></Svg>;
+}
+export function CheckGridIcon(p: IconProps) {
+  return <Svg {...p}><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M4 12h16M12 4v16M7 8l1.5 1.5L11 6.5" /></Svg>;
+}
 export function TextBlockIcon(p: IconProps) {
   return <Svg {...p}><path d="M5 5h14M12 5v14M9 19h6" /></Svg>;
 }
@@ -125,6 +134,9 @@ export function QuestionTypeIcon({ type, size }: { type: QuestionType; size?: nu
     case "SIGNATURE": return <SignatureIcon size={size} />;
     case "LINEAR_SCALE": return <ScaleIcon size={size} />;
     case "MULTI_ENTRY": return <MultiEntryIcon size={size} />;
+    case "TIME": return <ClockIcon size={size} />;
+    case "MULTIPLE_CHOICE_GRID": return <GridIcon size={size} />;
+    case "CHECKBOX_GRID": return <CheckGridIcon size={size} />;
     case "TEXT_BLOCK": return <TextBlockIcon size={size} />;
     case "IMAGE_BLOCK": return <ImageIcon size={size} />;
   }

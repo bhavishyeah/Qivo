@@ -14,6 +14,9 @@ export type QuestionType =
   | "SIGNATURE"
   | "LINEAR_SCALE"
   | "MULTI_ENTRY"
+  | "TIME"
+  | "MULTIPLE_CHOICE_GRID"
+  | "CHECKBOX_GRID"
   | "TEXT_BLOCK"
   | "IMAGE_BLOCK";
 
@@ -31,6 +34,10 @@ export type QuestionSettings = {
   maxLabel?: string;
   maxFileSizeMB?: number;
   allowedFileTypes?: string[];
+  // Grid questions: rows and columns, optionally one response required per row.
+  rows?: QuestionOption[];
+  columns?: QuestionOption[];
+  requireEachRow?: boolean;
   correctAnswer?: string;
   points?: number;
 };
@@ -52,6 +59,8 @@ export type Question = {
   conditions?: ConditionRule[];
   imageUrl?: string | null;
   imageAlign?: ImageAlign;
+  /** Display width as a percent of the form width; absent = original size. */
+  imageWidth?: number;
   imageCaption?: string | null;
   // Present when questions are loaded via the flattened list endpoint.
   sectionId?: string;
@@ -253,7 +262,9 @@ export type InvitePreview = {
   status: FormShareStatus;
 };
 
-export type AnswerValue = string | number | string[] | boolean | null;
+/** Grid answer: row value to one column value (multiple choice) or several (checkbox). */
+export type GridAnswer = Record<string, string | string[]>;
+export type AnswerValue = string | number | string[] | boolean | GridAnswer | null;
 
 export type UserInfo = {
   id: string;

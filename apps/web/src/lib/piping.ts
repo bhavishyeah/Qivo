@@ -1,4 +1,5 @@
 import type { AnswerValue, Question } from "../types";
+import { formatGridAnswer } from "./questionTypes";
 
 /**
  * Matches a piping token `{{ questionId }}` and captures the trimmed id.
@@ -56,6 +57,9 @@ function renderAnswerValue(question: Question, value: AnswerValue): string {
     return value;
   }
 
+  if (typeof value === "object" && value !== null) {
+    return formatGridAnswer(question, value);
+  }
   // number (NUMBER / RATING / LINEAR_SCALE) and any stray boolean.
   return String(value);
 }

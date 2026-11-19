@@ -1,4 +1,5 @@
 import type { AnswerValue, Question } from "../types";
+import { isValidTime } from "./questionTypes";
 
 /**
  * Client-side format validation that MIRRORS the API's per-type rules
@@ -135,6 +136,10 @@ export function validateQuestionFormat(
       return typeof value === "string" && isValidDate(value)
         ? null
         : "Please enter a valid date.";
+    case "TIME":
+      return typeof value === "string" && isValidTime(value)
+        ? null
+        : "Please enter a valid time.";
 
     case "MULTI_ENTRY":
       // Non-blank entries only (mirrors the server). An all-blank array is
