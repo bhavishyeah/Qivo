@@ -11,6 +11,8 @@ import morgan from "morgan";
 import { z } from "zod";
 
 import prisma from "./db/prisma.js";
+import { createHash } from "node:crypto";
+import { env } from "./config/env.js";
 import { csrfProtection } from "./middleware/csrf.js";
 import { isRazorpayConfigured } from "./services/razorpay.js";
 import { isAllowListConfigured } from "./services/paymentsAccess.js";
@@ -29,14 +31,34 @@ import workspaceRouter from "./modules/workspaces/workspace.routes.js";
 
 const app: Express = express();
 
-// Trust proxy in production (Railway, Render, etc. sit behind a reverse proxy)
+// Trust proxy in production (Railway, Render, etc. sit behind a reverse proxy).
+// TRUST_PROXY_HOPS is the number of proxies in front of the app (Railway edge
+// = 1) so req.ip is the real client IP taken from X-Forwarded-For.
 if (process.env.NODE_ENV === "production") {
-  app.set("trust proxy", 1);
+  app.set("trust proxy", env.TRUST_PROXY_HOPS);
+}
+
+// Rate-limit key for the general API limiter: the session token (hashed) when
+// the request carries one, so users behind a shared college/office IP get their
+// own bucket; otherwise the client IP. An IP-level backstop (below) still caps
+// requests that rotate fake tokens.
+function sessionOrIpKey(req: express.Request): string {
+  let token: string | undefined = req.cookies?.[env.SESSION_COOKIE_NAME];
+  if (!token) {
+    const header = req.get("Authorization");
+    if (header?.startsWith("Bearer ")) token = header.slice(7);
+  }
+  if (token) {
+    return `s:${createHash("sha256").update(token).digest("hex").slice(0, 32)}`;
+  }
+  return `ip:${req.ip ?? "unknown"}`;
 }
 
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: 100,
+  limit: env.RATE_LIMIT_MAX,
+  keyGenerator: sessionOrIpKey,
+  validate: { keyGeneratorIpFallback: false },
   standardHeaders: "draft-8",
   legacyHeaders: false,
   message: {
@@ -45,6 +67,22 @@ const apiLimiter = rateLimit({
       code: "RATE_LIMITED",
       message:
         "Too many requests. Please try again later.",
+    },
+  },
+});
+
+// Per-IP backstop for the general limiter (a shared campus IP serves many
+// users, so this is much higher than the per-session limit).
+const apiIpBackstopLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: env.RATE_LIMIT_IP_MAX,
+  standardHeaders: false,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: {
+      code: "RATE_LIMITED",
+      message: "Too many requests. Please try again later.",
     },
   },
 });
@@ -109,10 +147,10 @@ app.use(morgan("dev"));
 // Higher limit for public form endpoints (events with many attendees).
 // This MUST be mounted before the global /api limiter, and the global limiter
 // skips /api/forms/public — otherwise the stricter 100/15min bucket would
-// reject public submissions long before this 500 limit is reached.
+// reject public submissions long before this limit is reached.
 const publicFormLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: 500,
+  limit: env.RATE_LIMIT_PUBLIC_MAX,
   standardHeaders: "draft-8",
   legacyHeaders: false,
   message: { success: false, error: { code: "RATE_LIMITED", message: "Too many requests." } },
@@ -125,7 +163,13 @@ app.use("/api", (req, res, next) => {
     next();
     return;
   }
-  apiLimiter(req, res, next);
+  apiIpBackstopLimiter(req, res, (err?: unknown) => {
+    if (err) {
+      next(err);
+      return;
+    }
+    apiLimiter(req, res, next);
+  });
 });
 app.use("/api/auth", authLimiter);
 

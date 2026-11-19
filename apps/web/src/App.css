@@ -3636,3 +3636,56 @@ form {
   color: var(--qivo-text);
   font-size: var(--qivo-font-helper);
 }
+
+/* ── Compact editor chrome (single header) ───────────────── */
+
+.editor-shell {
+  padding: 0 40px 32px;
+}
+
+.editor-topnav {
+  margin: 0 -40px 12px;
+}
+
+.editor-topnav-inner {
+  height: 48px;
+}
+
+.editor-tabs {
+  margin-bottom: 12px;
+}
+
+.editor-tab {
+  padding: 8px 18px;
+}
+
+.editor-shell .editor-card {
+  padding: 20px;
+}
+
+.editor-shell .editor-card-header {
+  margin-bottom: 14px;
+}
+
+@media (max-width: 700px) {
+  .editor-shell {
+    padding: 0 16px 24px;
+  }
+
+  .editor-topnav {
+    margin: 0 -16px 8px;
+    padding: 0 12px;
+  }
+
+  .editor-tabs {
+    margin: 0 0 12px;
+  }
+
+  .editor-tab {
+    padding: 8px 14px;
+  }
+
+  .editor-shell .editor-card {
+    padding: 16px;
+  }
+}

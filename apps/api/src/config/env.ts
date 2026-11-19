@@ -12,6 +12,11 @@ function optional(key: string, fallback: string): string {
   return process.env[key] ?? fallback;
 }
 
+function positiveInt(key: string, fallback: number): number {
+  const n = Number(process.env[key]);
+  return Number.isInteger(n) && n > 0 ? n : fallback;
+}
+
 export const env = {
   NODE_ENV: optional("NODE_ENV", "development"),
   PORT: Number(optional("PORT", "3000")),
@@ -19,6 +24,11 @@ export const env = {
   WEB_URL: optional("WEB_URL", "http://localhost:5173"),
   SESSION_COOKIE_NAME: optional("SESSION_COOKIE_NAME", "qivo_session"),
   SESSION_DAYS: Number(optional("SESSION_DAYS", "30")),
+  // Rate limits per 15-minute window. See .env.example.
+  RATE_LIMIT_MAX: positiveInt("RATE_LIMIT_MAX", 2000),
+  RATE_LIMIT_IP_MAX: positiveInt("RATE_LIMIT_IP_MAX", 10000),
+  RATE_LIMIT_PUBLIC_MAX: positiveInt("RATE_LIMIT_PUBLIC_MAX", 1000),
+  TRUST_PROXY_HOPS: positiveInt("TRUST_PROXY_HOPS", 1),
   RESPONSE_EDIT_SECRET: optional(
     "RESPONSE_EDIT_SECRET",
     "dev-insecure-response-edit-secret-change-me",

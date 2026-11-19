@@ -1028,7 +1028,7 @@ export default function FormEditorPage() {
         <div className="editor-topnav-inner">
           {/* Left: logo + title */}
           <div className="editor-topnav-left">
-            <Link to="/dashboard" className="editor-topnav-logo">Qivo</Link>
+            <Link to="/dashboard" className="editor-topnav-logo" aria-label="Qivo - back to forms" title="Back to forms">Qivo</Link>
             {editingTitle ? (
               <input
                 className="editor-topnav-title-input"
@@ -1514,9 +1514,9 @@ export default function FormEditorPage() {
                   <div className="question-field"><label htmlFor="s-upi-id">UPI ID</label><input id="s-upi-id" type="text" autoComplete="off" maxLength={100} value={upiId} onChange={(e) => setUpiId(e.target.value)} placeholder="name@bank" style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }} /><small className="muted">Shown publicly to everyone who opens this form.</small></div>
                   <div className="question-field"><label htmlFor="s-upi-payee">Payee name</label><input id="s-upi-payee" type="text" autoComplete="off" maxLength={60} value={payeeName} onChange={(e) => setPayeeName(e.target.value)} placeholder="Name shown in the payer's UPI app" style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }} /><small className="muted">Respondents compare this with the name their UPI app shows.</small></div>
                   <div className="question-field">
-                    <label htmlFor="s-upi-amount">Amount (?, optional)</label>
+                    <label htmlFor="s-upi-amount">Amount ({"\u20B9"}, optional)</label>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span aria-hidden="true" style={{ color: "#64748b" }}>?</span>
+                      <span aria-hidden="true" style={{ color: "#64748b" }}>{"\u20B9"}</span>
                       <input id="s-upi-amount" type="number" min={1} max={150000} step="0.01" inputMode="decimal" value={upiAmountRupees} onChange={(e) => setUpiAmountRupees(e.target.value)} placeholder="Leave empty to state the amount in the instructions" style={{ flex: 1, border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }} />
                     </div>
                     <small className="muted">Fixed amount, ₹1 to ₹1,50,000.</small>

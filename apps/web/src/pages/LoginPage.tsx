@@ -66,7 +66,7 @@ export default function LoginPage() {
         window.google?.accounts.id.renderButton(container, {
           theme: "outline",
           size: "large",
-          width: "100%",
+          width: Math.min(400, Math.max(200, Math.round(container.getBoundingClientRect().width || 320))),
           text: "continue_with",
         });
       }

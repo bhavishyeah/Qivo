@@ -28,9 +28,12 @@ export default function AppLayout({
       }
     }
 
-    // Fetch now, then poll every 30s, and refresh when the tab regains focus.
+    // Fetch now, then poll every 60s (visible tab only), and refresh when the tab regains focus.
     void fetchUnread();
-    const interval = setInterval(() => void fetchUnread(), 30_000);
+    // Skip polling while the tab is hidden (saves API rate limit).
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") void fetchUnread();
+    }, 60_000);
     const onFocus = () => void fetchUnread();
     window.addEventListener("focus", onFocus);
 
@@ -62,6 +65,9 @@ export default function AppLayout({
   }
 
   const isActive = (path: string) => location.pathname === path;
+  // The form editor renders its own compact header (logo, title, actions and
+  // tabs), so the global top bar is hidden there to avoid a double navbar.
+  const isEditorRoute = /^\/forms\/[^/]+\/edit\/?$/.test(location.pathname);
 
   return (
     <div className="app-layout">
@@ -94,7 +100,7 @@ export default function AppLayout({
           </button>
         </div>
       ) : null}
-      <nav className="app-nav">
+      {isEditorRoute ? null : <nav className="app-nav">
         <div className="app-nav-inner">
           <Link to="/dashboard" className="app-nav-brand">
             Qivo
@@ -170,7 +176,7 @@ export default function AppLayout({
             </button>
           </div>
         </div>
-      </nav>
+      </nav>}
 
       <div className="app-content">{children}</div>
 
