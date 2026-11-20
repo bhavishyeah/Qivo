@@ -3,6 +3,9 @@ import {
   applyScheme,
   COLOR_SCHEME_KEY,
   getStoredScheme,
+  getThemePreference,
+  resolvePreference,
+  setThemePreference,
   resolveInitialScheme,
   setStoredScheme,
 } from "./colorScheme";
@@ -100,5 +103,22 @@ describe("applyScheme", () => {
     expect(env.docEl.dataset.colorScheme).toBe("dark");
     applyScheme("light");
     expect(env.docEl.dataset.colorScheme).toBe("light");
+  });
+});
+
+describe("theme preference", () => {
+  let env: ReturnType<typeof installStubs>;
+  afterEach(() => env.teardown());
+
+  it("defaults to system and round-trips light/dark/system", () => {
+    env = installStubs({ prefersDark: true });
+    expect(getThemePreference()).toBe("system");
+    setThemePreference("dark");
+    expect(env.store.get(COLOR_SCHEME_KEY)).toBe("dark");
+    expect(getThemePreference()).toBe("dark");
+    setThemePreference("system");
+    expect(env.store.has(COLOR_SCHEME_KEY)).toBe(false);
+    expect(resolvePreference("system")).toBe("dark");
+    expect(resolvePreference("light")).toBe("light");
   });
 });

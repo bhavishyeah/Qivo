@@ -1,38 +1,66 @@
-import { useState } from "react";
-import { applyScheme, setStoredScheme, type ColorScheme } from "../lib/colorScheme";
+import type { ReactNode } from "react";
+import type { ThemePreference } from "../lib/colorScheme";
 import PopoverMenu from "./PopoverMenu";
 
-function currentScheme(): ColorScheme {
-  return typeof document !== "undefined" && document.documentElement.dataset.colorScheme === "dark" ? "dark" : "light";
-}
+type UserMenuProps = {
+  name: string;
+  email: string;
+  preference: ThemePreference;
+  onPreferenceChange: (pref: ThemePreference) => void;
+  onLogout: () => void;
+  /** Custom trigger content and class (mobile bottom nav). Defaults to avatar + name. */
+  trigger?: ReactNode;
+  triggerClassName?: string;
+};
 
-export default function UserMenu({ name, onLogout }: { name: string; onLogout: () => void }) {
-  const [scheme, setScheme] = useState<ColorScheme>(currentScheme);
-  const next: ColorScheme = scheme === "dark" ? "light" : "dark";
+export default function UserMenu({
+  name,
+  email,
+  preference,
+  onPreferenceChange,
+  onLogout,
+  trigger,
+  triggerClassName,
+}: UserMenuProps) {
   const initial = (name.trim()[0] ?? "?").toUpperCase();
+  const choice = (id: ThemePreference, label: string) => ({
+    id,
+    label,
+    checked: preference === id,
+    onSelect: () => onPreferenceChange(id),
+  });
 
   return (
     <PopoverMenu
-      label={`Account menu for ${name}`}
-      triggerClassName="user-menu-trigger"
+      label="Profile menu"
+      triggerClassName={triggerClassName ?? "user-menu-trigger"}
       trigger={
-        <>
-          <span className="user-menu-avatar" aria-hidden="true">{initial}</span>
-          <span className="user-menu-name">{name}</span>
-        </>
+        trigger ?? (
+          <>
+            <span className="user-menu-avatar" aria-hidden="true">{initial}</span>
+            <span className="user-menu-name">{name}</span>
+          </>
+        )
+      }
+      header={
+        <div className="user-menu-header">
+          <span className="user-menu-avatar user-menu-avatar-lg" aria-hidden="true">{initial}</span>
+          <div className="user-menu-identity">
+            <span className="user-menu-fullname">{name}</span>
+            <span className="user-menu-email">{email}</span>
+          </div>
+        </div>
       }
       items={[
-        { id: "settings", label: "Settings", href: "/settings" },
         {
-          id: "scheme",
-          label: next === "dark" ? "Switch to dark mode" : "Switch to light mode",
-          onSelect: () => {
-            applyScheme(next);
-            setStoredScheme(next);
-            setScheme(next);
-          },
+          id: "appearance",
+          label: "Appearance",
+          segments: [choice("light", "Light"), choice("dark", "Dark"), choice("system", "System")],
         },
-        { id: "logout", label: "Log out", onSelect: onLogout },
+        { id: "settings", label: "Account settings", href: "/settings" },
+        { id: "password", label: "Change password", href: "/settings#password" },
+        { id: "divider", label: "", divider: true },
+        { id: "logout", label: "Log out", danger: true, onSelect: onLogout },
       ]}
     />
   );

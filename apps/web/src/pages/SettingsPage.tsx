@@ -1,4 +1,5 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+import { useLocation } from "react-router-dom";
 import { api, ApiRequestError } from "../lib/api";
 
 type UserInfo = { id: string; name: string; email: string };
@@ -10,6 +11,11 @@ export default function SettingsPage({ user }: { user: UserInfo }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const { hash } = useLocation();
+
+  useEffect(() => {
+    if (hash === "#password") document.getElementById("password")?.scrollIntoView({ block: "start" });
+  }, [hash]);
 
   async function handleChangePassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -82,7 +88,7 @@ export default function SettingsPage({ user }: { user: UserInfo }) {
       </section>
 
       {/* Change password */}
-      <section className="editor-card" style={{ maxWidth: 680, margin: "0 auto" }}>
+      <section id="password" className="editor-card" style={{ maxWidth: 680, margin: "0 auto", scrollMarginTop: 80 }}>
         <div className="editor-card-header">
           <div>
             <p className="eyebrow">Security</p>

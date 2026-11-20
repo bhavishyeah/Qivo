@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { api, setToken } from "../lib/api";
 import Logo from "./Logo";
 import UserMenu from "./UserMenu";
+import { useThemePreference } from "../lib/useThemePreference";
 import { ToastProvider } from "./Toast";
 
 const iconProps = { viewBox: "0 0 24 24", width: 22, height: 22, fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true } as const;
@@ -76,12 +77,13 @@ export default function AppLayout({
     navigate("/login");
   }
 
+  const isPreviewRoute = /^\/forms\/[^/]+\/preview\/?$/.test(location.pathname);
+  const [themePref, setThemePref] = useThemePreference(!isPreviewRoute);
   const isActive = (path: string) => location.pathname === path;
   // The form editor renders its own compact header (logo, title, actions and
   // tabs), so the global top bar is hidden there to avoid a double navbar.
   const isEditorRoute = /^\/forms\/[^/]+\/edit\/?$/.test(location.pathname);
   // The preview route renders the public form, which must stay outside .app-root.
-  const isPreviewRoute = /^\/forms\/[^/]+\/preview\/?$/.test(location.pathname);
 
   return (
     <ToastProvider>
@@ -163,7 +165,13 @@ export default function AppLayout({
           </div>
 
           <div className="app-nav-user">
-            <UserMenu name={user.name} onLogout={() => void handleLogout()} />
+            <UserMenu
+              name={user.name}
+              email={user.email}
+              preference={themePref}
+              onPreferenceChange={setThemePref}
+              onLogout={() => void handleLogout()}
+            />
           </div>
         </div>
       </nav>}
@@ -201,13 +209,20 @@ export default function AppLayout({
           Alerts
           {unreadCount > 0 ? <span className="app-bottom-nav-badge">{unreadCount > 9 ? "9+" : unreadCount}</span> : null}
         </Link>
-        <Link
-          to="/settings"
-          className={`app-bottom-nav-item ${isActive("/settings") ? "active" : ""}`}
-        >
-          <span className="app-bottom-nav-icon">{NavIcons.more}</span>
-          More
-        </Link>
+        <UserMenu
+          name={user.name}
+          email={user.email}
+          preference={themePref}
+          onPreferenceChange={setThemePref}
+          onLogout={() => void handleLogout()}
+          triggerClassName={`app-bottom-nav-item ${isActive("/settings") ? "active" : ""}`}
+          trigger={
+            <>
+              <span className="app-bottom-nav-icon">{NavIcons.more}</span>
+              Profile
+            </>
+          }
+        />
       </nav>
     </div>
     </ToastProvider>

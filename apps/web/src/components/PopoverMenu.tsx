@@ -24,6 +24,12 @@ export type PopoverMenuItem = {
   external?: boolean;
   /** When defined the item is a radio-style menu item with aria-checked. */
   checked?: boolean;
+  /** Renders a horizontal divider instead of an item. */
+  divider?: boolean;
+  /** Danger styling (e.g. Log out). */
+  danger?: boolean;
+  /** Renders a labelled segmented radio group; selecting keeps the menu open. */
+  segments?: { id: string; label: string; checked: boolean; onSelect: () => void }[];
 };
 
 type PopoverMenuProps = {
@@ -32,9 +38,11 @@ type PopoverMenuProps = {
   trigger: ReactNode;
   items: PopoverMenuItem[];
   triggerClassName?: string;
+  /** Non-interactive block rendered above the items. */
+  header?: ReactNode;
 };
 
-export default function PopoverMenu({ label, trigger, items, triggerClassName }: PopoverMenuProps) {
+export default function PopoverMenu({ label, trigger, items, triggerClassName, header }: PopoverMenuProps) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -156,7 +164,32 @@ export default function PopoverMenu({ label, trigger, items, triggerClassName }:
               }}
               onKeyDown={onMenuKeyDown}
             >
+              {header}
               {visible.map((item) => {
+                if (item.divider) return <div key={item.id} role="separator" className="popover-menu-divider" />;
+                if (item.segments) {
+                  return (
+                    <div key={item.id} className="popover-menu-segrow">
+                      <span className="popover-menu-seglabel">{item.label}</span>
+                      <div role="group" aria-label={item.label} className="popover-menu-segments">
+                        {item.segments.map((seg) => (
+                          <button
+                            key={seg.id}
+                            type="button"
+                            role="menuitemradio"
+                            aria-checked={seg.checked}
+                            tabIndex={-1}
+                            className="popover-menu-seg"
+                            onClick={seg.onSelect}
+                          >
+                            {seg.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                }
+                const itemClass = item.danger ? "popover-menu-item is-danger" : "popover-menu-item";
                 const content = (
                   <>
                     {item.icon ? <span className="popover-menu-icon" aria-hidden="true">{item.icon}</span> : null}
@@ -169,7 +202,7 @@ export default function PopoverMenu({ label, trigger, items, triggerClassName }:
                       key={item.id}
                       role="menuitem"
                       tabIndex={-1}
-                      className="popover-menu-item"
+                      className={itemClass}
                       href={item.href}
                       target="_blank"
                       rel="noopener noreferrer"
@@ -182,7 +215,7 @@ export default function PopoverMenu({ label, trigger, items, triggerClassName }:
                       key={item.id}
                       role="menuitem"
                       tabIndex={-1}
-                      className="popover-menu-item"
+                      className={itemClass}
                       to={item.href}
                       onClick={() => close(false)}
                     >
@@ -197,7 +230,7 @@ export default function PopoverMenu({ label, trigger, items, triggerClassName }:
                     role={item.checked === undefined ? "menuitem" : "menuitemradio"}
                     aria-checked={item.checked}
                     tabIndex={-1}
-                    className="popover-menu-item"
+                    className={itemClass}
                     aria-disabled={item.disabled ? true : undefined}
                     onClick={() => select(item)}
                   >

@@ -65,3 +65,34 @@ export function applyScheme(scheme: ColorScheme): void {
   if (typeof document === "undefined") return;
   document.documentElement.dataset.colorScheme = scheme;
 }
+
+/** Appearance preference shown in the profile menu. "system" follows the OS. */
+export type ThemePreference = ColorScheme | "system";
+
+export function getThemePreference(): ThemePreference {
+  return getStoredScheme() ?? "system";
+}
+
+/** Persist a preference. "system" removes the stored key (matches color-scheme.js). */
+export function setThemePreference(pref: ThemePreference): void {
+  if (pref !== "system") {
+    setStoredScheme(pref);
+    return;
+  }
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.removeItem(COLOR_SCHEME_KEY);
+  } catch {
+    // Ignore storage failures; the in-memory choice still applies.
+  }
+}
+
+/** Scheme a preference resolves to right now. */
+export function resolvePreference(pref: ThemePreference): ColorScheme {
+  if (pref !== "system") return pref;
+  return typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
+}
