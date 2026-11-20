@@ -1,6 +1,7 @@
 import { useState, useEffect, type FormEvent } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { api, ApiRequestError, setToken } from "../lib/api";
+import AuthLayout from "../components/AuthLayout";
 
 declare global {
   interface Window {
@@ -113,76 +114,69 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="page-shell">
-      <section className="auth-card">
-        <p className="eyebrow">Qivo Forms</p>
+    <AuthLayout
+      title="Welcome back"
+      subtitle="Log in to manage your forms and responses."
+      footer={
+        <>
+          Don't have an account?{" "}
+          <Link to={inviteToken ? `/signup?invite=${inviteToken}` : "/signup"}>Sign up</Link>
+          <span className="auth-sep" aria-hidden="true">
+            /
+          </span>
+          <Link to="/forgot-password">Forgot password?</Link>
+        </>
+      }
+    >
+      <form className="auth-form" onSubmit={handleSubmit} noValidate>
+        <div className="field">
+          <label className="field-label" htmlFor="login-email">
+            Email
+          </label>
+          <input
+            id="login-email"
+            className="input"
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+        </div>
 
-        <h1>Welcome back</h1>
+        <div className="field">
+          <label className="field-label" htmlFor="login-password">
+            Password
+          </label>
+          <input
+            id="login-password"
+            className="input"
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+        </div>
 
-        <p className="muted">Log in to manage your forms and responses.</p>
-
-        <form onSubmit={handleSubmit} noValidate>
-          <div className="question-field">
-            <label htmlFor="login-email">Email</label>
-            <input
-              id="login-email"
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </div>
-
-          <div className="question-field">
-            <label htmlFor="login-password">Password</label>
-            <input
-              id="login-password"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
-
-          {error ? (
-            <p className="submit-error" role="alert">
-              {error}
-            </p>
-          ) : null}
-
-          <button className="submit-button" type="submit" disabled={loading}>
-            {loading ? "Logging in..." : "Log in"}
-          </button>
-        </form>
-
-        {/* Google Sign-In */}
-        {import.meta.env.VITE_GOOGLE_CLIENT_ID ? (
-          <div style={{ marginTop: 20 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-              <hr style={{ flex: 1, border: "none", borderTop: "1px solid #e2e8f0" }} />
-              <span className="muted" style={{ fontSize: "0.82rem" }}>or</span>
-              <hr style={{ flex: 1, border: "none", borderTop: "1px solid #e2e8f0" }} />
-            </div>
-            <div id="google-btn" style={{ display: "flex", justifyContent: "center" }} />
-          </div>
+        {error ? (
+          <p className="msg msg-error" role="alert">
+            {error}
+          </p>
         ) : null}
 
-        <p className="muted" style={{ marginTop: 20, textAlign: "center" }}>
-          Don't have an account?{" "}
-          <Link
-            className="secondary-link"
-            to={inviteToken ? `/signup?invite=${inviteToken}` : "/signup"}
-          >
-            Sign up
-          </Link>
-          {" · "}
-          <Link className="secondary-link" to="/forgot-password">
-            Forgot password?
-          </Link>
-        </p>
-      </section>
-    </main>
+        <button className="btn btn-primary btn-lg auth-submit" type="submit" disabled={loading}>
+          {loading ? "Logging in..." : "Log in"}
+        </button>
+      </form>
+
+      {/* Google Sign-In */}
+      {import.meta.env.VITE_GOOGLE_CLIENT_ID ? (
+        <>
+          <div className="auth-divider">or</div>
+          <div id="google-btn" className="auth-google" />
+        </>
+      ) : null}
+    </AuthLayout>
   );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, ApiRequestError } from "../lib/api";
+import AuthLayout from "../components/AuthLayout";
 
 export default function VerifyEmailPage() {
   const [searchParams] = useSearchParams();
@@ -37,47 +38,32 @@ export default function VerifyEmailPage() {
 
   if (loading) {
     return (
-      <main className="page-shell">
-        <div className="status-card">
-          <p>Verifying your email...</p>
-        </div>
-      </main>
+      <AuthLayout title="Verifying" subtitle="Verifying your email...">
+        <div className="skeleton-line skeleton-line-lg" aria-hidden="true" />
+      </AuthLayout>
     );
   }
 
   if (success) {
     return (
-      <main className="page-shell">
-        <section className="status-card success-card">
-          <p className="eyebrow">Qivo Forms</p>
-          <h1>Email verified</h1>
-          <p>Your email address has been confirmed. You're all set.</p>
-          <Link
-            className="primary-link"
-            to="/dashboard"
-            style={{ display: "inline-flex", marginTop: 24 }}
-          >
-            Go to dashboard
-          </Link>
-        </section>
-      </main>
+      <AuthLayout title="Email verified" subtitle="Your email address has been confirmed. You're all set.">
+        <Link className="btn btn-primary btn-lg auth-submit" to="/dashboard">
+          Go to dashboard
+        </Link>
+      </AuthLayout>
     );
   }
 
   return (
-    <main className="page-shell">
-      <section className="status-card error-card">
-        <p className="eyebrow">Qivo Forms</p>
-        <h1>Verification failed</h1>
-        <p>{error}</p>
-        <Link
-          className="primary-link"
-          to="/login"
-          style={{ display: "inline-flex", marginTop: 24 }}
-        >
+    <AuthLayout title="Verification failed">
+      <p className="auth-status auth-status-error" role="alert">
+        {error}
+      </p>
+      <div className="auth-actions">
+        <Link className="btn btn-primary btn-lg auth-submit" to="/login">
           Back to login
         </Link>
-      </section>
-    </main>
+      </div>
+    </AuthLayout>
   );
 }
