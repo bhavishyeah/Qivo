@@ -5414,6 +5414,7 @@ export async function recordFormStart(slug: string): Promise<void> {
 // ---------------------------------------------------------------------------
 
 const DRAFT_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+const DRAFT_SEED_KEY = "__shuffleSeed";
 
 // Resolve a slug to a PUBLISHED, non-deleted form that has allowPartialSave on.
 // Collapses "no such form" and "feature off" into the same PUBLIC_FORM_NOT_FOUND
@@ -5453,9 +5454,15 @@ export async function saveDraft(
 ): Promise<{ token: string; expiresAt: Date }> {
   const form = await getPartialSaveForm(slug);
 
-  const answers = JSON.parse(
-    JSON.stringify(input.answers),
-  ) as Prisma.InputJsonValue;
+  // The shuffle seed rides inside the stored answers JSON under a reserved key
+  // (no migration). loadDraft strips it; it is never a real answer.
+  const cleanAnswers = JSON.parse(JSON.stringify(input.answers)) as Record<
+    string,
+    unknown
+  >;
+  delete cleanAnswers[DRAFT_SEED_KEY];
+  if (input.shuffleSeed) cleanAnswers[DRAFT_SEED_KEY] = input.shuffleSeed;
+  const answers = cleanAnswers as Prisma.InputJsonValue;
   const email = input.email ?? null;
   const currentSection = input.currentSection ?? null;
   const now = Date.now();
@@ -5511,6 +5518,7 @@ export async function loadDraft(
   answers: unknown;
   email: string | null;
   currentSection: number | null;
+  shuffleSeed: string | null;
 }> {
   const form = await getPartialSaveForm(slug);
 
@@ -5529,10 +5537,22 @@ export async function loadDraft(
     throw error;
   }
 
+  const stored =
+    draft.answers && typeof draft.answers === "object" && !Array.isArray(draft.answers)
+      ? { ...(draft.answers as Record<string, unknown>) }
+      : null;
+  let shuffleSeed: string | null = null;
+  if (stored) {
+    const seed = stored[DRAFT_SEED_KEY];
+    if (typeof seed === "string" && seed) shuffleSeed = seed;
+    delete stored[DRAFT_SEED_KEY];
+  }
+
   return {
-    answers: draft.answers,
+    answers: stored ?? draft.answers,
     email: draft.email,
     currentSection: draft.currentSection,
+    shuffleSeed,
   };
 }
 

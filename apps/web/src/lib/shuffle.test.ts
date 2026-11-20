@@ -4,17 +4,90 @@ import {
   createRng,
   displayOptions,
   getShuffleSeed,
+  newShuffleSeed,
   seededShuffle,
   shuffleOptions,
   shuffleQuestionList,
   shuffleWithinSections,
 } from "./shuffle";
+import { evaluateConditions } from "./conditions";
 
 const nums = Array.from({ length: 20 }, (_, i) => i);
 
 function q(id: string, type: Question["type"] = "SHORT_TEXT"): Question {
   return { id, label: id, type, required: false };
 }
+
+function cond(id: string, controller: string, value: string): Question {
+  return { ...q(id), conditions: [{ questionId: controller, operator: "equals", value }] };
+}
+
+function flat(sections: Section[]): Question[] {
+  return sections.flatMap((s) => s.questions);
+}
+
+/** Find a seed that puts `child` above `controller` in a one-section form. */
+function seedWithChildFirst(questions: Question[], childId: string, controllerId: string): string {
+  for (let i = 0; i < 500; i += 1) {
+    const ids = shuffleQuestionList(questions, `s${i}:sec`).map((x) => x.id);
+    if (ids.indexOf(childId) < ids.indexOf(controllerId)) return `s${i}`;
+  }
+  throw new Error("no seed found");
+}
+
+describe("shuffled forms with conditions", () => {
+  const controller: Question = {
+    ...q("ctrl", "SINGLE_CHOICE"),
+    options: [
+      { value: "yes", label: "Yes" },
+      { value: "no", label: "No" },
+    ],
+  };
+  const child = cond("child", "ctrl", "yes");
+  const section: Section = {
+    id: "sec",
+    title: "S",
+    questions: [controller, child, q("x1"), q("x2")],
+  } as Section;
+
+  it("keeps a conditional above its controller hidden until answered, then shows it", () => {
+    const seed = seedWithChildFirst(section.questions, "child", "ctrl");
+    const [shuffled] = shuffleWithinSections([section], seed);
+    const ids = (shuffled as Section).questions.map((x) => x.id);
+    expect(ids.indexOf("child")).toBeLessThan(ids.indexOf("ctrl"));
+    const visible = (answers: Record<string, string>) =>
+      (shuffled as Section).questions.filter((x) => evaluateConditions(x.conditions, answers)).map((x) => x.id);
+    expect(() => visible({})).not.toThrow();
+    expect(visible({})).not.toContain("child");
+    expect(visible({ ctrl: "no" })).not.toContain("child");
+    expect(visible({ ctrl: "yes" })).toContain("child");
+  });
+
+  it("evaluates conditions from the answers map, not from position", () => {
+    const answers = { ctrl: "yes" };
+    for (let i = 0; i < 20; i += 1) {
+      const shuffled = flat(shuffleWithinSections([section], `seed-${i}`));
+      const shown = shuffled.filter((x) => evaluateConditions(x.conditions, answers)).map((x) => x.id);
+      expect(shown.sort()).toEqual(["child", "ctrl", "x1", "x2"]);
+      const hidden = shuffled.filter((x) => evaluateConditions(x.conditions, {})).map((x) => x.id);
+      expect(hidden).not.toContain("child");
+    }
+  });
+
+  it("gives the same order when a resumed draft supplies the same seed", () => {
+    const original = "draft-seed-1";
+    const first = shuffleWithinSections([section], original).map((s) => s.questions.map((x) => x.id));
+    // Another device: different local seed, but the draft seed is used.
+    const localSeed = "other-device";
+    const draftSeed: string | null = original;
+    const resumedSeed = draftSeed ?? localSeed;
+    expect(shuffleWithinSections([section], localSeed).map((s) => s.questions.map((x) => x.id))).not.toEqual(first);
+    const second = shuffleWithinSections([section], resumedSeed).map((s) => s.questions.map((x) => x.id));
+    expect(second).toEqual(first);
+    const opts = displayOptions({ ...controller, settings: { shuffleOptions: true } }, original).map((o) => o.value);
+    expect(displayOptions({ ...controller, settings: { shuffleOptions: true } }, resumedSeed).map((o) => o.value)).toEqual(opts);
+  });
+});
 
 describe("seededShuffle", () => {
   it("is deterministic for the same seed", () => {
@@ -196,6 +269,14 @@ describe("displayOptions", () => {
     expect(orders.size).toBeGreaterThan(1);
     expect(displayOptions({ ...on, type: "DROPDOWN" as const }, "s1")).toHaveLength(6);
     expect(displayOptions({ ...on, type: "SHORT_TEXT" as const }, "s1")).toEqual(options);
+  });
+});
+
+describe("newShuffleSeed", () => {
+  it("returns a fresh non-persisted seed each call", () => {
+    const a = newShuffleSeed();
+    expect(a).not.toBe(newShuffleSeed());
+    expect(getShuffleSeed("preview:x")).not.toBe(a);
   });
 });
 

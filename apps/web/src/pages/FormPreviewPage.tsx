@@ -22,7 +22,7 @@ import {
   OTHER_PREFIX,
   questionAllowsOther,
 } from "../lib/otherOption";
-import { displayOptions, getShuffleSeed, shuffleWithinSections } from "../lib/shuffle";
+import { displayOptions, newShuffleSeed, shuffleWithinSections } from "../lib/shuffle";
 import { GridQuestion } from "../components/GridQuestion";
 import { StarRating } from "../components/StarRating";
 import { answerableQuestions } from "../lib/questionKinds";
@@ -69,7 +69,9 @@ export default function FormPreviewPage() {
   }, [formId]);
 
   // The preview shuffles like the live form (the builder itself never does).
-  const shuffleSeed = useMemo(() => (formId ? getShuffleSeed(`preview:${formId}`) : ""), [formId]);
+  // A fresh seed on every load (not persisted); "Reshuffle" picks another.
+  const [shuffleSeed, setShuffleSeed] = useState(() => newShuffleSeed());
+  const [reshuffled, setReshuffled] = useState(false);
   const shuffleQuestions = form?.schema?.settings?.shuffleQuestions === true;
   const sections = useMemo(() => {
     const base = form?.schema?.sections ?? [];
@@ -247,7 +249,21 @@ export default function FormPreviewPage() {
 
         {shuffleQuestions || hasShuffledOptions ? (
           <p className="muted" style={{ fontSize: "0.82rem", margin: "0 0 12px" }}>
-            Order is randomised for each respondent.
+            Order is randomised for each respondent.{" "}
+            <button
+              type="button"
+              className="link-button"
+              aria-label="Reshuffle question and option order"
+              onClick={() => {
+                setShuffleSeed(newShuffleSeed());
+                setReshuffled(true);
+              }}
+            >
+              Reshuffle
+            </button>
+            <span className="sr-only" role="status" aria-live="polite">
+              {reshuffled ? "Order reshuffled" : ""}
+            </span>
           </p>
         ) : null}
 

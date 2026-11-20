@@ -261,7 +261,10 @@ export default function PublicFormPage() {
   // Sections with email as section 0 if needed
   // Per-respondent seed for the shuffle options. Stored per form, so the order
   // is the same on re-render, validation errors and when a draft is resumed.
-  const shuffleSeed = useMemo(() => (form ? getShuffleSeed(form.id) : ""), [form]);
+  // A resumed draft carries its own seed, so the order matches across devices.
+  const [draftSeed, setDraftSeed] = useState<string | null>(null);
+  const localSeed = useMemo(() => (form ? getShuffleSeed(form.id) : ""), [form]);
+  const shuffleSeed = draftSeed ?? localSeed;
 
   // With "Shuffle question order" on, questions are reordered inside each
   // section only. Section order and jump rules are untouched.
@@ -313,6 +316,8 @@ export default function PublicFormPage() {
           (draft.answers ?? {}) as Record<string, AnswerValue>,
         );
         setEmail(draft.email ?? "");
+        // Old drafts have no seed: keep the local one (it is saved next time).
+        if (draft.shuffleSeed) setDraftSeed(draft.shuffleSeed);
         setResumeToken(token);
         const { history: restoredHistory } = clampResumeSection(
           form.schema.sections,
@@ -542,6 +547,7 @@ export default function PublicFormPage() {
         answers,
         ...(collectEmail && trimmedEmail ? { email: trimmedEmail } : {}),
         currentSection: currentSectionIndex,
+        ...(shuffleSeed ? { shuffleSeed } : {}),
         ...(resumeToken ? { token: resumeToken } : {}),
       });
       setResumeToken(result.token);

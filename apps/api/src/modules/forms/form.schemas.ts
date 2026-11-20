@@ -392,6 +392,8 @@ export const saveDraftSchema = z
     email: z.email().optional(),
     currentSection: z.number().int().min(0).max(1000).optional(),
     token: z.string().min(1).max(200).optional(),
+    // Per-respondent shuffle seed, so a resumed draft keeps the same order.
+    shuffleSeed: z.string().min(1).max(100).optional(),
   })
   .refine((b) => JSON.stringify(b.answers).length <= MAX_DRAFT_ANSWERS_CHARS, {
     message: "Draft is too large to save.",

@@ -206,6 +206,7 @@ export async function saveDraft(
     answers: Record<string, unknown>;
     email?: string;
     currentSection?: number;
+    shuffleSeed?: string;
     token?: string;
   },
 ): Promise<{ token: string; expiresAt: string }> {
@@ -221,6 +222,7 @@ export async function loadDraft(
   answers: Record<string, unknown>;
   email: string | null;
   currentSection: number | null;
+  shuffleSeed?: string | null;
 }> {
   return publicGet(
     `/api/forms/public/${slug}/draft?token=${encodeURIComponent(token)}`,

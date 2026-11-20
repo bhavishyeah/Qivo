@@ -392,3 +392,24 @@ form.invite-form {
     width: 100%;
   }
 }
+
+/* App.css has a global `form { padding }` meant for the public form. On phones
+   it indented the Settings content about 40px past the card edge. */
+@media (max-width: 640px) {
+  .settings-card > form {
+    padding-left: 0;
+    padding-right: 0;
+  }
+}
+
+/* Inline chrome links ("Back to editor", "Dashboard") were about 21px tall.
+   Touch-sized hit area on phones and coarse pointers only. */
+@media (pointer: coarse), (max-width: 640px) {
+  .app-root .primary-link,
+  .app-root .secondary-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+    padding-block: 8px;
+  }
+}

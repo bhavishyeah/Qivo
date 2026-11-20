@@ -125,6 +125,11 @@ function randomId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
 
+/** A fresh random seed (not persisted anywhere). */
+export function newShuffleSeed(): string {
+  return randomId();
+}
+
 /**
  * Per-respondent seed for a form, kept in localStorage (falling back to
  * sessionStorage, then memory) so the order survives reloads and draft resume.

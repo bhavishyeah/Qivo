@@ -206,8 +206,77 @@ describe("loadDraft", () => {
       answers: { q_name: "Asha" },
       email: "a@example.com",
       currentSection: 2,
+      shuffleSeed: null,
     });
     expect(prismaMock.formDraft.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it("returns the saved shuffle seed and strips it from answers", async () => {
+    prismaMock.form.findFirst.mockResolvedValue(formRow());
+    prismaMock.formDraft.findUnique.mockResolvedValue({
+      token: "valid-token",
+      formId: "form_1",
+      answers: { q_name: "Asha", __shuffleSeed: "seed-123" },
+      email: null,
+      currentSection: 0,
+      expiresAt: new Date(Date.now() + THIRTY_DAYS_MS),
+    });
+
+    const result = await loadDraft("my-form", "valid-token");
+    expect(result.shuffleSeed).toBe("seed-123");
+    expect(result.answers).toEqual({ q_name: "Asha" });
+  });
+
+  it("round-trips a seed through saveDraft and loadDraft", async () => {
+    prismaMock.form.findFirst.mockResolvedValue(formRow());
+    let stored: unknown;
+    prismaMock.formDraft.create.mockImplementation(async ({ data }) => {
+      stored = data.answers;
+      return { ...data, id: "d" };
+    });
+    await saveDraft("my-form", {
+      answers: { q_name: "Asha", __shuffleSeed: "spoofed" },
+      shuffleSeed: "seed-abc",
+    });
+    expect(stored).toEqual({ q_name: "Asha", __shuffleSeed: "seed-abc" });
+
+    prismaMock.formDraft.findUnique.mockResolvedValue({
+      token: "t",
+      formId: "form_1",
+      answers: stored,
+      email: null,
+      currentSection: null,
+      expiresAt: new Date(Date.now() + THIRTY_DAYS_MS),
+    });
+    const loaded = await loadDraft("my-form", "t");
+    expect(loaded.shuffleSeed).toBe("seed-abc");
+    expect(loaded.answers).toEqual({ q_name: "Asha" });
+  });
+
+  it("an old draft without a seed loads with shuffleSeed null", async () => {
+    prismaMock.form.findFirst.mockResolvedValue(formRow());
+    prismaMock.formDraft.findUnique.mockResolvedValue({
+      token: "old",
+      formId: "form_1",
+      answers: { q_name: "Old" },
+      email: null,
+      currentSection: null,
+      expiresAt: new Date(Date.now() + THIRTY_DAYS_MS),
+    });
+    const result = await loadDraft("my-form", "old");
+    expect(result.shuffleSeed).toBeNull();
+    expect(result.answers).toEqual({ q_name: "Old" });
+  });
+
+  it("saving without a seed stores no reserved key", async () => {
+    prismaMock.form.findFirst.mockResolvedValue(formRow());
+    let stored: unknown;
+    prismaMock.formDraft.create.mockImplementation(async ({ data }) => {
+      stored = data.answers;
+      return { ...data, id: "d" };
+    });
+    await saveDraft("my-form", { answers: { q_name: "A", __shuffleSeed: "x" } });
+    expect(stored).toEqual({ q_name: "A" });
   });
 
   it("throws DRAFT_NOT_FOUND for an unknown token", async () => {

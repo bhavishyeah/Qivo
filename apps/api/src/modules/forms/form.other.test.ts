@@ -170,6 +170,30 @@ describe("quiz scoring", () => {
     expect(computeQuizScore(schema, { q1: "a" })).toMatchObject({ earned: 1 });
     expect(computeQuizScore(schema, { q1: makeOtherAnswer("a") })).toMatchObject({ earned: 0 });
   });
+
+  it("scores a shuffled form the same whatever the display order", () => {
+    const mk = (id: string, correct: string) => ({
+      id,
+      label: id,
+      type: "SINGLE_CHOICE",
+      required: false,
+      options,
+      settings: { allowOther: true, shuffleOptions: true, correctAnswer: correct },
+    });
+    const qs = [mk("q1", "a"), mk("q2", "b"), mk("q3", "a")];
+    const build = (list: unknown[]) =>
+      ({
+        version: 1,
+        sections: [{ id: "s1", title: "S", questions: list }],
+        settings: { collectEmail: false, allowMultipleResponses: true, quizMode: true, shuffleQuestions: true },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      }) as any;
+    const answers = { q1: "a", q2: "a", q3: makeOtherAnswer("a") };
+    const forward = computeQuizScore(build(qs), answers);
+    const reversed = computeQuizScore(build([...qs].reverse()), answers);
+    expect(forward).toEqual({ earned: 1, total: 3, percentage: 33 });
+    expect(reversed).toEqual(forward);
+  });
 });
 
 describe("conditions", () => {
