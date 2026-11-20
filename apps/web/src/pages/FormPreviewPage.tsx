@@ -204,8 +204,8 @@ export default function FormPreviewPage() {
         {/* Preview banner */}
         <div
           style={{
-            background: "#fef3c7",
-            border: "1px solid #fde68a",
+            background: "var(--color-warning-tint, #fef3c7)",
+            border: "1px solid var(--color-border, #fde68a)",
             borderRadius: 12,
             padding: "12px 20px",
             marginBottom: 20,
@@ -216,7 +216,7 @@ export default function FormPreviewPage() {
             gap: 12,
           }}
         >
-          <span style={{ color: "#92400e", fontWeight: 700, fontSize: "0.88rem" }}>
+          <span style={{ color: "var(--color-warning-text, #92400e)", fontWeight: 700, fontSize: "0.88rem" }}>
             👁 Preview mode — responses won't be saved
           </span>
           <Link

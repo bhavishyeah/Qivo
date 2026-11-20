@@ -68,13 +68,13 @@ export default function SettingsPage({ user }: { user: UserInfo }) {
         <div style={{ display: "grid", gap: 12 }}>
           <div>
             <span className="summary-label">Name</span>
-            <p style={{ margin: "4px 0 0", color: "#111827", fontWeight: 600 }}>
+            <p style={{ margin: "4px 0 0", color: "var(--color-text)", fontWeight: 600 }}>
               {user.name}
             </p>
           </div>
           <div>
             <span className="summary-label">Email</span>
-            <p style={{ margin: "4px 0 0", color: "#111827", fontWeight: 600 }}>
+            <p style={{ margin: "4px 0 0", color: "var(--color-text)", fontWeight: 600 }}>
               {user.email}
             </p>
           </div>
@@ -102,10 +102,11 @@ export default function SettingsPage({ user }: { user: UserInfo }) {
           </p>
         ) : null}
 
-        <form onSubmit={handleChangePassword}>
-          <div className="question-field">
-            <label htmlFor="current-password">Current password</label>
+        <form onSubmit={handleChangePassword} style={{ display: "grid", gap: 16, justifyItems: "start", padding: 0 }}>
+          <div className="field" style={{ width: "100%" }}>
+            <label className="field-label" htmlFor="current-password">Current password</label>
             <input
+              className="input"
               id="current-password"
               type="password"
               autoComplete="current-password"
@@ -115,9 +116,10 @@ export default function SettingsPage({ user }: { user: UserInfo }) {
             />
           </div>
 
-          <div className="question-field">
-            <label htmlFor="new-password">New password</label>
+          <div className="field" style={{ width: "100%" }}>
+            <label className="field-label" htmlFor="new-password">New password</label>
             <input
+              className="input"
               id="new-password"
               type="password"
               autoComplete="new-password"
@@ -128,9 +130,10 @@ export default function SettingsPage({ user }: { user: UserInfo }) {
             />
           </div>
 
-          <div className="question-field">
-            <label htmlFor="confirm-new-password">Confirm new password</label>
+          <div className="field" style={{ width: "100%" }}>
+            <label className="field-label" htmlFor="confirm-new-password">Confirm new password</label>
             <input
+              className="input"
               id="confirm-new-password"
               type="password"
               autoComplete="new-password"

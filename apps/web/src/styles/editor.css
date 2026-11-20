@@ -203,3 +203,27 @@
 .app-root .muted {
   color: var(--color-text-subtle);
 }
+
+/* Legacy auth/status cards used by create-form, share, accept-invite and
+   loading states inside the chrome. */
+.app-root .auth-card,
+.app-root .status-card {
+  border-color: var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: none;
+}
+
+.app-root .auth-card h1,
+.app-root .status-card h1 {
+  color: var(--color-text);
+}
+
+.app-root .auth-card .question-field > label,
+.app-root .status-card p:not(.eyebrow) {
+  color: var(--color-text);
+}
+
+.app-root .auth-card form {
+  padding: 0;
+}

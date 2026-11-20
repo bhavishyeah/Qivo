@@ -157,10 +157,11 @@ export default function CreateFormPage() {
                 onChange={(e) => setWorkspaceId(e.target.value)}
                 style={{
                   width: "100%",
-                  border: "1px solid #cbd5e1",
+                  border: "1px solid var(--color-border-strong)",
                   borderRadius: 12,
                   padding: "13px 14px",
-                  background: "#ffffff",
+                  color: "var(--color-text)",
+                  background: "var(--color-surface)",
                 }}
               >
                 {workspaces.map((ws) => (
@@ -216,10 +217,11 @@ export default function CreateFormPage() {
                 onChange={(e) => setSelectedTemplate(e.target.value)}
                 style={{
                   width: "100%",
-                  border: "1px solid #cbd5e1",
+                  border: "1px solid var(--color-border-strong)",
                   borderRadius: 12,
                   padding: "13px 14px",
-                  background: "#ffffff",
+                  color: "var(--color-text)",
+                  background: "var(--color-surface)",
                 }}
               >
                 <option value="">Blank form</option>
@@ -259,7 +261,7 @@ export default function CreateFormPage() {
                       alignItems: "center",
                       justifyContent: "space-between",
                       gap: 12,
-                      border: "1px solid #e2e8f0",
+                      border: "1px solid var(--color-border)",
                       borderRadius: 10,
                       padding: "8px 12px",
                     }}

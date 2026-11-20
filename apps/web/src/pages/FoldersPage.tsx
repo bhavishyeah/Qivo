@@ -177,7 +177,7 @@ export default function FoldersPage() {
       <section className="editor-card" style={{ maxWidth: 980, margin: "0 auto 20px" }}>
         <form
           onSubmit={handleCreate}
-          style={{ display: "flex", gap: 12, alignItems: "end" }}
+          style={{ display: "flex", gap: 12, alignItems: "end", padding: 0 }}
         >
           <div style={{ flex: 1 }}>
             <label
@@ -195,9 +195,11 @@ export default function FoldersPage() {
               required
               style={{
                 width: "100%",
-                border: "1px solid #cbd5e1",
+                border: "1px solid var(--color-border-strong)",
                 borderRadius: 10,
                 padding: "10px 12px",
+                color: "var(--color-text)",
+                background: "var(--color-surface)",
               }}
             />
           </div>
@@ -287,9 +289,11 @@ function FolderItem({
                 value={renameValue}
                 onChange={(e) => onRenameChange(e.target.value)}
                 style={{
-                  border: "1px solid #cbd5e1",
+                  border: "1px solid var(--color-border-strong)",
                   borderRadius: 8,
                   padding: "6px 10px",
+                  color: "var(--color-text)",
+                  background: "var(--color-surface)",
                 }}
                 autoFocus
                 onKeyDown={(e) => {
@@ -314,7 +318,7 @@ function FolderItem({
             </div>
           ) : (
             <>
-              <strong style={{ color: "#111827" }}>📁 {folder.name}</strong>
+              <strong style={{ color: "var(--color-text)" }}>📁 {folder.name}</strong>
               <p className="muted" style={{ margin: "4px 0 0", fontSize: "0.82rem" }}>
                 {folder._count.forms} form{folder._count.forms === 1 ? "" : "s"}
                 {folder._count.forms > 0 ? (
