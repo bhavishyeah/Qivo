@@ -1560,8 +1560,8 @@ export default function FormEditorPage() {
             <textarea id="review-comment" rows={3} value={reviewComment} onChange={(e) => setReviewComment(e.target.value)} placeholder="Add feedback..." />
           </div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 12 }}>
-            <button className="secondary-button" type="button" disabled={reviewing} onClick={() => void handleReviewDecision("APPROVED")} style={{ background: "#16a34a", color: "#fff", border: "none" }}>{reviewing ? "..." : "Approve"}</button>
-            <button className="secondary-button" type="button" disabled={reviewing} onClick={() => void handleReviewDecision("CHANGES_REQUESTED")} style={{ background: "#f59e0b", color: "#fff", border: "none" }}>{reviewing ? "..." : "Request changes"}</button>
+            <button className="secondary-button" type="button" disabled={reviewing} onClick={() => void handleReviewDecision("APPROVED")} style={{ background: "var(--color-success-text)", color: "var(--color-on-primary)", border: "none" }}>{reviewing ? "..." : "Approve"}</button>
+            <button className="secondary-button" type="button" disabled={reviewing} onClick={() => void handleReviewDecision("CHANGES_REQUESTED")} style={{ background: "var(--color-warning-text)", color: "var(--color-on-primary)", border: "none" }}>{reviewing ? "..." : "Request changes"}</button>
             <button className="danger-button" type="button" disabled={reviewing} onClick={() => void handleReviewDecision("REJECTED")}>{reviewing ? "..." : "Reject"}</button>
           </div>
         </section>
@@ -1580,7 +1580,7 @@ export default function FormEditorPage() {
               {reviewers.length === 0
                 ? <p className="muted">No eligible reviewers found (needs Owner or Admin role).</p>
                 : (
-                  <select id="reviewer-select" value={selectedReviewer} onChange={(e) => setSelectedReviewer(e.target.value)} style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px", background: "#fff" }}>
+                  <select id="reviewer-select" value={selectedReviewer} onChange={(e) => setSelectedReviewer(e.target.value)} style={{ width: "100%", border: "1px solid var(--color-border-strong)", borderRadius: 10, padding: "10px 12px", background: "var(--color-surface)" }}>
                     {reviewers.map((r) => (
                       <option key={r.user.id} value={r.user.id}>{r.user.name} — {r.role}</option>
                     ))}
@@ -1600,7 +1600,7 @@ export default function FormEditorPage() {
 
       {/* ── Changes requested banner ── */}
       {form.status === "CHANGES_REQUESTED" ? (
-        <div style={{ maxWidth: 980, margin: "0 auto 20px", background: "#fef3c7", border: "1px solid #fbbf24", borderRadius: 12, padding: "16px 20px", color: "#92400e" }}>
+        <div style={{ maxWidth: 980, margin: "0 auto 20px", background: "var(--color-warning-tint)", border: "1px solid var(--color-warning-text)", borderRadius: 12, padding: "16px 20px", color: "var(--color-warning-text)" }}>
           <strong>Changes requested</strong>
           <p style={{ margin: "6px 0 0" }}>Edit the questions below and resubmit when ready.</p>
         </div>
@@ -1798,7 +1798,7 @@ export default function FormEditorPage() {
                             }}
                             style={{
                               flex: 1, fontWeight: 700, fontSize: "1rem",
-                              border: "none", borderBottom: "2px solid #e2e8f0",
+                              border: "none", borderBottom: "2px solid var(--color-border)",
                               padding: "6px 2px", background: "transparent",
                             }}
                             aria-label="Section title"
@@ -1940,23 +1940,23 @@ export default function FormEditorPage() {
               <label className="settings-toggle"><input type="checkbox" checked={allowPartialSave} onChange={(e) => setAllowPartialSave(e.target.checked)} /><span><strong>Let respondents save and resume later</strong><small>They get a link to come back and finish.</small></span></label>
               <label className="settings-toggle"><input type="checkbox" checked={quizMode} onChange={(e) => setQuizMode(e.target.checked)} /><span><strong>Quiz mode</strong><small>Enable scoring — set correct answers per question.</small></span></label>
               {quizMode ? (<label className="settings-toggle"><input type="checkbox" checked={showScore} onChange={(e) => setShowScore(e.target.checked)} /><span><strong>Show score after submission</strong><small>Respondent sees their score.</small></span></label>) : null}
-              <div className="question-field"><label htmlFor="s-response-notification">Email me about new responses</label><select id="s-response-notification" value={responseNotification} onChange={(e) => setResponseNotification(e.target.value as "off" | "immediate" | "daily")} style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }}><option value="off">Off</option><option value="immediate">Immediately</option><option value="daily">Daily digest</option></select><small className="muted">Get notified by email when this form receives responses.</small></div>
+              <div className="question-field"><label htmlFor="s-response-notification">Email me about new responses</label><select id="s-response-notification" value={responseNotification} onChange={(e) => setResponseNotification(e.target.value as "off" | "immediate" | "daily")} style={{ width: "100%", border: "1px solid var(--color-border-strong)", borderRadius: 10, padding: "10px 12px" }}><option value="off">Off</option><option value="immediate">Immediately</option><option value="daily">Daily digest</option></select><small className="muted">Get notified by email when this form receives responses.</small></div>
               <label className="settings-toggle" style={collectEmail ? undefined : { opacity: 0.5 }}><input type="checkbox" checked={sendConfirmationEmail} disabled={!collectEmail} onChange={(e) => setSendConfirmationEmail(e.target.checked)} /><span><strong>Send respondents a confirmation email</strong><small>{collectEmail ? "Email respondents a copy of their submission." : "Turn on 'Collect email addresses' to enable."}</small></span></label>
             </SettingsGroup>
             <SettingsGroup title="Access & Schedule" description="When the form opens and closes" summary={`${scheduledPublishAt ? "Scheduled" : "Manual publish"} · ${scheduledCloseAt ? "Auto-close set" : "No close date"}`}>
               <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-                <div className="question-field" style={{ flex: 1, minWidth: 200 }}><label htmlFor="s-publish">Scheduled publish</label><input id="s-publish" type="datetime-local" value={scheduledPublishAt} onChange={(e) => setScheduledPublishAt(e.target.value)} style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }} /><small className="muted">Form becomes public at this time.</small></div>
-                <div className="question-field" style={{ flex: 1, minWidth: 200 }}><label htmlFor="s-close">Scheduled close</label><input id="s-close" type="datetime-local" value={scheduledCloseAt} onChange={(e) => setScheduledCloseAt(e.target.value)} style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }} /><small className="muted">Stops accepting responses at this time.</small></div>
+                <div className="question-field" style={{ flex: 1, minWidth: 200 }}><label htmlFor="s-publish">Scheduled publish</label><input id="s-publish" type="datetime-local" value={scheduledPublishAt} onChange={(e) => setScheduledPublishAt(e.target.value)} style={{ width: "100%", border: "1px solid var(--color-border-strong)", borderRadius: 10, padding: "10px 12px" }} /><small className="muted">Form becomes public at this time.</small></div>
+                <div className="question-field" style={{ flex: 1, minWidth: 200 }}><label htmlFor="s-close">Scheduled close</label><input id="s-close" type="datetime-local" value={scheduledCloseAt} onChange={(e) => setScheduledCloseAt(e.target.value)} style={{ width: "100%", border: "1px solid var(--color-border-strong)", borderRadius: 10, padding: "10px 12px" }} /><small className="muted">Stops accepting responses at this time.</small></div>
               </div>
-              <div className="question-field"><label htmlFor="s-response-editing">Let respondents edit their response</label><select id="s-response-editing" value={responseEditing} onChange={(e) => setResponseEditing(e.target.value as "disabled" | "timed" | "until_close")} style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }}><option value="disabled">Off</option><option value="timed">Allow editing for a few minutes</option><option value="until_close">Allow editing until the form closes</option></select><small className="muted">Respondents can correct their own just-submitted response in the same session.</small></div>
-              {responseEditing === "timed" ? (<div className="question-field"><label htmlFor="s-response-edit-minutes">Editing window (minutes)</label><input id="s-response-edit-minutes" type="number" min={1} max={1440} value={responseEditMinutes} onChange={(e) => setResponseEditMinutes(Math.max(1, Math.min(1440, Number(e.target.value) || 1)))} style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }} /><small className="muted">How long after submitting a respondent can edit (1–1440).</small></div>) : null}
+              <div className="question-field"><label htmlFor="s-response-editing">Let respondents edit their response</label><select id="s-response-editing" value={responseEditing} onChange={(e) => setResponseEditing(e.target.value as "disabled" | "timed" | "until_close")} style={{ width: "100%", border: "1px solid var(--color-border-strong)", borderRadius: 10, padding: "10px 12px" }}><option value="disabled">Off</option><option value="timed">Allow editing for a few minutes</option><option value="until_close">Allow editing until the form closes</option></select><small className="muted">Respondents can correct their own just-submitted response in the same session.</small></div>
+              {responseEditing === "timed" ? (<div className="question-field"><label htmlFor="s-response-edit-minutes">Editing window (minutes)</label><input id="s-response-edit-minutes" type="number" min={1} max={1440} value={responseEditMinutes} onChange={(e) => setResponseEditMinutes(Math.max(1, Math.min(1440, Number(e.target.value) || 1)))} style={{ width: "100%", border: "1px solid var(--color-border-strong)", borderRadius: 10, padding: "10px 12px" }} /><small className="muted">How long after submitting a respondent can edit (1–1440).</small></div>) : null}
             </SettingsGroup>
             <SettingsGroup title="Presentation" description="What respondents see after submitting" summary={confirmationMessage ? "Custom message set" : "Default message"}>
               <div className="question-field"><label htmlFor="s-confirm">Confirmation message</label><textarea id="s-confirm" rows={3} value={confirmationMessage} onChange={(e) => setConfirmationMessage(e.target.value)} placeholder="Thanks for your response." /><small className="muted">Shown to respondents after they submit.</small></div>
             </SettingsGroup>
             <SettingsGroup title="Payments" description="Require a payment before respondents can submit" summary={paymentEnabled ? (paymentMode === "respondent" ? "Required · payer enters amount" : `Required · ₹${paymentAmountRupees || "0"}`) : "Off"}>
               {!paymentsAllowed ? (
-                <div role="note" className="muted" style={{ border: "1px solid #fcd34d", background: "#fffbeb", borderRadius: 10, padding: "10px 12px", marginBottom: 12 }}>
+                <div role="note" className="muted" style={{ border: "1px solid var(--color-warning-text)", background: "var(--color-warning-tint)", borderRadius: 10, padding: "10px 12px", marginBottom: 12 }}>
                   <p style={{ margin: 0 }}>Online card/UPI payments are limited to approved workspaces. Collect payments with the manual UPI option instead.</p>
                   {paymentWasEnabled ? (
                     <p style={{ margin: "8px 0 0", fontWeight: 600 }}>Payments were enabled on this form earlier. Respondents can't pay right now, and saving settings will turn payments off.</p>
@@ -1968,7 +1968,7 @@ export default function FormEditorPage() {
                 <>
                   <div className="question-field">
                     <label htmlFor="s-payment-mode">Payment amount</label>
-                    <select id="s-payment-mode" value={paymentMode} onChange={(e) => setPaymentMode(e.target.value as "fixed" | "respondent")} style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }}>
+                    <select id="s-payment-mode" value={paymentMode} onChange={(e) => setPaymentMode(e.target.value as "fixed" | "respondent")} style={{ width: "100%", border: "1px solid var(--color-border-strong)", borderRadius: 10, padding: "10px 12px" }}>
                       <option value="fixed">Fixed amount</option>
                       <option value="respondent">Respondent enters amount</option>
                     </select>
@@ -1978,8 +1978,8 @@ export default function FormEditorPage() {
                     <div className="question-field">
                       <label htmlFor="s-payment-amount">Amount (₹)</label>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <span aria-hidden="true" style={{ color: "#64748b" }}>₹</span>
-                        <input id="s-payment-amount" type="number" min={1} max={150000} step="0.01" inputMode="decimal" value={paymentAmountRupees} onChange={(e) => setPaymentAmountRupees(e.target.value)} placeholder="100" style={{ flex: 1, border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }} />
+                        <span aria-hidden="true" style={{ color: "var(--color-text-subtle)" }}>₹</span>
+                        <input id="s-payment-amount" type="number" min={1} max={150000} step="0.01" inputMode="decimal" value={paymentAmountRupees} onChange={(e) => setPaymentAmountRupees(e.target.value)} placeholder="100" style={{ flex: 1, border: "1px solid var(--color-border-strong)", borderRadius: 10, padding: "10px 12px" }} />
                       </div>
                       <small className="muted">Fixed amount per response. Minimum ₹1 (up to ₹1,50,000).</small>
                     </div>
@@ -1988,16 +1988,16 @@ export default function FormEditorPage() {
                       <div className="question-field" style={{ flex: 1, minWidth: 160 }}>
                         <label htmlFor="s-payment-min">Minimum (₹, optional)</label>
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <span aria-hidden="true" style={{ color: "#64748b" }}>₹</span>
-                          <input id="s-payment-min" type="number" min={1} max={150000} step="0.01" inputMode="decimal" value={paymentMinRupees} onChange={(e) => setPaymentMinRupees(e.target.value)} placeholder="1" style={{ flex: 1, border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }} />
+                          <span aria-hidden="true" style={{ color: "var(--color-text-subtle)" }}>₹</span>
+                          <input id="s-payment-min" type="number" min={1} max={150000} step="0.01" inputMode="decimal" value={paymentMinRupees} onChange={(e) => setPaymentMinRupees(e.target.value)} placeholder="1" style={{ flex: 1, border: "1px solid var(--color-border-strong)", borderRadius: 10, padding: "10px 12px" }} />
                         </div>
                         <small className="muted">Lowest allowed. Defaults to ₹1 if blank.</small>
                       </div>
                       <div className="question-field" style={{ flex: 1, minWidth: 160 }}>
                         <label htmlFor="s-payment-max">Maximum (₹, optional)</label>
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <span aria-hidden="true" style={{ color: "#64748b" }}>₹</span>
-                          <input id="s-payment-max" type="number" min={1} max={150000} step="0.01" inputMode="decimal" value={paymentMaxRupees} onChange={(e) => setPaymentMaxRupees(e.target.value)} placeholder="1,50,000" style={{ flex: 1, border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }} />
+                          <span aria-hidden="true" style={{ color: "var(--color-text-subtle)" }}>₹</span>
+                          <input id="s-payment-max" type="number" min={1} max={150000} step="0.01" inputMode="decimal" value={paymentMaxRupees} onChange={(e) => setPaymentMaxRupees(e.target.value)} placeholder="1,50,000" style={{ flex: 1, border: "1px solid var(--color-border-strong)", borderRadius: 10, padding: "10px 12px" }} />
                         </div>
                         <small className="muted">Highest allowed. Defaults to ₹1,50,000 if blank.</small>
                       </div>
@@ -2023,13 +2023,13 @@ export default function FormEditorPage() {
               {paymentTurnedOffNote ? (<p role="status" className="muted">Online payments were turned off because a form can use only one payment method.</p>) : null}
               {manualUpiEnabled ? (
                 <>
-                  <div className="question-field"><label htmlFor="s-upi-id">UPI ID</label><input id="s-upi-id" type="text" autoComplete="off" maxLength={100} value={upiId} onChange={(e) => setUpiId(e.target.value)} placeholder="name@bank" style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }} /><small className="muted">Shown publicly to everyone who opens this form.</small></div>
-                  <div className="question-field"><label htmlFor="s-upi-payee">Payee name</label><input id="s-upi-payee" type="text" autoComplete="off" maxLength={60} value={payeeName} onChange={(e) => setPayeeName(e.target.value)} placeholder="Name shown in the payer's UPI app" style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }} /><small className="muted">Respondents compare this with the name their UPI app shows.</small></div>
+                  <div className="question-field"><label htmlFor="s-upi-id">UPI ID</label><input id="s-upi-id" type="text" autoComplete="off" maxLength={100} value={upiId} onChange={(e) => setUpiId(e.target.value)} placeholder="name@bank" style={{ width: "100%", border: "1px solid var(--color-border-strong)", borderRadius: 10, padding: "10px 12px" }} /><small className="muted">Shown publicly to everyone who opens this form.</small></div>
+                  <div className="question-field"><label htmlFor="s-upi-payee">Payee name</label><input id="s-upi-payee" type="text" autoComplete="off" maxLength={60} value={payeeName} onChange={(e) => setPayeeName(e.target.value)} placeholder="Name shown in the payer's UPI app" style={{ width: "100%", border: "1px solid var(--color-border-strong)", borderRadius: 10, padding: "10px 12px" }} /><small className="muted">Respondents compare this with the name their UPI app shows.</small></div>
                   <div className="question-field">
                     <label htmlFor="s-upi-amount">Amount ({"\u20B9"}, optional)</label>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span aria-hidden="true" style={{ color: "#64748b" }}>{"\u20B9"}</span>
-                      <input id="s-upi-amount" type="number" min={1} max={150000} step="0.01" inputMode="decimal" value={upiAmountRupees} onChange={(e) => setUpiAmountRupees(e.target.value)} placeholder="Leave empty to state the amount in the instructions" style={{ flex: 1, border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }} />
+                      <span aria-hidden="true" style={{ color: "var(--color-text-subtle)" }}>{"\u20B9"}</span>
+                      <input id="s-upi-amount" type="number" min={1} max={150000} step="0.01" inputMode="decimal" value={upiAmountRupees} onChange={(e) => setUpiAmountRupees(e.target.value)} placeholder="Leave empty to state the amount in the instructions" style={{ flex: 1, border: "1px solid var(--color-border-strong)", borderRadius: 10, padding: "10px 12px" }} />
                     </div>
                     <small className="muted">Fixed amount, ₹1 to ₹1,50,000.</small>
                   </div>
@@ -2043,7 +2043,7 @@ export default function FormEditorPage() {
               {capacityEnabled ? (
                 <div className="question-field">
                   <label htmlFor="s-capacity-limit">Maximum responses</label>
-                  <input id="s-capacity-limit" type="number" min={1} max={1000000} step={1} inputMode="numeric" value={capacityLimit} onChange={(e) => setCapacityLimit(e.target.value)} placeholder="120" style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }} />
+                  <input id="s-capacity-limit" type="number" min={1} max={1000000} step={1} inputMode="numeric" value={capacityLimit} onChange={(e) => setCapacityLimit(e.target.value)} placeholder="120" style={{ width: "100%", border: "1px solid var(--color-border-strong)", borderRadius: 10, padding: "10px 12px" }} />
                   <small className="muted">The form shows "X of N seats left" and becomes fully booked at this count. Between 1 and 1,000,000.</small>
                 </div>
               ) : null}
@@ -2094,7 +2094,7 @@ export default function FormEditorPage() {
                   value={coverImageUrl}
                   onChange={(e) => setCoverImageUrl(e.target.value)}
                   placeholder="https://example.com/cover.jpg"
-                  style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px", marginTop: 8 }}
+                  style={{ width: "100%", border: "1px solid var(--color-border-strong)", borderRadius: 10, padding: "10px 12px", marginTop: 8 }}
                 />
                 {coverImageUrl ? (
                   <button type="button" className="secondary-button compact" style={{ marginTop: 8 }} onClick={() => setCoverImageUrl("")}>
@@ -2151,7 +2151,7 @@ export default function FormEditorPage() {
                   id="a-font"
                   value={fontFamily}
                   onChange={(e) => setFontFamily(e.target.value)}
-                  style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }}
+                  style={{ width: "100%", border: "1px solid var(--color-border-strong)", borderRadius: 10, padding: "10px 12px" }}
                 >
                   <option value="">Default</option>
                   {FONT_ALLOW_LIST.map((f) => (
@@ -2210,7 +2210,7 @@ function AppearancePreview({
       <p className="eyebrow" style={{ marginBottom: 8 }}>Live preview</p>
       <div
         style={{
-          border: "1px solid #e2e8f0",
+          border: "1px solid var(--color-border)",
           borderRadius: 12,
           padding: 16,
           background: resolved.background ?? "#ffffff",
@@ -2228,7 +2228,7 @@ function AppearancePreview({
         <h3 style={{ margin: "4px 0 12px" }}>{title || "Form title"}</h3>
         <div className="question-field" style={{ marginBottom: 12 }}>
           <label><span className="question-label">Sample question</span></label>
-          <input type="text" placeholder="Your answer..." disabled style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }} />
+          <input type="text" placeholder="Your answer..." disabled style={{ width: "100%", border: "1px solid var(--color-border-strong)", borderRadius: 10, padding: "10px 12px" }} />
         </div>
         <button type="button" className="submit-button" style={{ background: previewAccent, maxWidth: 200 }} disabled>
           Submit response
@@ -2675,7 +2675,7 @@ function QuestionCard({
                         id={`${question.id}-scale-min`}
                         value={question.settings?.min ?? 1}
                         onChange={(e) => onChange(question.id, { settings: { ...question.settings, min: Number(e.target.value) } })}
-                        style={{ border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px" }}
+                        style={{ border: "1px solid var(--color-border-strong)", borderRadius: 8, padding: "8px 10px" }}
                       >
                         <option value={0}>0</option>
                         <option value={1}>1</option>
@@ -2687,7 +2687,7 @@ function QuestionCard({
                         id={`${question.id}-scale-max`}
                         value={question.settings?.max ?? 10}
                         onChange={(e) => onChange(question.id, { settings: { ...question.settings, max: Number(e.target.value) } })}
-                        style={{ border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px" }}
+                        style={{ border: "1px solid var(--color-border-strong)", borderRadius: 8, padding: "8px 10px" }}
                       >
                         {[2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => <option key={n} value={n}>{n}</option>)}
                       </select>
@@ -2700,7 +2700,7 @@ function QuestionCard({
                         maxLength={100}
                         onChange={(e) => onChange(question.id, { settings: { ...question.settings, minLabel: e.target.value } })}
                         placeholder="e.g. Not at all"
-                        style={{ width: 120, border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px" }}
+                        style={{ width: 120, border: "1px solid var(--color-border-strong)", borderRadius: 8, padding: "8px 10px" }}
                       />
                     </div>
                     <div>
@@ -2711,7 +2711,7 @@ function QuestionCard({
                         maxLength={100}
                         onChange={(e) => onChange(question.id, { settings: { ...question.settings, maxLabel: e.target.value } })}
                         placeholder="e.g. Extremely"
-                        style={{ width: 120, border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px" }}
+                        style={{ width: 120, border: "1px solid var(--color-border-strong)", borderRadius: 8, padding: "8px 10px" }}
                       />
                     </div>
                   </>
@@ -2722,11 +2722,11 @@ function QuestionCard({
                       id={`${question.id}-stars`}
                       value={question.settings?.max ?? 5}
                       onChange={(e) => onChange(question.id, { settings: { ...question.settings, min: 1, max: Number(e.target.value) } })}
-                      style={{ border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px" }}
+                      style={{ border: "1px solid var(--color-border-strong)", borderRadius: 8, padding: "8px 10px" }}
                     >
                       {[3, 4, 5, 6, 7, 8, 9, 10].map((n) => <option key={n} value={n}>{n}</option>)}
                     </select>
-                    <span className="muted" aria-hidden="true" style={{ marginLeft: 10, color: "#f59e0b", letterSpacing: 2 }}>
+                    <span className="muted" aria-hidden="true" style={{ marginLeft: 10, color: "var(--color-warning-text)", letterSpacing: 2 }}>
                       {"\u2605".repeat(Math.min(10, Math.max(3, question.settings?.max ?? 5)))}
                     </span>
                   </div>
@@ -2735,7 +2735,7 @@ function QuestionCard({
             ) : null}
             {question.type === "TIME" ? (
               <div style={{ marginTop: 14 }}>
-                <input type="time" disabled aria-label="Time answer preview" style={{ border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px", background: "#f8fafc", color: "#94a3b8" }} />
+                <input type="time" disabled aria-label="Time answer preview" style={{ border: "1px solid var(--color-border-strong)", borderRadius: 8, padding: "8px 10px", background: "var(--color-surface-sunken)", color: "var(--color-text-subtle)" }} />
               </div>
             ) : null}
             {isGridType(question.type) ? <GridEditor question={question} onChange={onChange} /> : null}
@@ -2745,18 +2745,18 @@ function QuestionCard({
                 <label style={{display: "block", fontSize: "0.82rem", fontWeight: 750, marginBottom: 8}}>File upload settings</label>
                 <div style={{display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-start"}}>
                   <div>
-                    <label style={{display: "block", fontSize: "0.75rem", color: "#64748b", marginBottom: 4}}>Max size (MB)</label>
+                    <label style={{display: "block", fontSize: "0.75rem", color: "var(--color-text-subtle)", marginBottom: 4}}>Max size (MB)</label>
                     <input
                       type="number"
                       value={question.settings?.maxFileSizeMB ?? 5}
                       min={1}
                       max={50}
                       onChange={(e) => onChange(question.id, { settings: { ...question.settings, maxFileSizeMB: Number(e.target.value) } })}
-                      style={{width: 80, border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px"}}
+                      style={{width: 80, border: "1px solid var(--color-border-strong)", borderRadius: 8, padding: "8px 10px"}}
                     />
                   </div>
                   <div>
-                    <label style={{display: "block", fontSize: "0.75rem", color: "#64748b", marginBottom: 4}}>Allowed file types</label>
+                    <label style={{display: "block", fontSize: "0.75rem", color: "var(--color-text-subtle)", marginBottom: 4}}>Allowed file types</label>
                     <div style={{display: "flex", flexDirection: "column", gap: 6}}>
                       {([
                         { label: "Images (jpg, png, gif, webp\u2026)", mime: "image/*" },
@@ -2805,11 +2805,11 @@ function QuestionCard({
                     disabled
                     placeholder="Entry 1"
                     style={{
-                      border: "1px solid #cbd5e1",
+                      border: "1px solid var(--color-border-strong)",
                       borderRadius: 10,
                       padding: "10px 12px",
-                      background: "#f8fafc",
-                      color: "#94a3b8",
+                      background: "var(--color-surface-sunken)",
+                      color: "var(--color-text-subtle)",
                       width: "100%",
                     }}
                   />
@@ -2819,7 +2819,7 @@ function QuestionCard({
                     display: "inline-block",
                     marginTop: 8,
                     fontSize: "0.82rem",
-                    color: "#94a3b8",
+                    color: "var(--color-text-subtle)",
                     cursor: "default",
                   }}
                 >
@@ -2833,33 +2833,33 @@ function QuestionCard({
               <div style={{ marginTop: 14 }}>
                 <div
                   style={{
-                    border: "2px dashed #cbd5e1",
+                    border: "2px dashed var(--color-border-strong)",
                     borderRadius: 12,
                     padding: "24px 16px",
                     textAlign: "center",
-                    background: "#f8fafc",
+                    background: "var(--color-surface-sunken)",
                   }}
                 >
-                  <p style={{ margin: "0 0 4px", color: "#475569", fontWeight: 600 }}>Signature</p>
-                  <p style={{ margin: 0, color: "#94a3b8", fontSize: "0.82rem" }}>Respondent signs here</p>
+                  <p style={{ margin: "0 0 4px", color: "var(--color-text-muted)", fontWeight: 600 }}>Signature</p>
+                  <p style={{ margin: 0, color: "var(--color-text-subtle)", fontSize: "0.82rem" }}>Respondent signs here</p>
                 </div>
               </div>
             ) : null}
 
             {/* Quiz mode: correct answer + points */}
             {isQuizMode && answerable ? (
-              <div style={{ marginTop: 14, padding: "12px 14px", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 10 }}>
-                <span style={{ fontSize: "0.78rem", fontWeight: 750, color: "#166534", display: "block", marginBottom: 10 }}>
+              <div style={{ marginTop: 14, padding: "12px 14px", background: "var(--color-success-tint)", border: "1px solid var(--color-success-text)", borderRadius: 10 }}>
+                <span style={{ fontSize: "0.78rem", fontWeight: 750, color: "var(--color-success-text)", display: "block", marginBottom: 10 }}>
                   Quiz scoring
                 </span>
                 <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center" }}>
                   <div style={{ flex: 1, minWidth: 160 }}>
-                    <label style={{ display: "block", fontSize: "0.75rem", color: "#64748b", marginBottom: 4 }}>Correct answer</label>
+                    <label style={{ display: "block", fontSize: "0.75rem", color: "var(--color-text-subtle)", marginBottom: 4 }}>Correct answer</label>
                     {question.options ? (
                       <select
                         value={question.settings?.correctAnswer ?? ""}
                         onChange={(e) => onChange(question.id, { settings: { ...question.settings, correctAnswer: e.target.value || undefined } })}
-                        style={{ width: "100%", border: "1px solid #bbf7d0", borderRadius: 8, padding: "8px 10px", fontSize: "0.85rem" }}
+                        style={{ width: "100%", border: "1px solid var(--color-success-text)", borderRadius: 8, padding: "8px 10px", fontSize: "0.85rem" }}
                       >
                         <option value="">Not set</option>
                         {question.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -2870,19 +2870,19 @@ function QuestionCard({
                         value={question.settings?.correctAnswer ?? ""}
                         onChange={(e) => onChange(question.id, { settings: { ...question.settings, correctAnswer: e.target.value || undefined } })}
                         placeholder="Correct value..."
-                        style={{ width: "100%", border: "1px solid #bbf7d0", borderRadius: 8, padding: "8px 10px", fontSize: "0.85rem" }}
+                        style={{ width: "100%", border: "1px solid var(--color-success-text)", borderRadius: 8, padding: "8px 10px", fontSize: "0.85rem" }}
                       />
                     )}
                   </div>
                   <div style={{ width: 80 }}>
-                    <label style={{ display: "block", fontSize: "0.75rem", color: "#64748b", marginBottom: 4 }}>Points</label>
+                    <label style={{ display: "block", fontSize: "0.75rem", color: "var(--color-text-subtle)", marginBottom: 4 }}>Points</label>
                     <input
                       type="number"
                       value={question.settings?.points ?? 1}
                       min={0}
                       max={100}
                       onChange={(e) => onChange(question.id, { settings: { ...question.settings, points: Number(e.target.value) } })}
-                      style={{ width: "100%", border: "1px solid #bbf7d0", borderRadius: 8, padding: "8px 10px", textAlign: "center" }}
+                      style={{ width: "100%", border: "1px solid var(--color-success-text)", borderRadius: 8, padding: "8px 10px", textAlign: "center" }}
                     />
                   </div>
                 </div>
@@ -3106,11 +3106,11 @@ function ResponsesTabPanel({ formId, hasManualUpi }: { formId: string; formTitle
       <div style={{ display: "flex", gap: 16, marginBottom: 20, flexWrap: "wrap" }}>
         <div className="editor-card" style={{ flex: 1, minWidth: 140, padding: "20px", textAlign: "center" }}>
           <span className="muted" style={{ fontSize: "0.78rem", display: "block", marginBottom: 4 }}>Total</span>
-          <strong style={{ fontSize: "1.8rem", color: "#111827" }}>{totalCount ?? 0}</strong>
+          <strong style={{ fontSize: "1.8rem", color: "var(--color-text)" }}>{totalCount ?? 0}</strong>
         </div>
         <div className="editor-card" style={{ flex: 1, minWidth: 140, padding: "20px", textAlign: "center" }}>
           <span className="muted" style={{ fontSize: "0.78rem", display: "block", marginBottom: 4 }}>Showing</span>
-          <strong style={{ fontSize: "1.8rem", color: "#111827" }}>{responses.length}</strong>
+          <strong style={{ fontSize: "1.8rem", color: "var(--color-text)" }}>{responses.length}</strong>
         </div>
         <div className="editor-card" style={{ flex: 1, minWidth: 140, padding: "20px", textAlign: "center" }}>
           <Link to={`/forms/${formId}/reports`} className="secondary-link" style={{ fontSize: "0.88rem" }}>
@@ -3149,9 +3149,9 @@ function ResponsesTabPanel({ formId, hasManualUpi }: { formId: string; formTitle
             {responses.slice(0, 20).map((resp) => {
               const manualPayment = getManualPayment(resp.metadata);
               return (
-              <div key={resp.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", padding: "12px 16px", background: "#f8fafc", borderRadius: 10, border: "1px solid #f1f5f9" }}>
+              <div key={resp.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", padding: "12px 16px", background: "var(--color-surface-sunken)", borderRadius: 10, border: "1px solid var(--color-border)" }}>
                 <div>
-                  <strong style={{ color: "#1e293b", fontSize: "0.9rem" }}>
+                  <strong style={{ color: "var(--color-text)", fontSize: "0.9rem" }}>
                     {new Date(resp.submittedAt).toLocaleString()}
                   </strong>
                   {typeof resp.metadata?.email === "string" ? (
@@ -3208,7 +3208,7 @@ function SettingsGroup({
           {!expanded ? (
             <span className="settings-group-summary">{summary}</span>
           ) : null}
-          <span style={{ fontSize: "0.9rem", color: "#94a3b8" }}>{expanded ? "▲" : "▼"}</span>
+          <span style={{ fontSize: "0.9rem", color: "var(--color-text-subtle)" }}>{expanded ? "▲" : "▼"}</span>
         </div>
       </button>
       {expanded ? (
@@ -3226,10 +3226,10 @@ function SaveStatusBadge({ status }: { status: string }) {
   if (status === "idle") return null;
 
   const config: Record<string, { text: string; color: string; bg: string }> = {
-    saving: { text: "Saving…", color: "#64748b", bg: "#f1f5f9" },
-    saved: { text: "Saved ✓", color: "#16a34a", bg: "#f0fdf4" },
-    error: { text: "Error saving", color: "#dc2626", bg: "#fef2f2" },
-    offline: { text: "Offline ⚠", color: "#d97706", bg: "#fefce8" },
+    saving: { text: "Saving…", color: "var(--color-text-subtle)", bg: "var(--color-surface-sunken)" },
+    saved: { text: "Saved ✓", color: "var(--color-success-text)", bg: "var(--color-success-tint)" },
+    error: { text: "Error saving", color: "var(--color-danger-text)", bg: "var(--color-danger-tint)" },
+    offline: { text: "Offline ⚠", color: "var(--color-warning-text)", bg: "var(--color-warning-tint)" },
   };
 
   const c = config[status] ?? config["saving"];
@@ -3326,7 +3326,7 @@ function SectionJumpEditor({
         <button
           type="button"
           className="back-button inline-button"
-          style={{ fontSize: "0.78rem", color: "#94a3b8" }}
+          style={{ fontSize: "0.78rem", color: "var(--color-text-subtle)" }}
           onClick={() => setShowEditor(true)}
           disabled={inSectionQuestions.length === 0}
           title={inSectionQuestions.length === 0 ? "Add a question to this section first" : ""}
@@ -3338,9 +3338,9 @@ function SectionJumpEditor({
   }
 
   return (
-    <div ref={rootRef} style={{ marginBottom: 12, padding: "12px 14px", background: "#fefce8", border: "1px solid #fde68a", borderRadius: 10 }}>
+    <div ref={rootRef} style={{ marginBottom: 12, padding: "12px 14px", background: "var(--color-warning-tint)", border: "1px solid var(--color-warning-text)", borderRadius: 10 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <span style={{ fontSize: "0.78rem", fontWeight: 750, color: "#92400e" }}>
+        <span style={{ fontSize: "0.78rem", fontWeight: 750, color: "var(--color-warning-text)" }}>
           Skip logic — after this section, jump when:
         </span>
         {rules.length === 0 ? (
@@ -3362,7 +3362,7 @@ function SectionJumpEditor({
             <select
               value={rule.questionId}
               onChange={(e) => updateRule(idx, { questionId: e.target.value })}
-              style={{ border: "1px solid #fde68a", borderRadius: 6, padding: "6px 8px", fontSize: "0.8rem", maxWidth: 180 }}
+              style={{ border: "1px solid var(--color-warning-text)", borderRadius: 6, padding: "6px 8px", fontSize: "0.8rem", maxWidth: 180 }}
             >
               {inSectionQuestions.map((q) => (
                 <option key={q.id} value={q.id}>{q.label.slice(0, 30)}</option>
@@ -3372,7 +3372,7 @@ function SectionJumpEditor({
             <select
               value={rule.operator}
               onChange={(e) => updateRule(idx, { operator: e.target.value as SectionJumpRule["operator"] })}
-              style={{ border: "1px solid #fde68a", borderRadius: 6, padding: "6px 8px", fontSize: "0.8rem" }}
+              style={{ border: "1px solid var(--color-warning-text)", borderRadius: 6, padding: "6px 8px", fontSize: "0.8rem" }}
             >
               <option value="equals">equals</option>
               <option value="not_equals">not equals</option>
@@ -3385,7 +3385,7 @@ function SectionJumpEditor({
                 <select
                   value={rule.value ?? ""}
                   onChange={(e) => updateRule(idx, { value: e.target.value })}
-                  style={{ border: "1px solid #fde68a", borderRadius: 6, padding: "6px 8px", fontSize: "0.8rem" }}
+                  style={{ border: "1px solid var(--color-warning-text)", borderRadius: 6, padding: "6px 8px", fontSize: "0.8rem" }}
                 >
                   <option value="">Select...</option>
                   {refQuestion.options.map((o) => (
@@ -3398,17 +3398,17 @@ function SectionJumpEditor({
                   value={rule.value ?? ""}
                   onChange={(e) => updateRule(idx, { value: e.target.value })}
                   placeholder="value"
-                  style={{ border: "1px solid #fde68a", borderRadius: 6, padding: "6px 8px", fontSize: "0.8rem", width: 120 }}
+                  style={{ border: "1px solid var(--color-warning-text)", borderRadius: 6, padding: "6px 8px", fontSize: "0.8rem", width: 120 }}
                 />
               )
             ) : null}
 
-            <span style={{ fontSize: "0.78rem", color: "#92400e" }}>→ go to</span>
+            <span style={{ fontSize: "0.78rem", color: "var(--color-warning-text)" }}>→ go to</span>
 
             <select
               value={rule.target}
               onChange={(e) => updateRule(idx, { target: e.target.value })}
-              style={{ border: "1px solid #fde68a", borderRadius: 6, padding: "6px 8px", fontSize: "0.8rem", maxWidth: 180 }}
+              style={{ border: "1px solid var(--color-warning-text)", borderRadius: 6, padding: "6px 8px", fontSize: "0.8rem", maxWidth: 180 }}
             >
               {laterSections.map((s) => (
                 <option key={s.id} value={s.id}>{(s.title || "Untitled section").slice(0, 30)}</option>
@@ -3419,7 +3419,7 @@ function SectionJumpEditor({
             <button
               type="button"
               onClick={() => removeRule(idx)}
-              style={{ border: "none", background: "none", color: "#dc2626", cursor: "pointer", fontSize: "1rem", padding: "2px 6px" }}
+              style={{ border: "none", background: "none", color: "var(--color-danger-text)", cursor: "pointer", fontSize: "1rem", padding: "2px 6px" }}
               title="Remove rule"
             >
               ×
@@ -3533,9 +3533,9 @@ function ConditionEditor({
   }
 
   return (
-    <div style={{ marginTop: 14, padding: "12px 14px", background: "#fefce8", border: "1px solid #fde68a", borderRadius: 10 }}>
+    <div style={{ marginTop: 14, padding: "12px 14px", background: "var(--color-warning-tint)", border: "1px solid var(--color-warning-text)", borderRadius: 10 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <span style={{ fontSize: "0.78rem", fontWeight: 750, color: "#92400e" }}>
+        <span style={{ fontSize: "0.78rem", fontWeight: 750, color: "var(--color-warning-text)" }}>
           Conditional logic — show this question when:
         </span>
         {conditions.length === 0 ? (
@@ -3566,7 +3566,7 @@ function ConditionEditor({
             <select
               value={rule.questionId}
               onChange={(e) => updateCondition(idx, { questionId: e.target.value })}
-              style={{ border: "1px solid #fde68a", borderRadius: 6, padding: "6px 8px", fontSize: "0.8rem", maxWidth: 180 }}
+              style={{ border: "1px solid var(--color-warning-text)", borderRadius: 6, padding: "6px 8px", fontSize: "0.8rem", maxWidth: 180 }}
             >
               {availableQuestions.map((q) => (
                 <option key={q.id} value={q.id}>{q.label.slice(0, 30)}</option>
@@ -3576,7 +3576,7 @@ function ConditionEditor({
             <select
               value={rule.operator}
               onChange={(e) => updateCondition(idx, { operator: e.target.value as ConditionRule["operator"] })}
-              style={{ border: "1px solid #fde68a", borderRadius: 6, padding: "6px 8px", fontSize: "0.8rem" }}
+              style={{ border: "1px solid var(--color-warning-text)", borderRadius: 6, padding: "6px 8px", fontSize: "0.8rem" }}
             >
               <option value="equals">equals</option>
               <option value="not_equals">not equals</option>
@@ -3589,7 +3589,7 @@ function ConditionEditor({
                 <select
                   value={rule.value ?? ""}
                   onChange={(e) => updateCondition(idx, { value: e.target.value })}
-                  style={{ border: "1px solid #fde68a", borderRadius: 6, padding: "6px 8px", fontSize: "0.8rem" }}
+                  style={{ border: "1px solid var(--color-warning-text)", borderRadius: 6, padding: "6px 8px", fontSize: "0.8rem" }}
                 >
                   <option value="">Select...</option>
                   {refQuestion.options.map((o) => (
@@ -3602,7 +3602,7 @@ function ConditionEditor({
                   value={rule.value ?? ""}
                   onChange={(e) => updateCondition(idx, { value: e.target.value })}
                   placeholder="value"
-                  style={{ border: "1px solid #fde68a", borderRadius: 6, padding: "6px 8px", fontSize: "0.8rem", width: 120 }}
+                  style={{ border: "1px solid var(--color-warning-text)", borderRadius: 6, padding: "6px 8px", fontSize: "0.8rem", width: 120 }}
                 />
               )
             ) : null}
@@ -3610,7 +3610,7 @@ function ConditionEditor({
             <button
               type="button"
               onClick={() => removeCondition(idx)}
-              style={{ border: "none", background: "none", color: "#dc2626", cursor: "pointer", fontSize: "1rem", padding: "2px 6px" }}
+              style={{ border: "none", background: "none", color: "var(--color-danger-text)", cursor: "pointer", fontSize: "1rem", padding: "2px 6px" }}
               title="Remove condition"
             >
               ×
@@ -3685,9 +3685,9 @@ function VersionHistory({ formId }: { formId: string }) {
       {expanded && versions.length > 0 ? (
         <div className="editor-question-list">
           {versions.map((v) => (
-            <div key={v.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", background: "#f8fafc", borderRadius: 12, border: "1px solid #e2e8f0" }}>
+            <div key={v.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", background: "var(--color-surface-sunken)", borderRadius: 12, border: "1px solid var(--color-border)" }}>
               <div>
-                <strong style={{ color: "#111827" }}>v{v.versionNumber}</strong>
+                <strong style={{ color: "var(--color-text)" }}>v{v.versionNumber}</strong>
                 <span className="muted" style={{ marginLeft: 12 }}>{v.title}</span>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>

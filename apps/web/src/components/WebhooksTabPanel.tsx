@@ -33,10 +33,10 @@ const EVENT_OPTIONS = [
 
 function statusBadgeStyle(status: WebhookDelivery["status"]): React.CSSProperties {
   const palette: Record<WebhookDelivery["status"], { bg: string; fg: string }> = {
-    delivered: { bg: "#dcfce7", fg: "#166534" },
-    pending: { bg: "#fef9c3", fg: "#854d0e" },
-    failed: { bg: "#fee2e2", fg: "#991b1b" },
-    exhausted: { bg: "#e5e7eb", fg: "#374151" },
+    delivered: { bg: "var(--color-success-tint)", fg: "var(--color-success-text)" },
+    pending: { bg: "var(--color-warning-tint)", fg: "var(--color-warning-text)" },
+    failed: { bg: "var(--color-danger-tint)", fg: "var(--color-danger-text)" },
+    exhausted: { bg: "var(--status-draft-bg)", fg: "var(--status-draft-fg)" },
   };
   const { bg, fg } = palette[status];
   return {
@@ -183,7 +183,7 @@ export default function WebhooksTabPanel({ formId }: { formId: string }) {
         </div>
       </div>
 
-      <p style={{ color: "#475569", marginTop: 0 }}>
+      <p style={{ color: "var(--color-text-muted)", marginTop: 0 }}>
         Qivo POSTs each new response to the endpoints you configure here. Every
         request is signed with the webhook&apos;s secret (header{" "}
         <code>X-Qivo-Signature: sha256=&lt;hex&gt;</code>) so your receiver can
@@ -191,7 +191,7 @@ export default function WebhooksTabPanel({ formId }: { formId: string }) {
       </p>
 
       {error ? <p className="submit-error">{error}</p> : null}
-      {message ? <p style={{ color: "#166534" }}>{message}</p> : null}
+      {message ? <p style={{ color: "var(--color-success-text)" }}>{message}</p> : null}
 
       {/* Add webhook */}
       <form onSubmit={handleAdd} style={{ display: "grid", gap: 10, marginBottom: 24 }}>
@@ -240,9 +240,9 @@ export default function WebhooksTabPanel({ formId }: { formId: string }) {
 
       {/* List */}
       {loading ? (
-        <p style={{ color: "#64748b" }}>Loading webhooks...</p>
+        <p style={{ color: "var(--color-text-subtle)" }}>Loading webhooks...</p>
       ) : webhooks.length === 0 ? (
-        <p style={{ color: "#64748b" }}>No webhooks yet. Add one above.</p>
+        <p style={{ color: "var(--color-text-subtle)" }}>No webhooks yet. Add one above.</p>
       ) : (
         <div style={{ display: "grid", gap: 16 }}>
           {webhooks.map((webhook) => (
@@ -307,15 +307,15 @@ function WebhookRow({
   return (
     <div
       className="editor-card"
-      style={{ padding: 16, margin: 0, border: "1px solid #e2e8f0" }}
+      style={{ padding: 16, margin: 0, border: "1px solid var(--color-border)" }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
         <div style={{ minWidth: 0 }}>
           <p style={{ margin: 0, fontWeight: 600, wordBreak: "break-all" }}>{webhook.url}</p>
           {webhook.description ? (
-            <p style={{ margin: "4px 0 0", color: "#64748b" }}>{webhook.description}</p>
+            <p style={{ margin: "4px 0 0", color: "var(--color-text-subtle)" }}>{webhook.description}</p>
           ) : null}
-          <p style={{ margin: "6px 0 0", color: "#64748b", fontSize: 13 }}>
+          <p style={{ margin: "6px 0 0", color: "var(--color-text-subtle)", fontSize: 13 }}>
             Events:{" "}
             {webhook.events.length > 0
               ? webhook.events.map((e) => EVENT_LABELS[e] ?? e).join(", ")
@@ -334,7 +334,7 @@ function WebhookRow({
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <code
             style={{
-              background: "#f1f5f9",
+              background: "var(--color-surface-sunken)",
               padding: "6px 10px",
               borderRadius: 6,
               fontSize: 13,
@@ -365,7 +365,7 @@ function WebhookRow({
           type="button"
           className="secondary-button compact"
           onClick={onDelete}
-          style={{ color: "#b91c1c" }}
+          style={{ color: "var(--color-danger-text)" }}
         >
           Delete
         </button>
@@ -375,15 +375,15 @@ function WebhookRow({
       {showDeliveries ? (
         <div style={{ marginTop: 12 }}>
           {loadingDeliveries ? (
-            <p style={{ color: "#64748b" }}>Loading deliveries...</p>
+            <p style={{ color: "var(--color-text-subtle)" }}>Loading deliveries...</p>
           ) : deliveriesError ? (
             <p className="submit-error">{deliveriesError}</p>
           ) : deliveries.length === 0 ? (
-            <p style={{ color: "#64748b" }}>No deliveries yet.</p>
+            <p style={{ color: "var(--color-text-subtle)" }}>No deliveries yet.</p>
           ) : (
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <thead>
-                <tr style={{ textAlign: "left", color: "#64748b" }}>
+                <tr style={{ textAlign: "left", color: "var(--color-text-subtle)" }}>
                   <th style={{ padding: "6px 8px" }}>Status</th>
                   <th style={{ padding: "6px 8px" }}>Attempts</th>
                   <th style={{ padding: "6px 8px" }}>Response</th>
@@ -392,7 +392,7 @@ function WebhookRow({
               </thead>
               <tbody>
                 {deliveries.map((d) => (
-                  <tr key={d.id} style={{ borderTop: "1px solid #e2e8f0" }}>
+                  <tr key={d.id} style={{ borderTop: "1px solid var(--color-border)" }}>
                     <td style={{ padding: "6px 8px" }}>
                       <span style={statusBadgeStyle(d.status)}>{STATUS_LABELS[d.status]}</span>
                     </td>

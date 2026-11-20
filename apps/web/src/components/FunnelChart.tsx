@@ -1,13 +1,13 @@
 // CSS stepped funnel: Views -> Starts -> Completions.
-// Bars in brand blue (#2563eb) with a green (#16a34a) completion row.
+// Bars in chart series 1 with series 2 for the completion row (tokens.css).
 // Conversion % + drop-off are shown between rows, but are SUPPRESSED (with an
 // explanatory note) whenever a cross-question filter is active, because a
 // filtered completion count mixed with unfiltered view/start totals would
 // produce nonsense percentages (see design §3). A role="img" wrapper carries
 // an aria-label text alternative summarizing the whole funnel.
 
-const BLUE = "#2563eb";
-const GREEN = "#16a34a";
+const BLUE = "var(--chart-1)";
+const GREEN = "var(--chart-2)";
 
 export type FunnelData = {
   views: number;

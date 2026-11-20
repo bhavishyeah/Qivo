@@ -1,0 +1,205 @@
+/* Form editor chrome refinements (header, tabs, question cards, panels, responses).
+   Loaded after App.css. Tokens only, no hex. The per-form theme still overrides
+   --editor-accent inside .editor-themed only; these rules fall back to brand tokens. */
+
+.editor-shell {
+  background: var(--color-bg);
+}
+
+/* Header */
+.editor-topnav {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.editor-topnav-logo {
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: var(--tracking-heading);
+}
+
+.editor-topnav-title-input {
+  padding: 6px 4px;
+  border: 0;
+  border-bottom: 2px solid var(--color-focus);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.editor-topnav-title:hover {
+  border-radius: var(--radius-sm);
+}
+
+.editor-topnav-publish {
+  border-radius: var(--radius-md);
+}
+
+.editor-topnav-publish:hover:not(:disabled) {
+  transform: none;
+}
+
+.editor-topnav-state {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+}
+
+/* Tabs: Indigo (Lime Cream in dark) text and 2px indicator */
+.editor-tab.active {
+  color: var(--color-nav-indicator);
+  border-bottom-color: var(--color-nav-indicator);
+}
+
+/* Question cards: bar in Indigo (Lime Cream in dark) with a 24px marker cap.
+   A per-form accent still wins inside .editor-themed. */
+.editor-question.active-card {
+  box-shadow: var(--shadow-1);
+}
+
+.editor-question.active-card::before {
+  background: var(--editor-accent, var(--color-nav-indicator));
+}
+
+.editor-question.active-card::after {
+  content: "";
+  position: absolute;
+  top: 12px;
+  left: -1px;
+  width: 4px;
+  height: 24px;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--color-marker);
+  pointer-events: none;
+}
+
+.editor-question-index {
+  font-family: var(--font-mono);
+  border-radius: var(--radius-sm);
+}
+
+.editor-question-grip {
+  color: var(--color-text-subtle);
+}
+
+.editor-question-grip:hover {
+  color: var(--color-text);
+}
+
+/* Inputs inside the builder get the Orchid halo behind the focus underline */
+.editor-question-title:focus,
+.editor-form-header-desc-input:focus {
+  box-shadow: 0 0 0 3px var(--color-focus-halo);
+}
+
+/* Floating toolbar and menus */
+.editor-floating-btn,
+.editor-floating-toolbar {
+  border-radius: var(--radius-md);
+}
+
+.editor-floating-btn:hover {
+  transform: none;
+}
+
+.popover-menu {
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-2);
+}
+
+.popover-menu-item:hover,
+.popover-menu-item:focus-visible {
+  background: var(--color-hover);
+}
+
+.popover-menu-item.is-selected {
+  background: var(--color-selected);
+}
+
+/* Settings, appearance, webhooks panels */
+.settings-group-summary {
+  font-family: var(--font-mono);
+}
+
+.settings-group-header:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* Responses and reports */
+.responses-table th {
+  background: var(--color-surface-sunken);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.stat-card strong,
+.funnel-count {
+  font-family: var(--font-mono);
+}
+
+.segmented-btn.is-active {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.manual-upi-badge-pending,
+.manual-upi-badge-verified,
+.manual-upi-badge-rejected {
+  font-family: var(--font-mono);
+}
+
+/* Modals */
+.modal-header h2 {
+  font-family: var(--font-display);
+  letter-spacing: var(--tracking-heading);
+}
+
+.modal-close:hover {
+  background: var(--color-hover);
+}
+
+/* Public-form button/label classes reused by editor, responses and modal chrome.
+   Scoped here so the frozen public rules in App.css stay as they are. */
+:where(.editor-shell, .responses-shell, .modal-panel, .editor-card) .eyebrow {
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-weight: 500;
+  letter-spacing: var(--tracking-label);
+}
+
+:where(.editor-shell, .responses-shell, .modal-panel, .editor-card) .secondary-button {
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+:where(.editor-shell, .responses-shell, .modal-panel, .editor-card) .secondary-button:hover:not(:disabled) {
+  background: var(--color-hover);
+}
+
+:where(.editor-shell, .responses-shell, .modal-panel, .editor-card) .primary-button {
+  border-radius: var(--radius-md);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+:where(.editor-shell, .responses-shell, .modal-panel, .editor-card) .primary-button:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+  transform: none;
+}
+
+/* Legacy link and helper classes inside the chrome */
+.app-root .primary-link,
+.app-root .secondary-link {
+  color: var(--color-link);
+  font-weight: 600;
+}
+
+.app-root .muted {
+  color: var(--color-text-subtle);
+}

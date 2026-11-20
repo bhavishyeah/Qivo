@@ -43,7 +43,7 @@ function renderSampleAnswer(answer: string) {
               maxWidth: 90,
               maxHeight: 90,
               borderRadius: 6,
-              border: "1px solid #e2e8f0",
+              border: "1px solid var(--color-border)",
               objectFit: "cover",
               display: "block",
             }}
@@ -52,7 +52,7 @@ function renderSampleAnswer(answer: string) {
       );
     }
     return (
-      <a href={answer} target="_blank" rel="noopener noreferrer" style={{ color: "#2563eb", textDecoration: "underline" }}>
+      <a href={answer} target="_blank" rel="noopener noreferrer" style={{ color: "var(--color-link)", textDecoration: "underline" }}>
         View file
       </a>
     );
@@ -445,7 +445,7 @@ export default function FormReportsPage() {
                 <div style={{ width: "100%", height: 240 }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={timeSeries} margin={{ left: 0, right: 16, top: 8 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
                       <XAxis
                         dataKey="date"
                         tick={{ fontSize: 11 }}
@@ -455,8 +455,8 @@ export default function FormReportsPage() {
                       <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
                       <Tooltip />
                       <Legend />
-                      <Line type="monotone" dataKey="views" stroke="#2563eb" strokeWidth={2} dot={false} name="Views" />
-                      <Line type="monotone" dataKey="submissions" stroke="#16a34a" strokeWidth={2} dot={false} name="Submissions" />
+                      <Line type="monotone" dataKey="views" stroke="var(--chart-1)" strokeWidth={2} dot={false} name="Views" />
+                      <Line type="monotone" dataKey="submissions" stroke="var(--chart-2)" strokeWidth={2} dot={false} name="Submissions" />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -633,11 +633,11 @@ function ChoiceChart({ report }: { report: ChoiceReport }) {
         <div style={{ width: "100%", height: Math.max(200, chartData.length * 40) }}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartData} layout="vertical" margin={{ left: 20, right: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
               <XAxis type="number" />
               <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 12 }} />
               <Tooltip formatter={(value) => [`${value} responses`, "Count"]} />
-              <Bar dataKey="count" fill="#2563eb" radius={[0, 6, 6, 0]} />
+              <Bar dataKey="count" fill="var(--chart-1)" radius={[0, 6, 6, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -651,10 +651,10 @@ function ChoiceChart({ report }: { report: ChoiceReport }) {
               display: "flex",
               justifyContent: "space-between",
               padding: "8px 0",
-              borderBottom: i < report.options.length - 1 ? "1px solid #f1f5f9" : "none",
+              borderBottom: i < report.options.length - 1 ? "1px solid var(--color-border)" : "none",
             }}
           >
-            <span style={{ color: "#334155" }}>{item.name}</span>
+            <span style={{ color: "var(--color-text-muted)" }}>{item.name}</span>
             <span className="muted">
               {item.count} ({item.percentage}%)
             </span>
@@ -681,7 +681,7 @@ function RatingChart({ report }: { report: RatingReport }) {
         <div style={{ textAlign: "right" }}>
           <span className="muted">Average</span>
           <br />
-          <strong style={{ fontSize: "1.8rem", color: "#2563eb" }}>
+          <strong style={{ fontSize: "1.8rem", color: "var(--color-link)" }}>
             {report.average ?? "—"}
           </strong>
         </div>
@@ -694,11 +694,11 @@ function RatingChart({ report }: { report: RatingReport }) {
         <div style={{ width: "100%", height: 200 }}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartData} margin={{ left: 0, right: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
               <XAxis dataKey="rating" />
               <YAxis allowDecimals={false} />
               <Tooltip formatter={(value) => [`${value} responses`, "Count"]} />
-              <Bar dataKey="count" fill="#2563eb" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="count" fill="var(--chart-1)" radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -783,10 +783,10 @@ function TextSummary({ report }: { report: TextReport }) {
               key={i}
               style={{
                 padding: "8px 12px",
-                background: i % 2 === 0 ? "#f8fafc" : "#fff",
+                background: i % 2 === 0 ? "var(--color-surface-sunken)" : "var(--color-surface)",
                 borderRadius: 8,
                 marginBottom: 4,
-                color: "#334155",
+                color: "var(--color-text-muted)",
                 fontSize: "0.92rem",
               }}
             >

@@ -5,7 +5,7 @@ import { Chips } from "./Chips";
 // Count rendered chip pills by the shared indigo background color — the empty
 // "—" placeholder has no such style, so matches are exactly the chip spans.
 function countChips(html: string): number {
-  return html.split("background:#eef2ff").length - 1;
+  return html.split("background:var(--status-tag-bg)").length - 1;
 }
 
 describe("Chips", () => {

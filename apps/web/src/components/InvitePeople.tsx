@@ -138,7 +138,7 @@ export function InvitePeople({ formId, embedded = false }: { formId: string; emb
               onChange={(e) => setInviteEmail(e.target.value)}
               placeholder="person@example.com"
               required
-              style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }}
+              style={{ width: "100%", border: "1px solid var(--color-border-strong)", borderRadius: 10, padding: "10px 12px" }}
             />
           </div>
           <div>
@@ -152,13 +152,13 @@ export function InvitePeople({ formId, embedded = false }: { formId: string; emb
               id="share-role"
               value={inviteRole}
               onChange={(e) => setInviteRole(e.target.value as FormShareRole)}
-              style={{ border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }}
+              style={{ border: "1px solid var(--color-border-strong)", borderRadius: 10, padding: "10px 12px" }}
             >
               <option value="RESPONDER">Responder</option>
               <option value="EDITOR">Editor</option>
               <option value="VIEWER">Viewer</option>
             </select>
-            <p style={{ margin: "6px 0 0", fontSize: "0.75rem", color: "#94a3b8", maxWidth: 240 }}>
+            <p style={{ margin: "6px 0 0", fontSize: "0.75rem", color: "var(--color-text-subtle)", maxWidth: 240 }}>
               {SHARE_ROLE_DESCRIPTIONS[inviteRole]}
             </p>
           </div>
@@ -167,7 +167,7 @@ export function InvitePeople({ formId, embedded = false }: { formId: string; emb
           </button>
         </form>
 
-        <h3 style={{ fontSize: "0.95rem", fontWeight: 750, color: "#1e293b", marginBottom: 12 }}>
+        <h3 style={{ fontSize: "0.95rem", fontWeight: 750, color: "var(--color-text)", marginBottom: 12 }}>
           People with access
         </h3>
         {shares.length === 0 ? (
@@ -186,22 +186,22 @@ export function InvitePeople({ formId, embedded = false }: { formId: string; emb
                     alignItems: "center",
                     gap: 10,
                     padding: "10px 12px",
-                    border: "1px solid #e2e8f0",
+                    border: "1px solid var(--color-border)",
                     borderRadius: 12,
-                    background: "#f8fafc",
+                    background: "var(--color-surface-sunken)",
                   }}
                 >
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <strong style={{ color: "#111827", display: "block" }}>{label}</strong>
+                    <strong style={{ color: "var(--color-text)", display: "block" }}>{label}</strong>
                     {share.user ? (
-                      <span style={{ color: "#64748b", fontSize: "0.82rem" }}>
+                      <span style={{ color: "var(--color-text-subtle)", fontSize: "0.82rem" }}>
                         {share.user.email}
                       </span>
                     ) : null}
                   </div>
                   <span
                     className="status-pill"
-                    style={{ background: "#eef2ff", color: "#4338ca" }}
+                    style={{ background: "var(--status-tag-bg)", color: "var(--status-tag-fg)" }}
                   >
                     {share.role}
                   </span>
@@ -209,8 +209,8 @@ export function InvitePeople({ formId, embedded = false }: { formId: string; emb
                     className="status-pill"
                     style={
                       share.status === "ACCEPTED"
-                        ? { background: "#dcfce7", color: "#166534" }
-                        : { background: "#fef3c7", color: "#92400e" }
+                        ? { background: "var(--color-success-tint)", color: "var(--color-success-text)" }
+                        : { background: "var(--color-warning-tint)", color: "var(--color-warning-text)" }
                     }
                   >
                     {share.status === "ACCEPTED" ? "Accepted" : "Pending"}

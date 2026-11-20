@@ -4,7 +4,7 @@
 // honestly via the heading note. Rendered in schema section order. The caller
 // hides this card entirely for single-section forms (data is null then).
 
-const BLUE = "#2563eb";
+const BLUE = "var(--chart-1)";
 
 export type SectionCompletenessItem = {
   sectionId: string;

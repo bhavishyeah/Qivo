@@ -62,7 +62,7 @@ function renderAnswerValue(value: unknown, question?: Question) {
               maxWidth: 120,
               maxHeight: 120,
               borderRadius: 8,
-              border: "1px solid #e2e8f0",
+              border: "1px solid var(--color-border)",
               objectFit: "cover",
               display: "block",
             }}
@@ -71,7 +71,7 @@ function renderAnswerValue(value: unknown, question?: Question) {
       );
     }
     return (
-      <a href={value} target="_blank" rel="noopener noreferrer" style={{ color: "#2563eb", textDecoration: "underline" }}>
+      <a href={value} target="_blank" rel="noopener noreferrer" style={{ color: "var(--color-link)", textDecoration: "underline" }}>
         View file
       </a>
     );

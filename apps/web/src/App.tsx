@@ -3,6 +3,7 @@ import { BrowserRouter, Route, Routes, Navigate, useLocation } from "react-route
 
 import "./App.css";
 import "./styles/shell.css";
+import "./styles/editor.css";
 
 import AuthGuard from "./components/AuthGuard";
 import AppLayout from "./components/AppLayout";

@@ -128,7 +128,7 @@ export default function FormSharePage() {
         {!isPublished ? (
           <div
             className="submit-error"
-            style={{ marginBottom: 24, background: "#fef3c7", color: "#92400e" }}
+            style={{ marginBottom: 24, background: "var(--color-warning-tint)", color: "var(--color-warning-text)" }}
           >
             This form is not published yet. Publish it from the editor to make
             the public link and QR code active.
@@ -141,7 +141,7 @@ export default function FormSharePage() {
               display: "block",
               marginBottom: 8,
               fontWeight: 750,
-              color: "#1e293b",
+              color: "var(--color-text)",
             }}
           >
             Public link
@@ -153,11 +153,11 @@ export default function FormSharePage() {
               value={publicUrl}
               style={{
                 flex: 1,
-                border: "1px solid #cbd5e1",
+                border: "1px solid var(--color-border-strong)",
                 borderRadius: 10,
                 padding: "12px 14px",
-                background: "#f8fafc",
-                color: "#334155",
+                background: "var(--color-surface-sunken)",
+                color: "var(--color-text-muted)",
               }}
               onClick={(e) => (e.target as HTMLInputElement).select()}
             />
@@ -179,9 +179,9 @@ export default function FormSharePage() {
             gap: 20,
             marginBottom: 28,
             padding: 28,
-            border: "1px solid #e2e8f0",
+            border: "1px solid var(--color-border)",
             borderRadius: 16,
-            background: "#ffffff",
+            background: "var(--color-surface)",
           }}
         >
           <QRCodeSVG
