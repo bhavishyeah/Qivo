@@ -94,7 +94,6 @@ html:has(.app-shell) body {
   min-width: 32px;
   border-radius: 0;
   background: var(--scrollbar-thumb);
-  box-shadow: inset 0 0 0 1px var(--scrollbar-edge);
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--scrollbar-thumb-hover);

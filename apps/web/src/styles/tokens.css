@@ -90,8 +90,8 @@
   /* Scrollbars: Slime Lime thumb, Olive edge keeps it visible on light surfaces */
   --scrollbar-thumb: #b2fd00;
   --scrollbar-thumb-hover: #9de000;
-  --scrollbar-edge: #484a1c;
-  --scrollbar-track: transparent;
+  --scrollbar-edge: transparent;
+  --scrollbar-track: rgb(72 74 28 / 8%);
 
   /* Spacing (4px base) */
   --space-0: 0;
@@ -233,6 +233,6 @@
 
   --scrollbar-thumb: #b2fd00;
   --scrollbar-thumb-hover: #9de000;
-  --scrollbar-edge: #b2fd00;
+  --scrollbar-edge: transparent;
   --scrollbar-track: transparent;
 }
