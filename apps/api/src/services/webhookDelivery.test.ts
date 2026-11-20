@@ -291,6 +291,24 @@ describe("buildResponseCreatedPayload (AC8)", () => {
     expect(payload.answersLabeled).toEqual({ q_yes: "Yes", q_no: "No" });
   });
 
+  it("labels an Other answer as 'Other: text'", () => {
+    const payload = buildResponseCreatedPayload({
+      formId: "f",
+      formTitle: "t",
+      responseId: "r",
+      submittedAt: new Date(0),
+      answers: { q_single: "__other__:Radio", q_multi: ["known", "__other__:TV"] },
+      questions: [
+        { id: "q_single", label: "Plan", type: "SINGLE_CHOICE", options: [{ value: "known", label: "Known" }] },
+        { id: "q_multi", label: "Picks", type: "MULTIPLE_CHOICE", options: [{ value: "known", label: "Known" }] },
+      ],
+    });
+    expect(payload.answersLabeled).toEqual({
+      q_single: "Other: Radio",
+      q_multi: ["Known", "Other: TV"],
+    });
+  });
+
   it("falls back to the raw value when a choice option is unknown or missing", () => {
     const payload = buildResponseCreatedPayload({
       formId: "f",

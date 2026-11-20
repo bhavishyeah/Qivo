@@ -60,6 +60,13 @@ import { TEMPLATES } from "./templates.js";
 import { CLOUDINARY_DELIVERY_HOSTS } from "./questionImage.js";
 import { answerableQuestions, isAnswerableQuestion } from "./questionKinds.js";
 import {
+  formatOtherAnswer,
+  isOtherAnswer,
+  otherText,
+  questionAllowsOther,
+  validateOtherAnswer,
+} from "./otherOption.js";
+import {
   isGridAnswerMissing,
   isGridType,
   isValidScaleAnswer,
@@ -295,6 +302,7 @@ type FormSchema = {
     collectEmail: boolean;
     allowMultipleResponses: boolean;
     allowPartialSave: boolean;
+    shuffleQuestions?: boolean;
     scheduledPublishAt?: string | null;
     scheduledCloseAt?: string | null;
     quizMode?: boolean;
@@ -359,6 +367,9 @@ function getFormSchema(value: unknown): FormSchema {
         candidate?.settings?.allowMultipleResponses ?? true,
       allowPartialSave:
         candidate?.settings?.allowPartialSave ?? false,
+      ...(candidate?.settings?.shuffleQuestions !== undefined
+        ? { shuffleQuestions: candidate.settings.shuffleQuestions }
+        : {}),
       ...(candidate?.settings?.scheduledPublishAt !== undefined
         ? { scheduledPublishAt: candidate.settings.scheduledPublishAt }
         : {}),
@@ -972,6 +983,9 @@ export async function updateFormSettings(
         : {}),
       ...(input.allowPartialSave !== undefined
         ? { allowPartialSave: input.allowPartialSave }
+        : {}),
+      ...(input.shuffleQuestions !== undefined
+        ? { shuffleQuestions: input.shuffleQuestions }
         : {}),
       ...(input.scheduledPublishAt !== undefined
         ? { scheduledPublishAt: input.scheduledPublishAt }
@@ -2475,6 +2489,9 @@ function validateAnswerAgainstQuestion(
     case "SINGLE_CHOICE":
     case "DROPDOWN":
       if (!isString) return "expected a single selection";
+      if (isOtherAnswer(value) && !allowedOptionValues.has(value)) {
+        return validateOtherAnswer(value, questionAllowsOther(question));
+      }
       if (allowedOptionValues.size > 0 && !allowedOptionValues.has(value)) {
         return "selection is not an available option";
       }
@@ -2482,11 +2499,18 @@ function validateAnswerAgainstQuestion(
 
     case "MULTIPLE_CHOICE": {
       const selections = isArray ? value : [value];
-      if (allowedOptionValues.size > 0) {
-        for (const sel of selections) {
-          if (typeof sel !== "string" || !allowedOptionValues.has(sel)) {
-            return "selection is not an available option";
-          }
+      let otherCount = 0;
+      for (const sel of selections) {
+        if (isOtherAnswer(sel) && !allowedOptionValues.has(sel)) {
+          otherCount += 1;
+          if (otherCount > 1) return "only one Other entry is allowed";
+          const problem = validateOtherAnswer(sel, questionAllowsOther(question));
+          if (problem) return problem;
+        } else if (
+          allowedOptionValues.size > 0 &&
+          (typeof sel !== "string" || !allowedOptionValues.has(sel))
+        ) {
+          return "selection is not an available option";
         }
       }
       return null;
@@ -2532,6 +2556,10 @@ function validateAnswerAgainstQuestion(
  * correctAnswer may be a single value or a comma-separated list for multi-select.
  */
 function isAnswerCorrect(userAnswer: unknown, correctAnswer: unknown): boolean {
+  // An "Other" answer is free text and is never a correct choice.
+  if (isOtherAnswer(userAnswer)) return false;
+  if (Array.isArray(userAnswer) && userAnswer.some(isOtherAnswer)) return false;
+
   const correctSet = new Set(
     String(correctAnswer)
       .split(",")
@@ -2581,8 +2609,12 @@ function isQuestionVisibleFor(
           : String(answer ?? "") !== (rule.value ?? "");
       case "contains":
         return answerIsArray
-          ? (answer as string[]).some((a) => a.includes(rule.value ?? ""))
-          : String(answer ?? "")
+          ? (answer as string[]).some((a) =>
+              (isOtherAnswer(a) ? otherText(a) : String(a)).includes(
+                rule.value ?? "",
+              ),
+            )
+          : (isOtherAnswer(answer) ? otherText(answer) : String(answer ?? ""))
               .toLowerCase()
               .includes((rule.value ?? "").toLowerCase());
       case "not_empty":
@@ -2771,7 +2803,13 @@ function buildConfirmationAnswerList(
 
     if (Array.isArray(raw)) {
       const parts = raw
-        .map((item) => (item == null ? "" : String(item).trim()))
+        .map((item) =>
+          item == null
+            ? ""
+            : isOtherAnswer(item)
+              ? formatOtherAnswer(item)
+              : String(item).trim(),
+        )
         .filter((item) => item !== "");
       rendered = parts.length > 0 ? parts.join(", ") : null;
     } else if (question.type === "YES_NO") {
@@ -2781,7 +2819,7 @@ function buildConfirmationAnswerList(
     } else if (typeof raw === "number") {
       rendered = String(raw);
     } else if (typeof raw === "string") {
-      rendered = raw;
+      rendered = isOtherAnswer(raw) ? formatOtherAnswer(raw) : raw;
     } else if (typeof raw === "boolean") {
       rendered = raw ? "Yes" : "No";
     } else {
@@ -4710,7 +4748,15 @@ export async function getFormAnalytics(
 
 type ChoiceReport = {
   kind: "choice";
-  options: Array<{ name: string; count: number; percentage: number }>;
+  options: Array<{
+    name: string;
+    count: number;
+    percentage: number;
+    /** True for the aggregated "Other" bucket. */
+    isOther?: boolean;
+  }>;
+  /** Free-text "Other" answers (most recent first, capped). */
+  otherAnswers?: string[];
 };
 
 type RatingReport = {
@@ -5041,24 +5087,45 @@ export async function getFormReport(
       question.type === "YES_NO"
     ) {
       const counts = new Map<string, number>();
+      // "Other" answers are free text: count them in one bucket and keep the
+      // typed text separately instead of making one bar per typed value.
+      const otherTexts: string[] = [];
+      const tally = (item: unknown) => {
+        if (isOtherAnswer(item)) {
+          const text = otherText(item);
+          if (text !== "") otherTexts.push(text);
+          return;
+        }
+        const key = String(item);
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      };
       for (const answer of answers) {
         if (Array.isArray(answer)) {
-          for (const item of answer) {
-            const key = String(item);
-            counts.set(key, (counts.get(key) ?? 0) + 1);
-          }
+          for (const item of answer) tally(item);
         } else {
-          const key = String(answer);
-          counts.set(key, (counts.get(key) ?? 0) + 1);
+          tally(answer);
         }
       }
-      const options = Array.from(counts.entries())
-        .map(([name, count]) => ({
-          name,
-          count,
-          percentage: answered > 0 ? Math.round((count / answered) * 100) : 0,
-        }))
+      const pct = (count: number) =>
+        answered > 0 ? Math.round((count / answered) * 100) : 0;
+      const options: ChoiceReport["options"] = Array.from(counts.entries())
+        .map(([name, count]) => ({ name, count, percentage: pct(count) }))
         .sort((a, b) => b.count - a.count);
+      if (otherTexts.length > 0) {
+        options.push({
+          name: "Other",
+          count: otherTexts.length,
+          percentage: pct(otherTexts.length),
+          isOther: true,
+        });
+        options.sort((a, b) => b.count - a.count);
+        return {
+          ...base,
+          kind: "choice",
+          options,
+          otherAnswers: otherTexts.slice(0, 50),
+        };
+      }
       return { ...base, kind: "choice", options };
     }
 

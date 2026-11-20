@@ -20,6 +20,10 @@ import { isIP } from "node:net";
 
 import prisma from "../db/prisma.js";
 import { WebhookDeliveryStatus } from "../generated/prisma/client.js";
+import {
+  formatOtherAnswer,
+  isOtherAnswer,
+} from "../modules/forms/otherOption.js";
 import { parseGridConfig } from "../modules/forms/questionTypes.js";
 
 // ── Constants (module-level; no new env vars) ────────────────────────────────
@@ -121,7 +125,8 @@ function renderAnswerLabel(
   const labelFor = (value: unknown): unknown => {
     if (typeof value !== "string") return value;
     const match = options.find((o) => o.value === value);
-    return match ? match.label : value;
+    if (match) return match.label;
+    return isOtherAnswer(value) ? formatOtherAnswer(value) : value;
   };
 
   switch (question.type) {

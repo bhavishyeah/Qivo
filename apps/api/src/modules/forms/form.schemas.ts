@@ -119,6 +119,7 @@ export const updateFormSettingsSchema = z.object({
   quizMode: z.boolean().optional(),
   showScore: z.boolean().optional(),
   allowPartialSave: z.boolean().optional(),
+  shuffleQuestions: z.boolean().optional(),
   responseNotification: z.enum(["off", "immediate", "daily"]).optional(),
   sendConfirmationEmail: z.boolean().optional(),
   theme: themeSchema,

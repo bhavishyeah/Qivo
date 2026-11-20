@@ -105,6 +105,23 @@ export function validateQuestionSettings(
     }
     return null;
   }
+  if (
+    type === "SINGLE_CHOICE" ||
+    type === "MULTIPLE_CHOICE" ||
+    type === "DROPDOWN"
+  ) {
+    const other = settings?.["allowOther"];
+    if (other !== undefined && typeof other !== "boolean") {
+      return "allowOther must be true or false.";
+    }
+    if (other === true && type === "DROPDOWN") {
+      return "A dropdown cannot have an Other option.";
+    }
+    const shuffle = settings?.["shuffleOptions"];
+    if (shuffle !== undefined && typeof shuffle !== "boolean") {
+      return "shuffleOptions must be true or false.";
+    }
+  }
   return null;
 }
 
