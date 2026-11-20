@@ -20,6 +20,15 @@ import {
   ApiRequestError,
 } from "../lib/api";
 import { evaluateConditions } from "../lib/conditions";
+import ChoiceOther from "../components/ChoiceOther";
+import {
+  isOtherAnswer,
+  makeOtherAnswer,
+  normalizeOtherAnswers,
+  OTHER_PREFIX,
+  questionAllowsOther,
+} from "../lib/otherOption";
+import { displayOptions, getShuffleSeed, shuffleWithinSections } from "../lib/shuffle";
 import {
   isValidEmail,
   validateQuestionFormat,
@@ -250,10 +259,18 @@ export default function PublicFormPage() {
   }, [slug]);
 
   // Sections with email as section 0 if needed
+  // Per-respondent seed for the shuffle options. Stored per form, so the order
+  // is the same on re-render, validation errors and when a draft is resumed.
+  const shuffleSeed = useMemo(() => (form ? getShuffleSeed(form.id) : ""), [form]);
+
+  // With "Shuffle question order" on, questions are reordered inside each
+  // section only. Section order and jump rules are untouched.
   const sections = useMemo((): Section[] => {
     if (!form) return [];
-    return form.schema.sections;
-  }, [form]);
+    return form.schema.settings.shuffleQuestions === true
+      ? shuffleWithinSections(form.schema.sections, shuffleSeed)
+      : form.schema.sections;
+  }, [form, shuffleSeed]);
 
   const totalSections = sections.length;
   const isMultiSection = totalSections > 1;
@@ -637,7 +654,7 @@ export default function PublicFormPage() {
         };
         manualPayment?: { utr: string; proofUrl?: string };
       } = {
-        answers,
+        answers: normalizeOtherAnswers(answers),
         ...(form?.manualUpi?.enabled && !isEditing
           ? {
               manualPayment: {
@@ -755,7 +772,7 @@ export default function PublicFormPage() {
         // exists, so a payer is never charged for a submission the server would
         // reject. A 400 here surfaces the specific message and opens no Checkout.
         const order = await createPaymentOrder(slug, {
-          answers,
+          answers: normalizeOtherAnswers(answers),
           ...(collectEmail ? { email: normalizedEmail } : {}),
           ...(requestedAmount !== undefined ? { requestedAmount } : {}),
         });
@@ -1238,6 +1255,7 @@ export default function PublicFormPage() {
                       slug={slug ?? ""}
                       allQuestions={allQuestions}
                       answers={answers}
+                      shuffleSeed={shuffleSeed}
                       onChange={updateAnswer}
                       onInputChange={handleInputChange}
                       error={fieldErrors[question.id]}
@@ -1568,6 +1586,7 @@ export function QuestionField({
   slug,
   allQuestions,
   answers,
+  shuffleSeed,
   onChange,
   onInputChange,
   error,
@@ -1578,6 +1597,8 @@ export function QuestionField({
   slug: string;
   allQuestions: Question[];
   answers: Record<string, AnswerValue>;
+  /** Respondent seed for shuffled option order; absent = editor order. */
+  shuffleSeed?: string | undefined;
   onChange: (questionId: string, value: AnswerValue) => void;
   onInputChange: (
     questionId: string,
@@ -1725,7 +1746,9 @@ export function QuestionField({
     const options =
       question.type === "YES_NO"
         ? [{ value: "yes", label: "Yes" }, { value: "no", label: "No" }]
-        : question.options ?? [];
+        : displayOptions(question, shuffleSeed);
+    const allowOther = questionAllowsOther(question);
+    const otherAnswer = isOtherAnswer(value) ? value : null;
 
     return (
       <fieldset className="question-field">
@@ -1755,6 +1778,19 @@ export function QuestionField({
               <span>{option.label}</span>
             </label>
           ))}
+          {allowOther ? (
+            <ChoiceOther
+              kind="radio"
+              name={question.id}
+              inputId={inputId}
+              checked={otherAnswer !== null}
+              text={otherAnswer === null ? "" : otherAnswer.slice(OTHER_PREFIX.length)}
+              invalid={Boolean(error)}
+              onCheckedChange={() => onChange(question.id, makeOtherAnswer(""))}
+              onTextChange={(text) => onChange(question.id, makeOtherAnswer(text))}
+              onBlur={onBlur}
+            />
+          ) : null}
         </div>
         {errorElement}
       </fieldset>
@@ -1781,7 +1817,7 @@ export function QuestionField({
           }
         >
           <option value="">Choose</option>
-          {(question.options ?? []).map((option) => (
+          {displayOptions(question, shuffleSeed).map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>
@@ -1794,12 +1830,20 @@ export function QuestionField({
 
   if (question.type === "MULTIPLE_CHOICE") {
     const selected = Array.isArray(value) ? value : [];
+    const allowOther = questionAllowsOther(question);
+    const otherAnswer = selected.find(isOtherAnswer) ?? null;
 
     function toggleOption(optionValue: string) {
       const next = selected.includes(optionValue)
         ? selected.filter((item) => item !== optionValue)
         : [...selected, optionValue];
       onChange(question.id, next);
+    }
+
+    // Replace (or add/remove) the single Other entry, keeping other selections.
+    function setOther(next: string | null) {
+      const rest = selected.filter((item) => !isOtherAnswer(item));
+      onChange(question.id, next === null ? rest : [...rest, next]);
     }
 
     return (
@@ -1818,7 +1862,7 @@ export function QuestionField({
               .join(" ") || undefined
           }
         >
-          {(question.options ?? []).map((option) => (
+          {displayOptions(question, shuffleSeed).map((option) => (
             <label className="choice-item" key={option.value}>
               <input
                 type="checkbox"
@@ -1829,6 +1873,19 @@ export function QuestionField({
               <span>{option.label}</span>
             </label>
           ))}
+          {allowOther ? (
+            <ChoiceOther
+              kind="checkbox"
+              name={question.id}
+              inputId={inputId}
+              checked={otherAnswer !== null}
+              text={otherAnswer === null ? "" : otherAnswer.slice(OTHER_PREFIX.length)}
+              invalid={Boolean(error)}
+              onCheckedChange={(checked) => setOther(checked ? makeOtherAnswer("") : null)}
+              onTextChange={(text) => setOther(makeOtherAnswer(text))}
+              onBlur={onBlur}
+            />
+          ) : null}
         </div>
         {errorElement}
       </fieldset>

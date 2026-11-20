@@ -12,7 +12,9 @@ import {
 import { getManualPayment, neutralizeFormula } from "../lib/manualUpi";
 import { useManualPaymentReview } from "../lib/useManualPaymentReview";
 import { answerableQuestions } from "../lib/questionKinds";
+import { formatOtherAnswer, isOtherAnswer } from "../lib/otherOption";
 import { formatGridAnswer, isGridType } from "../lib/questionTypes";
+import { formatResponseValue } from "../lib/responseFormat";
 import type {
   FormRecord,
   ManualPaymentStatus,
@@ -30,14 +32,6 @@ function questionHeaderLabel(question: Question, questions: Question[]): string 
   return stripPipingTokens(question.label, questions);
 }
 
-function formatResponseValue(value: unknown, question?: Question): string {
-  if (value === null || value === undefined) return "—"; 
-  if (question && isGridType(question.type)) return formatGridAnswer(question, value);
-  if (Array.isArray(value)) return value.join(", ");
-  if (typeof value === "object") return JSON.stringify(value);
-  return String(value);
-}
-
 function escapeCsvValue(value: unknown): string {
   const text = formatResponseValue(value);
   return `"${text.replaceAll('"', '""')}"`;
@@ -48,7 +42,9 @@ function escapeCsvValue(value: unknown): string {
 function renderAnswerValue(value: unknown, question?: Question) {
   if (question && isGridType(question.type)) return formatGridAnswer(question, value);
   if (Array.isArray(value)) {
-    const items = value.map((v) => String(v).trim()).filter(Boolean);
+    const items = value
+      .map((v) => (isOtherAnswer(v) ? formatOtherAnswer(v) : String(v).trim()))
+      .filter(Boolean);
     return <Chips items={items} />;
   }
   if (typeof value === "string" && /^https?:\/\//.test(value)) {

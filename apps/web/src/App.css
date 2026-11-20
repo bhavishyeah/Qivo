@@ -266,6 +266,36 @@ form {
   accent-color: var(--qivo-primary);
 }
 
+/* "Other:" choice: the radio/checkbox tile plus its text input, on its own row. */
+.choice-other {
+  display: flex;
+  flex-basis: 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.question-field .choice-other-input {
+  flex: 1 1 220px;
+  min-width: 0;
+  min-height: 44px;
+  border: 1px solid var(--qivo-input-border);
+  border-radius: 12px;
+  padding: 10px 13px;
+  color: var(--qivo-text);
+  background: var(--qivo-input-bg);
+  outline: none;
+}
+
+.question-field .choice-other-input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.question-field .choice-other-input[aria-invalid="true"] {
+  border-color: #dc2626;
+}
+
 .rating-list {
   gap: 8px;
 }
@@ -3400,6 +3430,41 @@ form {
 }
 
 .editor-add-option:hover { color: var(--editor-accent, var(--qivo-primary)); }
+
+/* "Other" option row and the shuffle toggle row inside the active card. */
+.editor-option-other {
+  flex: 1;
+  padding: 8px 4px;
+  color: var(--qivo-text-muted);
+  font-size: 0.92rem;
+}
+
+.editor-option-or {
+  color: var(--qivo-text-muted);
+  font-size: 0.92rem;
+}
+
+.editor-inline-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  color: var(--qivo-text-muted);
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.editor-inline-toggle input { accent-color: var(--editor-accent, var(--qivo-primary)); }
+
+.settings-note {
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--color-border-strong, var(--qivo-border-strong));
+  color: var(--color-text-subtle, var(--qivo-text-secondary));
+  font-size: 0.86rem;
+}
+
+.settings-note-warning { border-left-color: var(--color-warning-text, #92400e); }
 
 /* Condition + section logic rows */
 .editor-condition-row,

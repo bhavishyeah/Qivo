@@ -76,7 +76,9 @@ type BaseReport = {
 
 type ChoiceReport = BaseReport & {
   kind: "choice";
-  options: Array<{ name: string; count: number; percentage: number }>;
+  options: Array<{ name: string; count: number; percentage: number; isOther?: boolean }>;
+  /** Typed "Other" answers, most recent first. */
+  otherAnswers?: string[];
 };
 type RatingReport = BaseReport & {
   kind: "rating";
@@ -647,7 +649,7 @@ function ChoiceChart({ report }: { report: ChoiceReport }) {
       <div style={{ marginTop: 16 }}>
         {report.options.map((item, i) => (
           <div
-            key={item.name}
+            key={item.isOther ? "__other_bucket__" : item.name}
             style={{
               display: "flex",
               justifyContent: "space-between",
@@ -662,6 +664,19 @@ function ChoiceChart({ report }: { report: ChoiceReport }) {
           </div>
         ))}
       </div>
+
+      {report.otherAnswers && report.otherAnswers.length > 0 ? (
+        <div style={{ marginTop: 16 }}>
+          <p className="eyebrow">Other answers</p>
+          <ul style={{ margin: "8px 0 0", paddingLeft: 18 }}>
+            {report.otherAnswers.map((text, i) => (
+              <li key={`${i}-${text}`} style={{ color: "var(--color-text-muted)", overflowWrap: "anywhere" }}>
+                {text}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </section>
   );
 }

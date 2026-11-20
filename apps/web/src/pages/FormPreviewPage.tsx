@@ -15,6 +15,14 @@ import { resolvePipedLabel } from "../lib/piping";
 import { DEFAULT_ACCENT, ensureFontLoaded, resolveTheme } from "../lib/theme";
 import SignaturePad from "../components/SignaturePad";
 import { QuestionImage } from "../components/QuestionImage";
+import ChoiceOther from "../components/ChoiceOther";
+import {
+  isOtherAnswer,
+  makeOtherAnswer,
+  OTHER_PREFIX,
+  questionAllowsOther,
+} from "../lib/otherOption";
+import { displayOptions, getShuffleSeed, shuffleWithinSections } from "../lib/shuffle";
 import { GridQuestion } from "../components/GridQuestion";
 import { StarRating } from "../components/StarRating";
 import { answerableQuestions } from "../lib/questionKinds";
@@ -60,7 +68,16 @@ export default function FormPreviewPage() {
     void loadForm();
   }, [formId]);
 
-  const sections = useMemo(() => form?.schema?.sections ?? [], [form]);
+  // The preview shuffles like the live form (the builder itself never does).
+  const shuffleSeed = useMemo(() => (formId ? getShuffleSeed(`preview:${formId}`) : ""), [formId]);
+  const shuffleQuestions = form?.schema?.settings?.shuffleQuestions === true;
+  const sections = useMemo(() => {
+    const base = form?.schema?.sections ?? [];
+    return shuffleQuestions ? shuffleWithinSections(base, shuffleSeed) : base;
+  }, [form, shuffleQuestions, shuffleSeed]);
+  const hasShuffledOptions = sections.some((s) =>
+    s.questions.some((q) => q.settings?.shuffleOptions === true),
+  );
   const totalSections = sections.length;
   const section = sections[currentSection];
   const questions = useMemo(
@@ -228,6 +245,12 @@ export default function FormPreviewPage() {
           </Link>
         </div>
 
+        {shuffleQuestions || hasShuffledOptions ? (
+          <p className="muted" style={{ fontSize: "0.82rem", margin: "0 0 12px" }}>
+            Order is randomised for each respondent.
+          </p>
+        ) : null}
+
         {/* Progress */}
         {totalSections > 1 ? (
           <div
@@ -271,6 +294,7 @@ export default function FormPreviewPage() {
               value={answers[question.id]}
               allQuestions={allQuestions}
               answers={answers}
+              shuffleSeed={shuffleSeed}
               onChange={updateAnswer}
               onInputChange={handleInputChange}
               error={fieldErrors[question.id]}
@@ -348,6 +372,7 @@ function PreviewQuestion({
   value,
   allQuestions,
   answers,
+  shuffleSeed,
   onChange,
   onInputChange,
   error,
@@ -357,6 +382,7 @@ function PreviewQuestion({
   value: AnswerValue | undefined;
   allQuestions: Question[];
   answers: Record<string, AnswerValue>;
+  shuffleSeed?: string | undefined;
   onChange: (id: string, value: AnswerValue) => void;
   onInputChange: (id: string, event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
   error?: string | undefined;
@@ -436,7 +462,9 @@ function PreviewQuestion({
   if (question.type === "SINGLE_CHOICE" || question.type === "YES_NO") {
     const options = question.type === "YES_NO"
       ? [{ value: "yes", label: "Yes" }, { value: "no", label: "No" }]
-      : question.options ?? [];
+      : displayOptions(question, shuffleSeed);
+    const allowOther = questionAllowsOther(question);
+    const otherAnswer = isOtherAnswer(value) ? value : null;
     return (
       <fieldset className="question-field">
         <legend id={`${previewId}-legend`}>{label}</legend>
@@ -459,6 +487,19 @@ function PreviewQuestion({
               <span>{o.label}</span>
             </label>
           ))}
+          {allowOther ? (
+            <ChoiceOther
+              kind="radio"
+              name={question.id}
+              inputId={previewId}
+              checked={otherAnswer !== null}
+              text={otherAnswer === null ? "" : otherAnswer.slice(OTHER_PREFIX.length)}
+              invalid={Boolean(error)}
+              onCheckedChange={() => onChange(question.id, makeOtherAnswer(""))}
+              onTextChange={(text) => onChange(question.id, makeOtherAnswer(text))}
+              onBlur={onBlur}
+            />
+          ) : null}
         </div>
         {errorElement}
       </fieldset>
@@ -485,7 +526,7 @@ function PreviewQuestion({
           }
         >
           <option value="">Choose</option>
-          {(question.options ?? []).map((o) => (
+          {displayOptions(question, shuffleSeed).map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>
@@ -496,6 +537,12 @@ function PreviewQuestion({
 
   if (question.type === "MULTIPLE_CHOICE") {
     const selected = Array.isArray(value) ? value : [];
+    const allowOther = questionAllowsOther(question);
+    const otherAnswer = selected.find(isOtherAnswer) ?? null;
+    const setOther = (next: string | null) => {
+      const rest = selected.filter((v) => !isOtherAnswer(v));
+      onChange(question.id, next === null ? rest : [...rest, next]);
+    };
     return (
       <fieldset className="question-field">
         <legend id={`${previewId}-legend`}>{label}</legend>
@@ -512,7 +559,7 @@ function PreviewQuestion({
               .join(" ") || undefined
           }
         >
-          {(question.options ?? []).map((o) => (
+          {displayOptions(question, shuffleSeed).map((o) => (
             <label className="choice-item" key={o.value}>
               <input type="checkbox" checked={selected.includes(o.value)} onChange={() => {
                 const next = selected.includes(o.value) ? selected.filter((v) => v !== o.value) : [...selected, o.value];
@@ -521,6 +568,19 @@ function PreviewQuestion({
               <span>{o.label}</span>
             </label>
           ))}
+          {allowOther ? (
+            <ChoiceOther
+              kind="checkbox"
+              name={question.id}
+              inputId={previewId}
+              checked={otherAnswer !== null}
+              text={otherAnswer === null ? "" : otherAnswer.slice(OTHER_PREFIX.length)}
+              invalid={Boolean(error)}
+              onCheckedChange={(checked) => setOther(checked ? makeOtherAnswer("") : null)}
+              onTextChange={(text) => setOther(makeOtherAnswer(text))}
+              onBlur={onBlur}
+            />
+          ) : null}
         </div>
         {errorElement}
       </fieldset>

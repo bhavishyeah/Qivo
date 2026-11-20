@@ -177,6 +177,7 @@ export default function FormEditorPage() {
   const [collectEmail, setCollectEmail] = useState(false);
   const [allowMultipleResponses, setAllowMultipleResponses] = useState(true);
   const [allowPartialSave, setAllowPartialSave] = useState(false);
+  const [shuffleQuestions, setShuffleQuestions] = useState(false);
   const [confirmationMessage, setConfirmationMessage] = useState("");
   const [scheduledPublishAt, setScheduledPublishAt] = useState("");
   const [scheduledCloseAt, setScheduledCloseAt] = useState("");
@@ -312,6 +313,7 @@ export default function FormEditorPage() {
     setCollectEmail(schema.settings?.collectEmail ?? false);
     setAllowMultipleResponses(schema.settings?.allowMultipleResponses ?? true);
     setAllowPartialSave(schema.settings?.allowPartialSave ?? false);
+    setShuffleQuestions(schema.settings?.shuffleQuestions ?? false);
     setConfirmationMessage(schema.confirmationMessage ?? "");
     setScheduledPublishAt(toDatetimeLocal(schema.settings?.scheduledPublishAt));
     setScheduledCloseAt(toDatetimeLocal(schema.settings?.scheduledCloseAt));
@@ -1279,6 +1281,7 @@ export default function FormEditorPage() {
           collectEmail,
           allowMultipleResponses,
           allowPartialSave,
+          shuffleQuestions,
           confirmationMessage,
           scheduledPublishAt: toIsoInstant(scheduledPublishAt),
           scheduledCloseAt: toIsoInstant(scheduledCloseAt),
@@ -1934,6 +1937,9 @@ export default function FormEditorPage() {
               <label className="settings-toggle"><input type="checkbox" checked={allowPartialSave} onChange={(e) => setAllowPartialSave(e.target.checked)} /><span><strong>Let respondents save and resume later</strong><small>They get a link to come back and finish.</small></span></label>
               <label className="settings-toggle"><input type="checkbox" checked={quizMode} onChange={(e) => setQuizMode(e.target.checked)} /><span><strong>Quiz mode</strong><small>Enable scoring — set correct answers per question.</small></span></label>
               {quizMode ? (<label className="settings-toggle"><input type="checkbox" checked={showScore} onChange={(e) => setShowScore(e.target.checked)} /><span><strong>Show score after submission</strong><small>Respondent sees their score.</small></span></label>) : null}
+              <label className="settings-toggle"><input type="checkbox" checked={shuffleQuestions} onChange={(e) => setShuffleQuestions(e.target.checked)} /><span><strong>Shuffle question order</strong><small>Each respondent sees the questions in a different order within each section. Sections, jump rules, titles and images keep their place. Your editor, responses and exports stay in the order you set.</small></span></label>
+              {shuffleQuestions && questions.some((q) => (q.conditions?.length ?? 0) > 0) ? (<p className="settings-note settings-note-warning" role="note">Some questions only appear based on other answers. With shuffling, such a question can come before the one it depends on and stays hidden until that question is answered.</p>) : null}
+              {quizMode && !shuffleQuestions ? (<p className="settings-note" role="note">Tip: shuffle question order, and shuffle options on each question, to make answers harder to copy in a quiz.</p>) : null}
               <div className="question-field"><label htmlFor="s-response-notification">Email me about new responses</label><Select id="s-response-notification" value={responseNotification} onChange={(v) => setResponseNotification(v as "off" | "immediate" | "daily")} options={[{ value: "off", label: "Off" }, { value: "immediate", label: "Immediately" }, { value: "daily", label: "Daily digest" }]} /><small className="muted">Get notified by email when this form receives responses.</small></div>
               <label className="settings-toggle" style={collectEmail ? undefined : { opacity: 0.5 }}><input type="checkbox" checked={sendConfirmationEmail} disabled={!collectEmail} onChange={(e) => setSendConfirmationEmail(e.target.checked)} /><span><strong>Send respondents a confirmation email</strong><small>{collectEmail ? "Email respondents a copy of their submission." : "Turn on 'Collect email addresses' to enable."}</small></span></label>
             </SettingsGroup>
@@ -2355,6 +2361,19 @@ function QuestionCard({
     onChange(question.id, { options: updated });
   }
 
+  // "Other" is free text, so it exists for multiple choice and checkboxes only.
+  const allowsOther = question.type === "SINGLE_CHOICE" || question.type === "MULTIPLE_CHOICE";
+  const otherOn = question.settings?.allowOther === true;
+  const shuffleOn = isChoice && question.settings?.shuffleOptions === true;
+
+  function setAllowOther(on: boolean) {
+    onChange(question.id, { settings: { ...question.settings, allowOther: on } });
+  }
+
+  function setShuffleOptions(on: boolean) {
+    onChange(question.id, { settings: { ...question.settings, shuffleOptions: on } });
+  }
+
   function changeType(newType: QuestionType) {
     // Preserve compatible data, reset type-specific fields
     const patch: Partial<Question> = { type: newType };
@@ -2377,6 +2396,10 @@ function QuestionCard({
     // settings for tidiness (they would be inert otherwise).
     if (newType === "SIGNATURE") {
       patch.settings = undefined;
+    }
+    // A dropdown cannot take free text, so drop "Other" when switching to it.
+    if (newType === "DROPDOWN" && question.settings?.allowOther) {
+      patch.settings = { ...(patch.settings ?? question.settings), allowOther: false };
     }
     onChange(question.id, patch);
   }
@@ -2404,6 +2427,13 @@ function QuestionCard({
       hidden: !answerable || sectionCount <= 1,
     },
     { id: "image", label: question.imageUrl ? "Change image" : "Add image", onSelect: onAddImage, hidden: !onAddImage || !answerable },
+    {
+      id: "shuffle-options",
+      label: "Shuffle option order",
+      checked: shuffleOn,
+      onSelect: () => setShuffleOptions(!shuffleOn),
+      hidden: !isChoice,
+    },
   ];
 
   const titleText = previewLabelWithPlaceholders(question.label, allQuestions) || "Untitled question";
@@ -2649,6 +2679,21 @@ function QuestionCard({
                     ) : null}
                   </div>
                 ))}
+                {allowsOther && otherOn ? (
+                  <div className="editor-option-row">
+                    <span className={`editor-option-marker ${question.type === "MULTIPLE_CHOICE" ? "is-square" : ""}`} aria-hidden="true" />
+                    <span className="editor-option-other">Other...</span>
+                    <button
+                      type="button"
+                      className="editor-option-remove"
+                      onClick={(e) => { e.stopPropagation(); setAllowOther(false); }}
+                      title='Remove "Other"'
+                      aria-label='Remove "Other" option'
+                    >
+                      {"\u00d7"}
+                    </button>
+                  </div>
+                ) : null}
                 <div className="editor-option-row">
                   <span className={`editor-option-marker is-ghost ${question.type === "MULTIPLE_CHOICE" ? "is-square" : ""}`} aria-hidden="true" />
                   <button
@@ -2658,7 +2703,29 @@ function QuestionCard({
                   >
                     Add option
                   </button>
+                  {allowsOther && !otherOn ? (
+                    <>
+                      <span className="editor-option-or">or</span>
+                      <button
+                        type="button"
+                        className="editor-add-option"
+                        onClick={(e) => { e.stopPropagation(); setAllowOther(true); }}
+                      >
+                        add &quot;Other&quot;
+                      </button>
+                    </>
+                  ) : null}
                 </div>
+                {shuffleOn ? (
+                  <label className="editor-inline-toggle" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked
+                      onChange={() => setShuffleOptions(false)}
+                    />
+                    <span>Shuffle option order{allowsOther && otherOn ? ' ("Other" stays last)' : ""}</span>
+                  </label>
+                ) : null}
               </div>
             ) : null}
 
