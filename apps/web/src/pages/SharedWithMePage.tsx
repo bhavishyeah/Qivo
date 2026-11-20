@@ -10,10 +10,10 @@ const ROLE_LABELS: Record<string, string> = {
   RESPONDER: "Responder",
 };
 
-const ROLE_COLORS: Record<string, string> = {
-  EDITOR: "#2563eb",
-  VIEWER: "#6b7280",
-  RESPONDER: "#059669",
+const ROLE_BADGES: Record<string, string> = {
+  EDITOR: "badge badge-status-published",
+  VIEWER: "badge badge-status-draft",
+  RESPONDER: "badge badge-tag",
 };
 
 function formLink(item: SharedWithMeItem): string {
@@ -45,12 +45,14 @@ export default function SharedWithMePage() {
 
   if (loading) {
     return (
-      <main className="page-shell">
-        <div className="status-card">
-          <div className="skeleton-block" style={{ width: 220, height: 24, marginBottom: 12 }} />
-          <div className="skeleton-block" style={{ width: "100%", height: 64, marginBottom: 8 }} />
-          <div className="skeleton-block" style={{ width: "100%", height: 64, marginBottom: 8 }} />
-          <div className="skeleton-block" style={{ width: "100%", height: 64 }} />
+      <main className="dashboard-shell">
+        <div className="page-col-md" aria-hidden="true">
+          <div className="skeleton-line skeleton-line-lg" style={{ width: 220, marginBottom: 16 }} />
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="skeleton-tile" style={{ marginBottom: 8 }}>
+              <div className="skeleton-line skeleton-line-lg" />
+            </div>
+          ))}
         </div>
       </main>
     );
@@ -58,81 +60,38 @@ export default function SharedWithMePage() {
 
   if (error) {
     return (
-      <main className="page-shell">
-        <div className="status-card">
-          <p style={{ color: "#dc2626" }}>{error}</p>
-        </div>
+      <main className="dashboard-shell">
+        <p className="msg msg-error page-col-md" role="alert">{error}</p>
       </main>
     );
   }
 
   return (
-    <main className="page-shell">
-      <div className="status-card">
-        <h1 style={{ fontSize: "1.25rem", fontWeight: 600, marginBottom: 16 }}>
-          Shared with me
-        </h1>
+    <main className="dashboard-shell">
+      <header className="dashboard-header">
+        <div>
+          <p className="dash-kicker">Collaboration</p>
+          <h1>Shared with me</h1>
+        </div>
+      </header>
 
+      <div className="panel page-col-md">
         {items.length === 0 ? (
-          <p style={{ color: "#6b7280", fontSize: "0.95rem" }}>
-            No forms have been shared with you yet.
-          </p>
+          <div className="panel-empty">
+            <p>No forms have been shared with you yet.</p>
+          </div>
         ) : (
-          <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 8 }}>
+          <ul className="row-list" style={{ listStyle: "none", padding: 0, margin: 0 }}>
             {items.map((item) => (
-              <li
-                key={item.shareId}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 12,
-                  padding: "12px 16px",
-                  border: "1px solid #e5e7eb",
-                  borderRadius: 8,
-                  background: "#fafafa",
-                }}
-              >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p
-                    style={{
-                      fontWeight: 500,
-                      fontSize: "0.95rem",
-                      margin: 0,
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                    }}
-                  >
-                    {item.form.title}
-                  </p>
-                  <p style={{ fontSize: "0.8rem", color: "#9ca3af", margin: "2px 0 0 0" }}>
-                    {item.form.status}
-                  </p>
+              <li key={item.shareId} className="row-item">
+                <div className="row-main">
+                  <strong className="row-title">{item.form.title}</strong>
+                  <span className="row-meta">{item.form.status}</span>
                 </div>
-                <span
-                  style={{
-                    fontSize: "0.75rem",
-                    fontWeight: 600,
-                    color: "#fff",
-                    background: ROLE_COLORS[item.role] ?? "#6b7280",
-                    padding: "2px 10px",
-                    borderRadius: 12,
-                    whiteSpace: "nowrap",
-                  }}
-                >
+                <span className={ROLE_BADGES[item.role] ?? "badge"}>
                   {ROLE_LABELS[item.role] ?? item.role}
                 </span>
-                <Link
-                  to={formLink(item)}
-                  style={{
-                    fontSize: "0.85rem",
-                    color: "#2563eb",
-                    textDecoration: "none",
-                    whiteSpace: "nowrap",
-                    fontWeight: 500,
-                  }}
-                >
+                <Link className="row-link" to={formLink(item)}>
                   {item.role === "RESPONDER" ? "Fill form" : item.role === "EDITOR" ? "Edit" : "View responses"}
                 </Link>
               </li>

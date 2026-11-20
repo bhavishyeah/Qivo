@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, ApiRequestError } from "../lib/api";
+import { PageIcon, type PageIconName } from "../components/PageIcons";
 
 type NotificationRecord = {
   id: string;
@@ -12,22 +13,21 @@ type NotificationRecord = {
   createdAt: string;
 };
 
-const TYPE_ICONS: Record<string, string> = {
-  FORM_SUBMITTED_FOR_REVIEW: "📋",
-  FORM_APPROVED: "✅",
-  FORM_CHANGES_REQUESTED: "✏️",
-  FORM_REJECTED: "❌",
-  FORM_PUBLISHED: "🚀",
-  MEMBER_INVITED: "👋",
-  MEMBER_REMOVED: "👤",
-  RESPONSE_MILESTONE: "🎉",
-  FORM_SHARED: "🔗",
+const TYPE_ICONS: Record<string, PageIconName> = {
+  FORM_SUBMITTED_FOR_REVIEW: "doc",
+  FORM_APPROVED: "check",
+  FORM_CHANGES_REQUESTED: "edit",
+  FORM_REJECTED: "cross",
+  FORM_PUBLISHED: "send",
+  MEMBER_INVITED: "user",
+  MEMBER_REMOVED: "user",
+  RESPONSE_MILESTONE: "chart",
+  FORM_SHARED: "link",
 };
 
 function groupByDate(notifications: NotificationRecord[]) {
   const groups: { label: string; items: NotificationRecord[] }[] = [];
   const map = new Map<string, NotificationRecord[]>();
-
   const today = new Date();
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
@@ -35,7 +35,6 @@ function groupByDate(notifications: NotificationRecord[]) {
   for (const n of notifications) {
     const d = new Date(n.createdAt);
     let label: string;
-
     if (d.toDateString() === today.toDateString()) {
       label = "Today";
     } else if (d.toDateString() === yesterday.toDateString()) {
@@ -43,20 +42,17 @@ function groupByDate(notifications: NotificationRecord[]) {
     } else {
       label = d.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
     }
-
     if (!map.has(label)) {
       map.set(label, []);
       groups.push({ label, items: map.get(label)! });
     }
     map.get(label)!.push(n);
   }
-
   return groups;
 }
 
 export default function NotificationsPage() {
   const navigate = useNavigate();
-
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -106,13 +102,13 @@ export default function NotificationsPage() {
   if (loading) {
     return (
       <main className="dashboard-shell">
-        <div style={{ maxWidth: 680, margin: "0 auto" }}>
+        <div className="page-col-sm" aria-hidden="true">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} style={{ display: "flex", gap: 12, padding: "16px 0", borderBottom: "1px solid #f1f5f9" }}>
-              <div className="skeleton-block" style={{ width: 40, height: 40, borderRadius: "50%", flexShrink: 0 }} />
+            <div key={i} className="act-skel">
+              <div className="skeleton-line act-skel-icon" />
               <div style={{ flex: 1 }}>
-                <div className="skeleton-block" style={{ width: "60%", height: 16, marginBottom: 8 }} />
-                <div className="skeleton-block" style={{ width: "80%", height: 13 }} />
+                <div className="skeleton-line skeleton-line-lg" style={{ width: "60%", marginBottom: 8 }} />
+                <div className="skeleton-line" style={{ width: "80%" }} />
               </div>
             </div>
           ))}
@@ -125,129 +121,69 @@ export default function NotificationsPage() {
     <main className="dashboard-shell">
       <header className="dashboard-header">
         <div>
-          <p className="eyebrow">Activity</p>
+          <p className="dash-kicker">Activity</p>
           <h1>Notifications</h1>
-          <p className="muted">
+          <p className="page-sub">
             {unreadCount > 0
               ? `${unreadCount} unread notification${unreadCount === 1 ? "" : "s"}`
               : "All caught up."}
           </p>
         </div>
-
         {unreadCount > 0 ? (
-          <button className="secondary-button" type="button" onClick={() => void markAllRead()}>
+          <button className="btn btn-secondary" type="button" onClick={() => void markAllRead()}>
             Mark all as read
           </button>
         ) : null}
       </header>
 
       {error ? (
-        <p className="submit-error" role="alert" style={{ maxWidth: 680, margin: "0 auto 18px" }}>
+        <p className="msg msg-error page-col-sm" role="alert">
           {error}
         </p>
       ) : null}
 
-      <div style={{ maxWidth: 680, margin: "0 auto" }}>
+      <div className="page-col-sm">
         {notifications.length === 0 ? (
-          <div className="editor-card" style={{ textAlign: "center", padding: "48px 24px" }}>
-            <p style={{ fontSize: "2.5rem", margin: "0 0 12px" }}>🔔</p>
-            <h2 style={{ margin: "0 0 8px", color: "#111827" }}>No notifications</h2>
-            <p className="muted">
+          <div className="panel panel-empty">
+            <h2>No notifications</h2>
+            <p>
               You'll be notified about form reviews, approvals, response milestones, and team activity.
             </p>
           </div>
         ) : (
           groups.map((group) => (
-            <div key={group.label} style={{ marginBottom: 24 }}>
-              <p
-                style={{
-                  color: "#94a3b8",
-                  fontSize: "0.75rem",
-                  fontWeight: 800,
-                  letterSpacing: "0.1em",
-                  textTransform: "uppercase",
-                  margin: "0 0 8px",
-                }}
-              >
-                {group.label}
-              </p>
-              <div className="editor-card" style={{ padding: 0, overflow: "hidden" }}>
-                {group.items.map((notification, idx) => (
-                  <button
-                    key={notification.id}
-                    type="button"
-                    onClick={() => handleClick(notification)}
-                    style={{
-                      display: "flex",
-                      alignItems: "flex-start",
-                      gap: 14,
-                      width: "100%",
-                      padding: "16px 20px",
-                      background: notification.read ? "#ffffff" : "#f0f7ff",
-                      borderBottom: idx < group.items.length - 1 ? "1px solid #f1f5f9" : "none",
-                      border: "none",
-                      cursor: notification.metadata?.formId ? "pointer" : "default",
-                      textAlign: "left",
-                      transition: "background 150ms ease",
-                    }}
-                    onMouseEnter={(e) => {
-                      if (notification.metadata?.formId) {
-                        (e.currentTarget as HTMLButtonElement).style.background = "#e8f4ff";
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      (e.currentTarget as HTMLButtonElement).style.background = notification.read ? "#ffffff" : "#f0f7ff";
-                    }}
-                  >
-                    {/* Icon */}
-                    <div
-                      style={{
-                        width: 40,
-                        height: 40,
-                        borderRadius: 12,
-                        background: notification.read ? "#f1f5f9" : "#dbeafe",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: "1.1rem",
-                        flexShrink: 0,
-                      }}
+            <section key={group.label} className="act-group">
+              <h2 className="act-group-title">{group.label}</h2>
+              <div className="panel panel-flush" style={{ marginBottom: 0 }}>
+                {group.items.map((notification) => {
+                  const linked = Boolean(notification.metadata?.formId);
+                  return (
+                    <button
+                      key={notification.id}
+                      type="button"
+                      onClick={() => handleClick(notification)}
+                      className={`act-item${notification.read ? "" : " act-item-unread"}${linked ? " act-item-link" : ""}`}
                     >
-                      {TYPE_ICONS[notification.type] ?? "📌"}
-                    </div>
-
-                    {/* Content */}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
-                        <strong style={{ color: "#111827", fontSize: "0.92rem", fontWeight: notification.read ? 600 : 750 }}>
-                          {notification.title}
-                        </strong>
-                        <span style={{ color: "#94a3b8", fontSize: "0.75rem", whiteSpace: "nowrap", flexShrink: 0 }}>
-                          {new Date(notification.createdAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+                      <span className="act-icon">
+                        <PageIcon name={TYPE_ICONS[notification.type] ?? "pin"} />
+                      </span>
+                      <span className="act-body">
+                        <span className="act-head">
+                          <span className="act-title">{notification.title}</span>
+                          <span className="act-time">
+                            {new Date(notification.createdAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+                          </span>
                         </span>
-                      </div>
-                      <p style={{ margin: "4px 0 0", color: "#475569", fontSize: "0.86rem", lineHeight: 1.5 }}>
-                        {notification.message}
-                      </p>
-                    </div>
-
-                    {/* Unread dot */}
-                    {!notification.read ? (
-                      <div
-                        style={{
-                          width: 8,
-                          height: 8,
-                          borderRadius: "50%",
-                          background: "#2563eb",
-                          flexShrink: 0,
-                          marginTop: 6,
-                        }}
-                      />
-                    ) : null}
-                  </button>
-                ))}
+                        <span className="act-text" style={{ display: "block" }}>
+                          {notification.message}
+                        </span>
+                      </span>
+                      {!notification.read ? <span className="act-unread-label">NEW</span> : null}
+                    </button>
+                  );
+                })}
               </div>
-            </div>
+            </section>
           ))
         )}
       </div>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, ApiRequestError } from "../lib/api";
 import type { WorkspaceRecord } from "../types";
+import { PageIcon, type PageIconName } from "../components/PageIcons";
 
 type AuditEntry = {
   id: string;
@@ -21,11 +22,11 @@ const ACTION_LABELS: Record<string, string> = {
   FORM_DELETED: "deleted a form",
 };
 
-const ACTION_ICONS: Record<string, string> = {
-  FORM_CREATED: "📝",
-  FORM_PUBLISHED: "🚀",
-  FORM_CLOSED: "🔒",
-  FORM_DELETED: "🗑️",
+const ACTION_ICONS: Record<string, PageIconName> = {
+  FORM_CREATED: "edit",
+  FORM_PUBLISHED: "send",
+  FORM_CLOSED: "lock",
+  FORM_DELETED: "trash",
 };
 
 export default function AuditLogPage() {
@@ -36,7 +37,6 @@ export default function AuditLogPage() {
   const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
   const limit = 30;
 
   useEffect(() => {
@@ -82,13 +82,13 @@ export default function AuditLogPage() {
   if (loading) {
     return (
       <main className="dashboard-shell">
-        <div style={{ maxWidth: 780, margin: "0 auto" }}>
+        <div className="page-col-md" aria-hidden="true">
           {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} style={{ display: "flex", gap: 12, padding: "16px 0", borderBottom: "1px solid #f1f5f9" }}>
-              <div className="skeleton-block" style={{ width: 36, height: 36, borderRadius: "50%" }} />
+            <div key={i} className="act-skel">
+              <div className="skeleton-line act-skel-icon" />
               <div style={{ flex: 1 }}>
-                <div className="skeleton-block" style={{ width: "50%", height: 16, marginBottom: 8 }} />
-                <div className="skeleton-block" style={{ width: "30%", height: 12 }} />
+                <div className="skeleton-line skeleton-line-lg" style={{ width: "50%", marginBottom: 8 }} />
+                <div className="skeleton-line" style={{ width: "30%" }} />
               </div>
             </div>
           ))}
@@ -101,16 +101,16 @@ export default function AuditLogPage() {
     <main className="dashboard-shell">
       <header className="dashboard-header">
         <div>
-          <p className="eyebrow">Activity</p>
+          <p className="dash-kicker">Activity</p>
           <h1>Audit log</h1>
-          <p className="muted">Track all actions in this workspace. {total} total entries.</p>
+          <p className="page-sub">Track all actions in this workspace. {total} total entries.</p>
         </div>
-
         {workspaces.length > 1 ? (
           <select
+            className="input input-auto"
+            aria-label="Workspace"
             value={selectedWs}
             onChange={(e) => void changeWorkspace(e.target.value)}
-            style={{ border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px", background: "#fff" }}
           >
             {workspaces.map((ws) => (
               <option key={ws.id} value={ws.id}>{ws.name}</option>
@@ -120,58 +120,36 @@ export default function AuditLogPage() {
       </header>
 
       {error ? (
-        <p className="submit-error" role="alert" style={{ maxWidth: 780, margin: "0 auto 18px" }}>
+        <p className="msg msg-error page-col-md" role="alert">
           {error}
         </p>
       ) : null}
 
-      <div className="editor-card" style={{ maxWidth: 780, margin: "0 auto" }}>
+      <div className="panel page-col-md">
         {logs.length === 0 ? (
-          <div className="empty-state" style={{ padding: "32px 0", textAlign: "center" }}>
-            <p style={{ fontSize: "2rem", margin: "0 0 12px" }}>📋</p>
+          <div className="panel-empty">
             <h2>No audit entries</h2>
-            <p className="muted">Actions like creating, publishing, or deleting forms are logged here.</p>
+            <p>Actions like creating, publishing, or deleting forms are logged here.</p>
           </div>
         ) : (
           <div>
             {logs.map((entry) => {
               const title = (entry.metadata as { title?: string } | null)?.title ?? entry.entityId ?? "";
               const label = ACTION_LABELS[entry.action] ?? entry.action.toLowerCase().replace(/_/g, " ");
-              const icon = ACTION_ICONS[entry.action] ?? "📌";
-
+              const icon = ACTION_ICONS[entry.action] ?? "pin";
               return (
-                <div
-                  key={entry.id}
-                  style={{
-                    display: "flex",
-                    gap: 14,
-                    padding: "14px 4px",
-                    borderBottom: "1px solid #f1f5f9",
-                    alignItems: "flex-start",
-                  }}
-                >
-                  <span
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 10,
-                      background: "#f8fafc",
-                      display: "grid",
-                      placeItems: "center",
-                      fontSize: "1rem",
-                      flexShrink: 0,
-                    }}
-                  >
-                    {icon}
+                <div key={entry.id} className="act-row">
+                  <span className="act-icon">
+                    <PageIcon name={icon} />
                   </span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ margin: 0, color: "#1e293b", fontSize: "0.9rem" }}>
+                  <div className="act-body">
+                    <p>
                       <strong>{label}</strong>
-                      {title ? <> — <span style={{ color: "#475569" }}>{title as string}</span></> : null}
+                      {title ? <> {"\u2014"} <span className="text-muted">{title as string}</span></> : null}
                     </p>
-                    <p style={{ margin: "2px 0 0", color: "#94a3b8", fontSize: "0.78rem" }}>
-                      {entry.userName} · {new Date(entry.createdAt).toLocaleString()} · {entry.entityType}
-                      {entry.entityId ? ` · ${entry.entityId.slice(0, 8)}…` : ""}
+                    <p className="act-text">
+                      {entry.userName} {"\u00B7"} {new Date(entry.createdAt).toLocaleString()} {"\u00B7"} {entry.entityType}
+                      {entry.entityId ? ` \u00B7 ${entry.entityId.slice(0, 8)}\u2026` : ""}
                     </p>
                   </div>
                 </div>
@@ -182,20 +160,20 @@ export default function AuditLogPage() {
 
         {/* Pagination */}
         {total > limit ? (
-          <div className="pagination-controls" style={{ marginTop: 16 }}>
+          <div className="pager">
             <button
-              className="secondary-button compact"
+              className="btn btn-secondary btn-sm"
               type="button"
               disabled={offset === 0}
               onClick={() => void loadLogs(selectedWs, Math.max(0, offset - limit))}
             >
               Previous
             </button>
-            <span className="muted">
-              {offset + 1}–{Math.min(offset + limit, total)} of {total}
+            <span>
+              {offset + 1}{"\u2013"}{Math.min(offset + limit, total)} of {total}
             </span>
             <button
-              className="secondary-button compact"
+              className="btn btn-secondary btn-sm"
               type="button"
               disabled={offset + limit >= total}
               onClick={() => void loadLogs(selectedWs, offset + limit)}

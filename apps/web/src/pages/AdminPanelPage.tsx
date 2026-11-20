@@ -11,6 +11,21 @@ type StatsData = {
   recentForms: { id: string; title: string; status: string; createdAt: string }[];
 };
 
+function statusBadgeClass(status: string): string {
+  switch (status.toLowerCase()) {
+    case "published":
+      return "badge badge-status-published";
+    case "pending_review":
+      return "badge badge-status-pending";
+    case "closed":
+      return "badge badge-status-closed";
+    case "archived":
+      return "badge badge-status-archived";
+    default:
+      return "badge badge-status-draft";
+  }
+}
+
 export default function AdminPanelPage() {
   const [stats, setStats] = useState<StatsData | null>(null);
   const [workspaces, setWorkspaces] = useState<WorkspaceRecord[]>([]);
@@ -41,7 +56,7 @@ export default function AdminPanelPage() {
 
   async function loadStats(wsId: string) {
     try {
-      // Single aggregate request — the server computes all counts (previously
+      // Single aggregate request: the server computes all counts (previously
       // this fired one /responses-count request per form).
       const data = await api.get<StatsData>(
         `/api/forms/workspace-stats?workspaceId=${encodeURIComponent(wsId)}`,
@@ -63,10 +78,14 @@ export default function AdminPanelPage() {
   if (loading) {
     return (
       <main className="dashboard-shell">
-        <div style={{ maxWidth: 980, margin: "0 auto" }}>
-          <div className="skeleton-block" style={{ width: 280, height: 48, marginBottom: 32 }} />
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16 }}>
-            {[1, 2, 3, 4].map((i) => <div key={i} className="skeleton-card"><div className="skeleton-block" style={{ height: 60 }} /></div>)}
+        <div className="page-col" aria-hidden="true">
+          <div className="skeleton-line skeleton-line-lg" style={{ width: 280, height: 40, marginBottom: 32 }} />
+          <div className="stat-grid">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="skeleton-tile">
+                <div className="skeleton-line skeleton-line-lg" />
+              </div>
+            ))}
           </div>
         </div>
       </main>
@@ -77,69 +96,67 @@ export default function AdminPanelPage() {
     <main className="dashboard-shell">
       <header className="dashboard-header">
         <div>
-          <p className="eyebrow">Admin</p>
+          <p className="dash-kicker">Admin</p>
           <h1>Dashboard</h1>
-          <p className="muted">Overview of your workspace activity and usage.</p>
+          <p className="page-sub">Overview of your workspace activity and usage.</p>
         </div>
-
         {workspaces.length > 1 ? (
           <select
+            className="input input-auto"
+            aria-label="Workspace"
             value={selectedWs}
             onChange={(e) => void switchWorkspace(e.target.value)}
-            style={{ border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px", background: "#fff" }}
           >
             {workspaces.map((ws) => <option key={ws.id} value={ws.id}>{ws.name}</option>)}
           </select>
         ) : null}
       </header>
 
-      {error ? <p className="submit-error" role="alert" style={{ maxWidth: 980, margin: "0 auto 18px" }}>{error}</p> : null}
+      {error ? <p className="msg msg-error page-col" role="alert">{error}</p> : null}
 
       {stats ? (
-        <>
+        <div className="page-col">
           {/* Stats grid */}
-          <section style={{ maxWidth: 980, margin: "0 auto 24px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16 }}>
-            <StatCard label="Total Forms" value={stats.totalForms} icon="📋" />
-            <StatCard label="Published" value={stats.publishedForms} icon="🚀" />
-            <StatCard label="Drafts" value={stats.draftForms} icon="📝" />
-            <StatCard label="Total Responses" value={stats.totalResponses} icon="📊" />
-            <StatCard label="Team Members" value={stats.totalMembers} icon="👥" />
+          <section className="stat-grid" aria-label="Workspace totals">
+            <StatCard label="Total forms" value={stats.totalForms} />
+            <StatCard label="Published" value={stats.publishedForms} />
+            <StatCard label="Drafts" value={stats.draftForms} />
+            <StatCard label="Responses" value={stats.totalResponses} />
+            <StatCard label="Members" value={stats.totalMembers} />
           </section>
 
           {/* Recent forms */}
-          <section className="editor-card" style={{ maxWidth: 980, margin: "0 auto" }}>
-            <div className="editor-card-header">
-              <div><p className="eyebrow">Recent</p><h2>Latest forms</h2></div>
+          <section className="panel">
+            <div className="panel-head">
+              <div><p className="dash-kicker">Recent</p><h2>Latest forms</h2></div>
             </div>
-
             {stats.recentForms.length === 0 ? (
-              <p className="muted" style={{ padding: "16px 0" }}>No forms in this workspace.</p>
+              <p className="text-muted">No forms in this workspace.</p>
             ) : (
-              <div className="editor-question-list">
+              <div className="row-list">
                 {stats.recentForms.map((form) => (
-                  <div key={form.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", background: "#f8fafc", borderRadius: 12, border: "1px solid #e2e8f0" }}>
-                    <div>
-                      <strong style={{ color: "#111827" }}>{form.title}</strong>
-                      <span className={`status-pill status-${form.status.toLowerCase()}`} style={{ marginLeft: 10, fontSize: "0.65rem" }}>{form.status.replace(/_/g, " ")}</span>
+                  <div key={form.id} className="row-item">
+                    <div className="row-main">
+                      <strong className="row-title">{form.title}</strong>
+                      <span className={statusBadgeClass(form.status)}>{form.status.replace(/_/g, " ")}</span>
                     </div>
-                    <span className="muted" style={{ fontSize: "0.78rem" }}>{new Date(form.createdAt).toLocaleDateString()}</span>
+                    <span className="text-subtle">{new Date(form.createdAt).toLocaleDateString()}</span>
                   </div>
                 ))}
               </div>
             )}
           </section>
-        </>
+        </div>
       ) : null}
     </main>
   );
 }
 
-function StatCard({ label, value, icon }: { label: string; value: number; icon: string }) {
+function StatCard({ label, value }: { label: string; value: number }) {
   return (
-    <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 16, padding: "24px 20px", textAlign: "center" }}>
-      <span style={{ fontSize: "1.6rem", display: "block", marginBottom: 8 }}>{icon}</span>
-      <strong style={{ fontSize: "1.8rem", color: "#111827", display: "block" }}>{value}</strong>
-      <span style={{ color: "#64748b", fontSize: "0.82rem" }}>{label}</span>
+    <div className="stat-card">
+      <strong className="stat-value">{value}</strong>
+      <span className="stat-label">{label}</span>
     </div>
   );
 }

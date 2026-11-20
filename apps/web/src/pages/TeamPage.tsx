@@ -15,13 +15,6 @@ const ROLE_DESCRIPTIONS: Record<string, string> = {
   VIEWER: "Can view forms and responses but cannot edit.",
 };
 
-const ROLE_COLORS: Record<string, string> = {
-  OWNER: "#1d4ed8",
-  ADMIN: "#7c3aed",
-  EDITOR: "#0891b2",
-  VIEWER: "#64748b",
-};
-
 export default function TeamPage() {
   const [workspaces, setWorkspaces] = useState<WorkspaceRecord[]>([]);
   const [selectedWorkspace, setSelectedWorkspace] = useState<string>("");
@@ -237,11 +230,11 @@ export default function TeamPage() {
   if (loading) {
     return (
       <main className="dashboard-shell">
-        <div style={{ maxWidth: 980, margin: "0 auto" }}>
+        <div className="page-col" aria-hidden="true">
           {[1, 2].map((i) => (
-            <div key={i} className="editor-card" style={{ marginBottom: 16 }}>
-              <div className="skeleton-block" style={{ width: "40%", height: 24, marginBottom: 12 }} />
-              <div className="skeleton-block" style={{ width: "60%", height: 16 }} />
+            <div key={i} className="skeleton-tile" style={{ marginBottom: 16 }}>
+              <div className="skeleton-line skeleton-line-lg" style={{ width: "40%" }} />
+              <div className="skeleton-line" style={{ width: "60%" }} />
             </div>
           ))}
         </div>
@@ -259,35 +252,22 @@ export default function TeamPage() {
     <main className="dashboard-shell">
       <header className="dashboard-header">
         <div>
-          <p className="eyebrow">Team</p>
+          <p className="dash-kicker">Team</p>
           <h1>
             {selectedWsData?.name ?? "Workspace"}
-            <span
-              className="status-pill"
-              style={{
-                marginLeft: 12,
-                verticalAlign: "middle",
-                background: "#f1f5f9",
-                color: "#64748b",
-                fontSize: "0.65rem",
-              }}
-            >
-              {selectedWsData?.type}
-            </span>
+            <span className="badge page-title-chip">{selectedWsData?.type}</span>
           </h1>
-          <p className="muted">
-            {members.length} member{members.length !== 1 ? "s" : ""} · Your role:{" "}
-            <strong style={{ color: ROLE_COLORS[selectedWsData?.role ?? ""] ?? "#64748b" }}>
-              {selectedWsData?.role}
-            </strong>
+          <p className="page-sub">
+            {members.length} member{members.length !== 1 ? "s" : ""} {"\u00B7"} Your role:{" "}
+            <strong>{selectedWsData?.role}</strong>
           </p>
         </div>
 
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <div className="page-header-actions">
           {canManage && selectedWsData?.type === "TEAM" ? (
             <button
               type="button"
-              className="secondary-button"
+              className="btn btn-secondary"
               onClick={() => { setShowRename(true); setRenameName(selectedWsData?.name ?? ""); }}
             >
               Rename
@@ -296,16 +276,15 @@ export default function TeamPage() {
           {canManage ? (
             <button
               type="button"
-              className="secondary-button"
+              className="btn btn-secondary"
               onClick={() => setShowBranding((v) => !v)}
             >
-              {showBranding ? "Cancel" : "🎨 Branding"}
+              {showBranding ? "Cancel" : "Branding"}
             </button>
           ) : null}
           <button
             type="button"
-            className="secondary-button"
-            style={{ background: "#2563eb", color: "#fff", border: "none" }}
+            className={`btn ${showCreateWs ? "btn-secondary" : "btn-primary"}`}
             onClick={() => setShowCreateWs((v) => !v)}
           >
             {showCreateWs ? "Cancel" : "+ New workspace"}
@@ -314,44 +293,36 @@ export default function TeamPage() {
       </header>
 
       {message ? (
-        <p className="editor-message" role="status" style={{ maxWidth: 980, margin: "0 auto 18px" }}>
+        <p className="msg msg-ok page-col" role="status">
           {message}
         </p>
       ) : null}
 
       {error ? (
-        <p className="submit-error" role="alert" style={{ maxWidth: 980, margin: "0 auto 18px" }}>
+        <p className="msg msg-error page-col" role="alert">
           {error}
         </p>
       ) : null}
 
       {/* Workspace switcher */}
       {workspaces.length > 1 ? (
-        <section className="editor-card" style={{ maxWidth: 980, margin: "0 auto 20px" }}>
-          <div className="editor-card-header">
-            <div><p className="eyebrow">Switch</p><h2>Your workspaces</h2></div>
+        <section className="panel page-col">
+          <div className="panel-head">
+            <div><p className="dash-kicker">Switch</p><h2>Your workspaces</h2></div>
           </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+          <div className="ws-switch">
             {workspaces.map((ws) => (
               <button
                 key={ws.id}
                 type="button"
+                className="ws-chip"
+                aria-pressed={ws.id === selectedWorkspace}
                 onClick={() => void handleWorkspaceChange(ws.id)}
-                style={{
-                  padding: "10px 16px",
-                  borderRadius: 10,
-                  border: ws.id === selectedWorkspace ? "2px solid #2563eb" : "1px solid #e2e8f0",
-                  background: ws.id === selectedWorkspace ? "#eff6ff" : "#f8fafc",
-                  color: ws.id === selectedWorkspace ? "#1d4ed8" : "#475569",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  fontSize: "0.88rem",
-                }}
               >
                 {ws.name}
-                <span style={{ marginLeft: 8, fontSize: "0.72rem", opacity: 0.7 }}>
-                  {ws.type} · {ws.role}
-                </span>
+                <small>
+                  {ws.type} {"\u00B7"} {ws.role}
+                </small>
               </button>
             ))}
           </div>
@@ -360,24 +331,25 @@ export default function TeamPage() {
 
       {/* Create workspace */}
       {showCreateWs ? (
-        <section className="editor-card" style={{ maxWidth: 980, margin: "0 auto 20px", background: "#eff6ff", border: "1px solid #bfdbfe" }}>
-          <div className="editor-card-header">
-            <div><p className="eyebrow">New team workspace</p><h2>Create workspace</h2></div>
+        <section className="panel panel-tint page-col">
+          <div className="panel-head">
+            <div><p className="dash-kicker">New team workspace</p><h2>Create workspace</h2></div>
           </div>
-          <form onSubmit={handleCreateWorkspace} style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "end" }}>
-            <div style={{ flex: 1, minWidth: 200 }}>
-              <label style={{ display: "block", marginBottom: 7, fontWeight: 750, fontSize: "0.86rem" }}>Workspace name</label>
+          <form onSubmit={handleCreateWorkspace} className="field-row">
+            <div className="field">
+              <label className="field-label" htmlFor="new-ws-name">Workspace name</label>
               <input
+                id="new-ws-name"
+                className="input"
                 type="text"
                 value={newWsName}
                 onChange={(e) => setNewWsName(e.target.value)}
                 placeholder="e.g. ITM Events Team"
                 required
                 autoFocus
-                style={{ width: "100%", border: "1px solid #bfdbfe", borderRadius: 10, padding: "10px 12px" }}
               />
             </div>
-            <button className="secondary-button" type="submit" disabled={creatingWs || !newWsName.trim()}>
+            <button className="btn btn-primary" type="submit" disabled={creatingWs || !newWsName.trim()}>
               {creatingWs ? "Creating..." : "Create"}
             </button>
           </form>
@@ -386,23 +358,24 @@ export default function TeamPage() {
 
       {/* Rename workspace */}
       {showRename ? (
-        <section className="editor-card" style={{ maxWidth: 980, margin: "0 auto 20px" }}>
-          <div className="editor-card-header">
-            <div><p className="eyebrow">Rename</p><h2>Rename workspace</h2></div>
-            <button className="back-button inline-button" type="button" onClick={() => setShowRename(false)}>Cancel</button>
+        <section className="panel page-col">
+          <div className="panel-head">
+            <div><p className="dash-kicker">Rename</p><h2>Rename workspace</h2></div>
+            <button className="btn btn-ghost btn-sm" type="button" onClick={() => setShowRename(false)}>Cancel</button>
           </div>
-          <form onSubmit={handleRenameWorkspace} style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "end" }}>
-            <div style={{ flex: 1, minWidth: 200 }}>
+          <form onSubmit={handleRenameWorkspace} className="field-row">
+            <div className="field">
               <input
+                className="input"
                 type="text"
+                aria-label="Workspace name"
                 value={renameName}
                 onChange={(e) => setRenameName(e.target.value)}
                 required
                 autoFocus
-                style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }}
               />
             </div>
-            <button className="secondary-button" type="submit" disabled={renaming || !renameName.trim()}>
+            <button className="btn btn-primary" type="submit" disabled={renaming || !renameName.trim()}>
               {renaming ? "Saving..." : "Save"}
             </button>
           </form>
@@ -411,196 +384,163 @@ export default function TeamPage() {
 
       {/* Branding */}
       {showBranding ? (
-        <section className="editor-card" style={{ maxWidth: 980, margin: "0 auto 20px" }}>
-          <div className="editor-card-header">
-            <div><p className="eyebrow">Branding</p><h2>Public form appearance</h2></div>
+        <section className="panel page-col">
+          <div className="panel-head">
+            <div><p className="dash-kicker">Branding</p><h2>Public form appearance</h2></div>
           </div>
-          <p className="muted" style={{ marginBottom: 16, fontSize: "0.88rem" }}>
+          <p className="text-muted" style={{ marginTop: 0 }}>
             Your workspace name, logo, and accent color appear on all public forms.
           </p>
-          <form onSubmit={handleSaveBranding} style={{ display: "grid", gap: 14 }}>
-            <div className="question-field">
-              <label>Logo URL (optional)</label>
-              <input type="url" value={brandLogoUrl} onChange={(e) => setBrandLogoUrl(e.target.value)} placeholder="https://example.com/logo.png" style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }} />
-              <small className="muted">Direct URL to your logo image. 200px wide recommended.</small>
+          <form onSubmit={handleSaveBranding} className="form-stack">
+            <div className="field">
+              <label className="field-label" htmlFor="brand-logo">Logo URL (optional)</label>
+              <input id="brand-logo" className="input" type="url" value={brandLogoUrl} onChange={(e) => setBrandLogoUrl(e.target.value)} placeholder="https://example.com/logo.png" />
+              <small className="field-help">Direct URL to your logo image. 200px wide recommended.</small>
             </div>
-            <div className="question-field">
-              <label>Accent color (optional)</label>
-              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                <input type="color" value={brandColor || "#2563eb"} onChange={(e) => setBrandColor(e.target.value)} style={{ width: 44, height: 44, border: "1px solid #cbd5e1", borderRadius: 8, padding: 2, cursor: "pointer" }} />
-                <input type="text" value={brandColor} onChange={(e) => setBrandColor(e.target.value)} placeholder="#2563eb" style={{ width: 120, border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px", fontFamily: "monospace" }} />
+            <div className="field">
+              <label className="field-label" htmlFor="brand-color">Accent color (optional)</label>
+              <div className="field-row">
+                <input className="input input-color" type="color" aria-label="Pick accent color" value={brandColor || "#2563eb"} onChange={(e) => setBrandColor(e.target.value)} />
+                <input id="brand-color" className="input input-mono" type="text" value={brandColor} onChange={(e) => setBrandColor(e.target.value)} placeholder="#2563eb" />
               </div>
-              <small className="muted">Used for buttons and links on your public forms.</small>
+              <small className="field-help">Used for buttons and links on your public forms.</small>
             </div>
 
-            {/* Live preview — mirrors how branding appears on a public form */}
-            <div className="question-field">
-              <label>Preview</label>
-              <div
-                style={{
-                  border: "1px solid #e2e8f0",
-                  borderRadius: 12,
-                  padding: 20,
-                  background: "#fff",
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+            {/* Live preview: mirrors how branding appears on a public form */}
+            <div className="field">
+              <span className="field-label">Preview</span>
+              <div className="brand-preview">
+                <div className="brand-preview-head">
                   {brandLogoUrl.trim() ? (
                     <img
+                      className="brand-preview-logo"
                       src={brandLogoUrl.trim()}
                       alt="Logo preview"
-                      style={{ height: 36, maxWidth: 160, objectFit: "contain" }}
                       onError={(e) => {
                         (e.currentTarget as HTMLImageElement).style.display = "none";
                       }}
                     />
                   ) : null}
-                  <span
-                    style={{
-                      textTransform: "uppercase",
-                      letterSpacing: "0.06em",
-                      fontSize: "0.72rem",
-                      fontWeight: 700,
-                      color: brandColor.trim() || "#2563eb",
-                    }}
-                  >
+                  <span className="brand-preview-name" style={{ color: brandColor.trim() || "#2563eb" }}>
                     {selectedWsData?.name ?? "Your workspace"}
                   </span>
                 </div>
-                <p style={{ margin: "0 0 14px", color: "#334155", fontSize: "0.92rem" }}>
-                  Sample form question — this is how respondents see your form.
+                <p className="brand-preview-text">
+                  Sample form question {"\u2014"} this is how respondents see your form.
                 </p>
                 <span
-                  style={{
-                    display: "inline-block",
-                    padding: "9px 18px",
-                    borderRadius: 10,
-                    background: brandColor.trim() || "#2563eb",
-                    color: "#fff",
-                    fontSize: "0.88rem",
-                    fontWeight: 600,
-                  }}
+                  className="brand-preview-btn"
+                  style={{ background: brandColor.trim() || "#2563eb", color: "white" }}
                 >
                   Submit
                 </span>
               </div>
-              <small className="muted">Updates live as you edit. Logo hides if the URL can't load.</small>
+              <small className="field-help">Updates live as you edit. Logo hides if the URL can't load.</small>
             </div>
 
-            <button className="secondary-button" type="submit" disabled={savingBrand}>
-              {savingBrand ? "Saving..." : "Save branding"}
-            </button>
+            <div>
+              <button className="btn btn-primary" type="submit" disabled={savingBrand}>
+                {savingBrand ? "Saving..." : "Save branding"}
+              </button>
+            </div>
           </form>
         </section>
       ) : null}
 
       {/* Invite form */}
       {canManage ? (
-        <section className="editor-card" style={{ maxWidth: 980, margin: "0 auto 20px" }}>
-          <div className="editor-card-header">
-            <div><p className="eyebrow">Invite</p><h2>Add a member</h2></div>
+        <section className="panel page-col">
+          <div className="panel-head">
+            <div><p className="dash-kicker">Invite</p><h2>Add a member</h2></div>
           </div>
-          <p className="muted" style={{ marginBottom: 16, fontSize: "0.88rem" }}>
+          <p className="text-muted" style={{ marginTop: 0 }}>
             The person must already have a Qivo account. They'll get access immediately.
           </p>
-          <form onSubmit={handleInvite} style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "end" }}>
-            <div style={{ flex: 1, minWidth: 200 }}>
-              <label htmlFor="invite-email" style={{ display: "block", marginBottom: 7, fontWeight: 750, fontSize: "0.86rem" }}>Email address</label>
+          <form onSubmit={handleInvite} className="field-row">
+            <div className="field">
+              <label className="field-label" htmlFor="invite-email">Email address</label>
               <input
                 id="invite-email"
+                className="input"
                 type="email"
                 value={inviteEmail}
                 onChange={(e) => setInviteEmail(e.target.value)}
                 placeholder="colleague@example.com"
                 required
-                style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }}
               />
             </div>
-            <div>
-              <label htmlFor="invite-role" style={{ display: "block", marginBottom: 7, fontWeight: 750, fontSize: "0.86rem" }}>Role</label>
+            <div className="field field-fixed">
+              <label className="field-label" htmlFor="invite-role">Role</label>
               <select
                 id="invite-role"
+                className="input input-auto"
                 value={inviteRole}
                 onChange={(e) => setInviteRole(e.target.value as "ADMIN" | "EDITOR" | "VIEWER")}
-                style={{ border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px" }}
               >
                 <option value="ADMIN">Admin</option>
                 <option value="EDITOR">Editor</option>
                 <option value="VIEWER">Viewer</option>
               </select>
-              <p style={{ margin: "6px 0 0", fontSize: "0.75rem", color: "#94a3b8", maxWidth: 240 }}>
-                {ROLE_DESCRIPTIONS[inviteRole]}
-              </p>
             </div>
-            <button className="secondary-button" type="submit" disabled={inviting || !inviteEmail.trim()}>
+            <button className="btn btn-primary" type="submit" disabled={inviting || !inviteEmail.trim()}>
               {inviting ? "Inviting..." : "Invite"}
             </button>
           </form>
+          <p className="field-help" style={{ marginTop: 8 }}>
+            {ROLE_DESCRIPTIONS[inviteRole]}
+          </p>
         </section>
       ) : null}
 
       {/* Members list */}
-      <section className="editor-card" style={{ maxWidth: 980, margin: "0 auto" }}>
-        <div className="editor-card-header">
-          <div><p className="eyebrow">Members</p><h2>{members.length} members</h2></div>
+      <section className="panel page-col">
+        <div className="panel-head">
+          <div><p className="dash-kicker">Members</p><h2>{members.length} members</h2></div>
         </div>
 
         {members.length === 0 ? (
-          <p className="muted" style={{ padding: "16px 0" }}>No members yet.</p>
+          <p className="text-muted">No members yet.</p>
         ) : (
-          <div className="team-member-list">
+          <div className="member-list">
             {members.map((member) => (
-              <div key={member.id} className="team-member-row">
-                {/* Avatar */}
-                <div className="team-member-avatar">
+              <div key={member.id} className="member-row">
+                <div className="member-avatar" aria-hidden="true">
                   {member.user.name.slice(0, 1).toUpperCase()}
                 </div>
 
-                {/* Info */}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <strong style={{ color: "#111827", display: "block" }}>{member.user.name}</strong>
-                  <span style={{ color: "#64748b", fontSize: "0.84rem" }}>{member.user.email}</span>
-                  <span style={{ color: "#94a3b8", fontSize: "0.76rem", display: "block", marginTop: 2 }}>
+                <div className="member-info">
+                  <strong className="member-name">{member.user.name}</strong>
+                  <span className="member-email">{member.user.email}</span>
+                  <span className="member-joined">
                     Joined {new Date(member.joinedAt).toLocaleDateString()}
                   </span>
                 </div>
 
-                {/* Role + actions */}
-                <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+                <div className="member-actions">
                   {member.role === "OWNER" ? (
-                    <span
-                      className="status-pill"
-                      style={{ background: "#dbeafe", color: ROLE_COLORS["OWNER"] }}
-                    >
-                      OWNER
-                    </span>
+                    <span className="badge badge-status-published">OWNER</span>
                   ) : canManage ? (
                     <>
                       <select
+                        className="input input-sm input-auto"
+                        aria-label={`Role for ${member.user.name}`}
                         value={member.role}
                         onChange={(e) => void handleRoleChange(member.id, e.target.value)}
-                        style={{ border: "1px solid #e2e8f0", borderRadius: 8, padding: "6px 10px", fontSize: "0.85rem", background: "#f8fafc" }}
                       >
                         <option value="ADMIN">Admin</option>
                         <option value="EDITOR">Editor</option>
                         <option value="VIEWER">Viewer</option>
                       </select>
                       <button
-                        className="danger-button"
+                        className="btn btn-danger btn-sm"
                         type="button"
                         onClick={() => void handleRemove(member.id, member.user.name)}
-                        style={{ fontSize: "0.8rem", padding: "6px 10px" }}
                       >
                         Remove
                       </button>
                     </>
                   ) : (
-                    <span
-                      className="status-pill"
-                      style={{ color: ROLE_COLORS[member.role] ?? "#64748b", background: "#f1f5f9" }}
-                    >
-                      {member.role}
-                    </span>
+                    <span className="badge badge-status-draft">{member.role}</span>
                   )}
                 </div>
               </div>
