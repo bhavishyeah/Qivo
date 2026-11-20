@@ -3,9 +3,9 @@
   "short_name": "Qivo",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f4f7fb",
-  "theme_color": "#2563eb",
-  "description": "Create, publish, and manage Qivo forms.",
+  "background_color": "#42005f",
+  "theme_color": "#42005f",
+  "description": "Build forms for registrations and fees. Take UPI payments, limit seats, and review every response. Made for colleges, teachers, student clubs and event organisers in India.",
   "icons": [
     {
       "src": "/icons/maskable_icon_x192.png",
