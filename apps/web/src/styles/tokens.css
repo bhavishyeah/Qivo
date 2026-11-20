@@ -87,6 +87,12 @@
   --chart-grid: var(--color-border);
   --chart-axis: var(--color-text-muted);
 
+  /* Scrollbars: Slime Lime thumb, Olive edge keeps it visible on light surfaces */
+  --scrollbar-thumb: #b2fd00;
+  --scrollbar-thumb-hover: #9de000;
+  --scrollbar-edge: #484a1c;
+  --scrollbar-track: #eef1dc;
+
   /* Spacing (4px base) */
   --space-0: 0;
   --space-1: 4px;
@@ -224,4 +230,9 @@
   --shadow-1: 0 1px 2px rgb(0 0 0 / 12%);
   --shadow-2: 0 6px 20px rgb(0 0 0 / 24%);
   --shadow-3: 0 18px 48px rgb(0 0 0 / 44%);
+
+  --scrollbar-thumb: #b2fd00;
+  --scrollbar-thumb-hover: #9de000;
+  --scrollbar-edge: #b2fd00;
+  --scrollbar-track: #0c0012;
 }
