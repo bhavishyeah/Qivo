@@ -8,6 +8,7 @@ import './styles/primitives.css'
 import './styles/legacy-aliases.css'
 import './styles/public-form-freeze.css'
 import App from './App.tsx'
+import './styles/public-form-polish.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

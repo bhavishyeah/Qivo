@@ -6,13 +6,14 @@ import {
   type CSSProperties,
 } from "react";
 import { Link, useParams } from "react-router-dom";
-import ColorSchemeToggle from "../components/ColorSchemeToggle";
+import { useForceLightScheme } from "../lib/useForceLightScheme";
 import { api, ApiRequestError } from "../lib/api";
 import { evaluateConditions } from "../lib/conditions";
 import { validateQuestionFormat } from "../lib/validation";
 import { nextSectionAfter } from "../lib/sectionJumps";
 import { resolvePipedLabel } from "../lib/piping";
 import { DEFAULT_ACCENT, ensureFontLoaded, resolveTheme } from "../lib/theme";
+import { publicFormVars } from "../lib/publicFormTheme";
 import SignaturePad from "../components/SignaturePad";
 import { QuestionImage } from "../components/QuestionImage";
 import ChoiceOther from "../components/ChoiceOther";
@@ -35,6 +36,7 @@ import type { AnswerValue, FormRecord, Question } from "../types";
  * without actually submitting any data.
  */
 export default function FormPreviewPage() {
+  useForceLightScheme();
   const { formId } = useParams<{ formId: string }>();
 
   const [form, setForm] = useState<FormRecord | null>(null);
@@ -199,9 +201,7 @@ export default function FormPreviewPage() {
       // Per-form custom background is passed as --qivo-form-bg so dark mode can
       // override it (shown in light mode only); cover/accent apply in both.
       style={{
-        ...(resolved.background
-          ? ({ "--qivo-form-bg": resolved.background } as CSSProperties)
-          : {}),
+        ...(publicFormVars(resolved) as CSSProperties),
         ...(resolved.fontFamily ? { fontFamily: resolved.fontFamily } : {}),
       }}
     >
@@ -282,8 +282,6 @@ export default function FormPreviewPage() {
 
         {/* Header */}
         <header className="public-form-header">
-          <ColorSchemeToggle />
-          <p className="eyebrow" style={{ color: previewAccent }}>Qivo Form (Preview)</p>
           <h1 className="public-form-title">{form.title}</h1>
           {form.description ? <p className="public-form-description">{form.description}</p> : null}
           {totalSections > 1 ? (

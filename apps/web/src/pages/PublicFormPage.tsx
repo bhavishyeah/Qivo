@@ -45,10 +45,11 @@ import { clampResumeSection } from "../lib/resumeSection";
 import { resolvePipedLabel } from "../lib/piping";
 import { isImageUrl, uploadToCloudinary } from "../lib/upload";
 import SignaturePad, { type SignaturePadHandle } from "../components/SignaturePad";
-import ColorSchemeToggle from "../components/ColorSchemeToggle";
+import { useForceLightScheme } from "../lib/useForceLightScheme";
 import ManualUpiPayment from "../components/ManualUpiPayment";
 import { formatInr, normalizeUtr, validateManualPayment } from "../lib/manualUpi";
 import { ensureFontLoaded, resolveTheme } from "../lib/theme";
+import { publicFormVars } from "../lib/publicFormTheme";
 import type { AnswerValue, PublicForm, Question, Section } from "../types";
 import { QuestionImage } from "../components/QuestionImage";
 import { GridQuestion } from "../components/GridQuestion";
@@ -159,6 +160,7 @@ function friendlyFileTypes(mimeTypes: string[]): string {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function PublicFormPage() {
+  useForceLightScheme();
   const { slug } = useParams<{ slug: string }>();
 
   const [form, setForm] = useState<PublicForm | null>(null);
@@ -1098,9 +1100,7 @@ export default function PublicFormPage() {
       // background — the owner's light bg is shown in light mode only. The cover
       // image and accent apply in both schemes.
       style={{
-        ...(resolved.background
-          ? ({ "--qivo-form-bg": resolved.background } as CSSProperties)
-          : {}),
+        ...(publicFormVars(resolved) as CSSProperties),
         ...(resolved.fontFamily ? { fontFamily: resolved.fontFamily } : {}),
       }}
     >
@@ -1131,7 +1131,6 @@ export default function PublicFormPage() {
 
         {/* Header */}
         <header className="public-form-header">
-          <ColorSchemeToggle />
           {form.branding?.logoUrl ? (
             <img
               src={form.branding.logoUrl}
@@ -1139,9 +1138,6 @@ export default function PublicFormPage() {
               style={{ height: 40, width: "auto", borderRadius: 8, marginBottom: 12 }}
             />
           ) : null}
-          <p className="eyebrow" style={resolved.accent ? { color: resolved.accent } : undefined}>
-            {form.branding?.workspaceName ?? "Qivo Form"}
-          </p>
           <h1 className="public-form-title">{form.title}</h1>
           {form.description ? (
             <p className="public-form-description">{form.description}</p>
@@ -1162,7 +1158,7 @@ export default function PublicFormPage() {
               style={{
                 margin: "10px 0 0",
                 fontWeight: 600,
-                color: resolved.accent ?? "var(--qivo-text-secondary, #475569)",
+                color: "var(--pf-text, var(--qivo-text-secondary, #475569))",
               }}
             >
               {seatsLeftLabel(form.capacity!)}

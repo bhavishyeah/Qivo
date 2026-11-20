@@ -51,19 +51,21 @@ export function GridQuestion({
                   const checked = Array.isArray(cell) ? cell.includes(col.value) : cell === col.value;
                   return (
                     <td key={col.value}>
-                      <input
-                        type={isRadio ? "radio" : "checkbox"}
-                        name={`${question.id}-${row.value}`}
-                        checked={checked}
-                        disabled={disabled}
-                        aria-label={`${row.label}, ${col.label}`}
-                        onChange={(e) =>
-                          onChange(
-                            question.id,
-                            setGridCell(question.type, value, row.value, col.value, e.target.checked),
-                          )
-                        }
-                      />
+                      <label className={`choice-cell ${isRadio ? "is-radio" : "is-checkbox"}`}>
+                        <input
+                          type={isRadio ? "radio" : "checkbox"}
+                          name={`${question.id}-${row.value}`}
+                          checked={checked}
+                          disabled={disabled}
+                          aria-label={`${row.label}, ${col.label}`}
+                          onChange={(e) =>
+                            onChange(
+                              question.id,
+                              setGridCell(question.type, value, row.value, col.value, e.target.checked),
+                            )
+                          }
+                        />
+                      </label>
                     </td>
                   );
                 })}

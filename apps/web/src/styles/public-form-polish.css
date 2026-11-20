@@ -1,0 +1,658 @@
+/* Public respondent form polish. The earlier freeze on this form is lifted for
+   exactly these items: readable text colours, custom choice controls and the
+   manual UPI payment block. Everything reads the per-form theme variables set
+   on the shell (--pf-*, from lib/publicFormTheme.ts), so it follows the
+   Appearance accent and background. Light scheme only: respondents never get
+   dark mode. */
+
+.public-form-shell {
+  --pf-accent-c: var(--pf-accent, var(--qivo-primary));
+  --pf-ink-c: var(--pf-accent-ink, #ffffff);
+  --pf-link-c: var(--pf-accent-text, var(--qivo-primary));
+  --pf-tint: color-mix(in srgb, var(--pf-accent-c) 10%, #ffffff);
+  --pf-tint-soft: color-mix(in srgb, var(--pf-accent-c) 5%, #ffffff);
+  --pf-ring: color-mix(in srgb, var(--pf-accent-c) 45%, transparent);
+  --pf-line: #7c8aa0;
+  /* Muted shades that stay AA (>= 4.5:1) on the white card. */
+  --qivo-text-secondary: #475569;
+  --qivo-text-muted: #5b6b80;
+  --qivo-placeholder: #64748b;
+  color-scheme: light;
+}
+
+/* Text that sits directly on the page background. */
+.public-form-shell .public-form-title {
+  color: var(--pf-text, var(--qivo-text));
+}
+.public-form-shell .public-form-description {
+  color: var(--pf-muted, var(--qivo-text-secondary));
+}
+.public-form-shell .public-section-counter {
+  color: var(--pf-muted, var(--qivo-text-secondary));
+}
+.public-form-shell .public-capacity-counter {
+  color: var(--pf-text, var(--qivo-text-secondary));
+}
+.public-form-shell .public-form-brand {
+  color: var(--pf-muted, var(--qivo-text-muted));
+}
+
+/* ---- Choice controls: radio, checkbox, Yes/No, Other, rating ------------ */
+.public-form-shell .choice-list {
+  display: grid;
+  gap: 10px;
+}
+.public-form-shell .choice-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 16px;
+  border: 1.5px solid var(--qivo-border-strong);
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--qivo-text);
+  font-weight: 500;
+  line-height: 1.4;
+  box-shadow: none;
+  cursor: pointer;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease,
+    box-shadow 120ms ease;
+}
+.public-form-shell .choice-item > span {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+/* The native input stays in the tile (semantics, keyboard, form submit) but is
+   invisible; it covers the tile so a tap lands on it directly. */
+.public-form-shell .choice-item > input,
+.public-form-shell .choice-cell > input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+/* Indicator (22px). */
+.public-form-shell .choice-item::before,
+.public-form-shell .choice-cell::before {
+  content: "";
+  flex: 0 0 22px;
+  box-sizing: border-box;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--pf-line);
+  background: #ffffff;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease;
+}
+.public-form-shell .choice-item:has(input[type="radio"])::before,
+.public-form-shell .choice-cell.is-radio::before {
+  border-radius: 50%;
+}
+.public-form-shell .choice-item:has(input[type="checkbox"])::before,
+.public-form-shell .choice-cell.is-checkbox::before {
+  border-radius: 6px;
+}
+/* Radio dot / checkbox tick, scaled in when selected. */
+.public-form-shell .choice-item::after,
+.public-form-shell .choice-cell::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  transition: transform 120ms ease;
+}
+.public-form-shell .choice-item:has(input[type="radio"])::after {
+  left: 22px;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--pf-accent-c);
+  transform: translateY(-50%) scale(0);
+}
+.public-form-shell .choice-cell.is-radio::after {
+  left: 50%;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--pf-accent-c);
+  transform: translate(-50%, -50%) scale(0);
+}
+.public-form-shell .choice-item:has(input[type="checkbox"])::after {
+  left: 24px;
+  top: 50%;
+  width: 6px;
+  height: 11px;
+  border: solid var(--pf-ink-c);
+  border-width: 0 2.5px 2.5px 0;
+  transform: translateY(-62%) rotate(45deg) scale(0);
+}
+.public-form-shell .choice-cell.is-checkbox::after {
+  left: 50%;
+  top: 50%;
+  width: 6px;
+  height: 11px;
+  border: solid var(--pf-ink-c);
+  border-width: 0 2.5px 2.5px 0;
+  transform: translate(-50%, -62%) rotate(45deg) scale(0);
+}
+.public-form-shell .choice-item:has(input[type="radio"]:checked)::after {
+  transform: translateY(-50%) scale(1);
+}
+.public-form-shell .choice-cell.is-radio:has(input:checked)::after {
+  transform: translate(-50%, -50%) scale(1);
+}
+.public-form-shell .choice-item:has(input[type="checkbox"]:checked)::after {
+  transform: translateY(-62%) rotate(45deg) scale(1);
+}
+.public-form-shell .choice-cell.is-checkbox:has(input:checked)::after {
+  transform: translate(-50%, -62%) rotate(45deg) scale(1);
+}
+.public-form-shell .choice-item:has(input[type="checkbox"]:checked)::before,
+.public-form-shell .choice-cell.is-checkbox:has(input:checked)::before {
+  background: var(--pf-accent-c);
+  border-color: var(--pf-accent-c);
+}
+.public-form-shell .choice-item:has(input:checked)::before,
+.public-form-shell .choice-cell:has(input:checked)::before {
+  border-color: var(--pf-accent-c);
+}
+/* Tile states. */
+.public-form-shell .choice-item:hover {
+  border-color: var(--pf-accent-c);
+  background: var(--pf-tint-soft);
+}
+.public-form-shell .choice-item:has(input:checked) {
+  border-color: var(--pf-accent-c);
+  background: var(--pf-tint);
+  box-shadow: none;
+  font-weight: 600;
+}
+.public-form-shell .choice-item:focus-within {
+  outline: none;
+}
+.public-form-shell .choice-item:has(input:focus-visible),
+.public-form-shell .choice-cell:has(input:focus-visible) {
+  outline: 2px solid var(--pf-accent-c);
+  outline-offset: 2px;
+}
+.public-form-shell .choice-item:has(input:disabled) {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* "Other:" tile; the text input appears below it once the tile is selected. */
+.public-form-shell .choice-other {
+  display: grid;
+  gap: 8px;
+  flex-basis: auto;
+}
+.public-form-shell .choice-other:not(:has(input:checked)) .choice-other-input {
+  display: none;
+}
+.public-form-shell .question-field .choice-other-input {
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 16px;
+  border: 1.5px solid var(--pf-accent-c);
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--qivo-text);
+  font: inherit;
+  animation: pf-reveal 140ms ease both;
+}
+.public-form-shell .question-field .choice-other-input:focus {
+  box-shadow: 0 0 0 3px var(--pf-ring);
+}
+.public-form-shell .question-field .choice-other-input[aria-invalid="true"] {
+  border-color: #b91c1c;
+}
+@keyframes pf-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Rating numbers: square tiles, selected fills with the accent. */
+.public-form-shell .rating-item {
+  position: relative;
+  min-width: 48px;
+  min-height: 48px;
+  justify-content: center;
+  padding: 8px 12px;
+  border: 1.5px solid var(--qivo-border-strong);
+  border-radius: 10px;
+  background: #ffffff;
+  font-weight: 600;
+  box-shadow: none;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease,
+    color 120ms ease;
+}
+.public-form-shell .rating-item input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.public-form-shell .rating-item:hover {
+  border-color: var(--pf-accent-c);
+  background: var(--pf-tint-soft);
+}
+.public-form-shell .rating-item:has(input:checked) {
+  border-color: var(--pf-accent-c);
+  background: var(--pf-accent-c);
+  color: var(--pf-ink-c);
+  box-shadow: none;
+}
+.public-form-shell .rating-item:focus-within {
+  outline: none;
+}
+.public-form-shell .rating-item:has(input:focus-visible) {
+  outline: 2px solid var(--pf-accent-c);
+  outline-offset: 2px;
+}
+
+/* Grid cells (multiple choice grid, checkbox grid). */
+.public-form-shell .choice-cell {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  cursor: pointer;
+}
+.public-form-shell .choice-cell::before {
+  flex: 0 0 22px;
+}
+.public-form-shell .choice-cell:hover::before {
+  border-color: var(--pf-accent-c);
+}
+.public-form-shell .grid-question input {
+  width: 100%;
+  height: 100%;
+}
+
+/* ---- Manual UPI payment ------------------------------------------------- */
+.public-form-shell .manual-upi {
+  display: grid;
+  gap: 20px;
+  margin: 24px 0;
+  padding: 24px;
+  border: 1px solid var(--qivo-border);
+  border-radius: 16px;
+  background: #ffffff;
+  color: var(--qivo-text);
+  font-family: inherit;
+}
+.public-form-shell .manual-upi > * {
+  margin: 0;
+  min-width: 0;
+}
+.public-form-shell .manual-upi-head {
+  display: grid;
+  gap: 4px;
+}
+.public-form-shell .manual-upi-head > * {
+  margin: 0;
+}
+.public-form-shell .manual-upi-step {
+  color: var(--pf-link-c);
+  font-family: var(--font-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.public-form-shell .manual-upi-heading,
+.public-form-shell .manual-upi-subheading {
+  font-size: 1.25rem;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: var(--qivo-text);
+}
+.public-form-shell .manual-upi-label,
+.public-form-shell .manual-upi-helper {
+  color: var(--qivo-text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+.public-form-shell .manual-upi-divider {
+  height: 0;
+  border: 0;
+  border-top: 1px solid var(--qivo-border);
+}
+
+.public-form-shell .manual-upi-details {
+  display: grid;
+  gap: 0;
+  border: 1px solid var(--qivo-border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.public-form-shell .manual-upi-details > div {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border-top: 1px solid var(--qivo-border);
+}
+.public-form-shell .manual-upi-details > div:first-child {
+  border-top: 0;
+}
+.public-form-shell .manual-upi-details dt {
+  min-width: 0;
+  color: var(--qivo-text-secondary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.public-form-shell .manual-upi-details dd {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.public-form-shell .manual-upi-row-id dd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+}
+.public-form-shell .manual-upi-id {
+  flex: 1 1 200px;
+  min-width: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--qivo-border);
+  border-radius: 8px;
+  background: var(--qivo-surface);
+  font-family: var(--font-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 0.95rem;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  user-select: all;
+}
+.public-form-shell .manual-upi-copy {
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1.5px solid var(--pf-accent-c);
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--pf-link-c);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+.public-form-shell .manual-upi-copy:hover,
+.public-form-shell .manual-upi-copy.is-copied {
+  background: var(--pf-tint);
+}
+.public-form-shell .manual-upi-copy:focus-visible,
+.public-form-shell .manual-upi-file-label:focus-visible,
+.public-form-shell .manual-upi-open-app:focus-visible {
+  outline: 2px solid var(--pf-accent-c);
+  outline-offset: 2px;
+}
+.public-form-shell .manual-upi-row-amount dd {
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+.public-form-shell .manual-upi-copy-status {
+  margin-top: -12px;
+  min-height: 0;
+  color: var(--pf-link-c);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+.public-form-shell .manual-upi-copy-status:empty {
+  display: none;
+}
+
+.public-form-shell .manual-upi-note {
+  padding: 14px 16px;
+  border-left: 4px solid var(--pf-accent-c);
+  border-radius: 4px 10px 10px 4px;
+  background: var(--pf-tint);
+}
+.public-form-shell .manual-upi-note-label {
+  margin: 0 0 4px;
+  color: var(--qivo-text-secondary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.public-form-shell .manual-upi-instructions {
+  margin: 0;
+  color: var(--qivo-text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.public-form-shell .manual-upi-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid #f2c46d;
+  border-radius: 10px;
+  background: #fff8e6;
+  color: #7a3b05;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+.public-form-shell .manual-upi-warning-icon {
+  flex: 0 0 18px;
+  margin-top: 1px;
+  color: #b45309;
+}
+
+.public-form-shell .manual-upi-qr {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  margin: 0;
+}
+.public-form-shell .manual-upi-qr-tile {
+  display: block;
+  padding: 16px;
+  border: 1.5px solid var(--qivo-border-strong);
+  border-radius: 16px;
+  background: #ffffff;
+  line-height: 0;
+}
+.public-form-shell .manual-upi-qr-tile svg {
+  max-width: 100%;
+  height: auto;
+}
+.public-form-shell .manual-upi-qr figcaption {
+  margin: 0;
+  color: var(--qivo-text-secondary);
+  font-size: 0.875rem;
+  text-align: center;
+}
+.public-form-shell .manual-upi-app {
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  text-align: center;
+}
+.public-form-shell .manual-upi-app > p {
+  margin: 0;
+  max-width: 44ch;
+}
+.public-form-shell .manual-upi-open-app {
+  width: 100%;
+  min-height: 48px;
+  margin: 0;
+  padding: 12px 18px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--pf-accent-c);
+  color: var(--pf-ink-c);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+/* Confirmation fields: label above input, full width. */
+.public-form-shell .manual-upi-field {
+  display: grid;
+  gap: 8px;
+}
+.public-form-shell .manual-upi-field > label,
+.public-form-shell .manual-upi-proof-title {
+  margin: 0;
+  color: var(--qivo-text);
+  font-weight: 600;
+}
+.public-form-shell .manual-upi-field > small {
+  margin: 0;
+  color: var(--qivo-text-secondary);
+  font-size: 0.8125rem;
+}
+.public-form-shell .manual-upi-field .field-error {
+  margin: 0;
+  color: var(--qivo-error-text);
+  font-size: 0.875rem;
+}
+.public-form-shell .manual-upi-field input[type="text"] {
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 14px;
+  border: 1.5px solid var(--qivo-input-border);
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--qivo-text);
+  font-family: var(--font-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 1rem;
+  letter-spacing: 0.04em;
+  outline: none;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+.public-form-shell .manual-upi-field input[type="text"]:focus {
+  border-color: var(--pf-accent-c);
+  box-shadow: 0 0 0 3px var(--pf-ring);
+}
+.public-form-shell .manual-upi-field input[type="text"][aria-invalid="true"] {
+  border-color: #b91c1c;
+}
+.public-form-shell .manual-upi-dropzone {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 20px 16px;
+  border: 2px dashed var(--pf-line);
+  border-radius: 12px;
+  background: var(--pf-tint-soft);
+  text-align: center;
+}
+.public-form-shell .manual-upi-dropzone:focus-within {
+  outline: 2px solid var(--pf-accent-c);
+  outline-offset: 2px;
+}
+.public-form-shell .manual-upi-file-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--pf-accent-c);
+  color: var(--pf-ink-c);
+  font-weight: 700;
+  cursor: pointer;
+}
+.public-form-shell .manual-upi-file-label:hover {
+  filter: brightness(0.95);
+}
+.public-form-shell .manual-upi-drop-hint {
+  color: var(--qivo-text-secondary);
+  font-size: 0.8125rem;
+}
+.public-form-shell .manual-upi-proof-preview {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+}
+.public-form-shell .manual-upi-thumb {
+  width: 144px;
+  max-width: 100%;
+  max-height: 144px;
+  border: 1px solid var(--qivo-border);
+  border-radius: 10px;
+  background: #ffffff;
+  object-fit: cover;
+}
+.public-form-shell .manual-upi-proof-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 12px;
+}
+.public-form-shell .manual-upi-file-name {
+  flex: 1 1 100%;
+  color: var(--qivo-text-secondary);
+  font-family: var(--font-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+.public-form-shell .manual-upi-proof-actions .secondary-button {
+  min-height: 44px;
+  border-radius: 10px;
+}
+
+@media (max-width: 480px) {
+  .public-form-shell .manual-upi {
+    padding: 18px 16px;
+    gap: 18px;
+  }
+  .public-form-shell .manual-upi-copy {
+    flex: 1 1 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .public-form-shell .choice-item,
+  .public-form-shell .choice-item::before,
+  .public-form-shell .choice-item::after,
+  .public-form-shell .choice-cell::before,
+  .public-form-shell .choice-cell::after,
+  .public-form-shell .rating-item,
+  .public-form-shell .manual-upi-copy,
+  .public-form-shell .manual-upi-field input[type="text"] {
+    transition: none;
+  }
+  .public-form-shell .question-field .choice-other-input {
+    animation: none;
+  }
+}

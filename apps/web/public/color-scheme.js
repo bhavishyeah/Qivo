@@ -7,6 +7,12 @@
 // attribute (a test enforces the key).
 (function () {
   try {
+    // Respondent routes (public form, projector page, builder preview) are
+    // always light: skip the stored/OS preference so there is no dark flash.
+    if (/^\/(f\/|forms\/[^/]+\/preview\/?$)/.test(location.pathname)) {
+      document.documentElement.dataset.colorScheme = "light";
+      return;
+    }
     var s = localStorage.getItem("qivo-color-scheme");
     if (s !== "light" && s !== "dark") {
       s =
