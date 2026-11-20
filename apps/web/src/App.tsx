@@ -9,7 +9,7 @@ import "./styles/pages.css";
 
 import AuthGuard from "./components/AuthGuard";
 import AppLayout from "./components/AppLayout";
-import LandingPage from "./pages/LandingPage";
+import ErrorBoundary from "./components/ErrorBoundary";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
@@ -37,6 +37,19 @@ import { guestRedirectPath } from "./lib/guestRedirect";
 
 // Lazy-loaded pages (heavy dependencies like recharts)
 const FormReportsPage = lazy(() => import("./pages/FormReportsPage"));
+// Landing is guest-only, so logged-in users never download this chunk.
+const LandingPage = lazy(() => import("./pages/LandingPage"));
+
+function LandingLoadFailed() {
+  return (
+    <div className="app-root app-shell landing-boot landing-failed">
+      <p>Could not load the page.</p>
+      <button type="button" className="btn btn-accent" onClick={() => window.location.reload()}>
+        Reload
+      </button>
+    </div>
+  );
+}
 
 function LazyFallback() {
   return (
@@ -76,7 +89,7 @@ function App() {
     <BrowserRouter>
       <Routes>
         {/* Public routes */}
-        <Route path="/" element={<GuestOnly><LandingPage /></GuestOnly>} />
+        <Route path="/" element={<GuestOnly><ErrorBoundary fallback={<LandingLoadFailed />}><Suspense fallback={<div className="landing-boot" />}><LandingPage /></Suspense></ErrorBoundary></GuestOnly>} />
         <Route path="/login" element={<GuestOnly><LoginPage /></GuestOnly>} />
         <Route path="/signup" element={<GuestOnly><SignupPage /></GuestOnly>} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />

@@ -771,3 +771,21 @@
     align-items: stretch;
   }
 }
+
+/* Landing chunk placeholder and load-failure fallback (the landing styles ship in the lazy chunk). */
+.landing-boot {
+  min-height: 100dvh;
+  background: var(--brand-indigo);
+}
+
+.landing-failed {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  background: var(--brand-indigo);
+  color: var(--brand-cream);
+}
+
