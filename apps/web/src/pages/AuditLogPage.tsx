@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, ApiRequestError } from "../lib/api";
 import type { WorkspaceRecord } from "../types";
 import { PageIcon, type PageIconName } from "../components/PageIcons";
+import Select from "../components/Select";
 
 type AuditEntry = {
   id: string;
@@ -106,16 +107,7 @@ export default function AuditLogPage() {
           <p className="page-sub">Track all actions in this workspace. {total} total entries.</p>
         </div>
         {workspaces.length > 1 ? (
-          <select
-            className="input input-auto"
-            aria-label="Workspace"
-            value={selectedWs}
-            onChange={(e) => void changeWorkspace(e.target.value)}
-          >
-            {workspaces.map((ws) => (
-              <option key={ws.id} value={ws.id}>{ws.name}</option>
-            ))}
-          </select>
+          <Select aria-label="Workspace" fullWidth={false} value={selectedWs} onChange={(v) => void changeWorkspace(v)} options={workspaces.map((ws) => ({ value: ws.id, label: ws.name }))} />
         ) : null}
       </header>
 

@@ -34,6 +34,8 @@ export default function Modal({
     (first ?? panel)?.focus();
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
+        // An open Select list handles its own Escape.
+        if ((event.target as HTMLElement | null)?.closest?.('[role="listbox"]')) return;
         event.preventDefault();
         event.stopPropagation();
         onCloseRef.current();

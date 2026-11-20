@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, ApiRequestError } from "../lib/api";
+import Select, { type SelectOption } from "../components/Select";
 import type { FormRecord, WorkspaceRecord } from "../types";
 
 type TemplateInfo = {
@@ -11,6 +12,16 @@ type TemplateInfo = {
   questionCount: number;
   custom: boolean;
 };
+
+function toTemplateOption(t: TemplateInfo, group: string): SelectOption {
+  return {
+    value: t.id,
+    label: t.name,
+    ...(t.description ? { description: t.description } : {}),
+    meta: `${t.questionCount} question${t.questionCount === 1 ? "" : "s"}`,
+    group,
+  };
+}
 
 export default function CreateFormPage() {
   const navigate = useNavigate();
@@ -137,6 +148,11 @@ export default function CreateFormPage() {
 
   const builtInTemplates = templates.filter((t) => !t.custom);
   const customTemplates = templates.filter((t) => t.custom);
+  const templateOptions: SelectOption[] = [
+    { value: "", label: "Blank form", description: "Start with an empty form and add your own questions." },
+    ...builtInTemplates.map((t) => toTemplateOption(t, "Templates")),
+    ...customTemplates.map((t) => toTemplateOption(t, "Your workspace templates")),
+  ];
 
   return (
     <main className="page-shell">
@@ -151,25 +167,7 @@ export default function CreateFormPage() {
           {workspaces.length > 1 ? (
             <div className="question-field">
               <label htmlFor="create-workspace">Workspace</label>
-              <select
-                id="create-workspace"
-                value={workspaceId}
-                onChange={(e) => setWorkspaceId(e.target.value)}
-                style={{
-                  width: "100%",
-                  border: "1px solid var(--color-border-strong)",
-                  borderRadius: 12,
-                  padding: "13px 14px",
-                  color: "var(--color-text)",
-                  background: "var(--color-surface)",
-                }}
-              >
-                {workspaces.map((ws) => (
-                  <option key={ws.id} value={ws.id}>
-                    {ws.name}
-                  </option>
-                ))}
-              </select>
+              <Select id="create-workspace" value={workspaceId} onChange={setWorkspaceId} options={workspaces.map((ws) => ({ value: ws.id, label: ws.name }))} />
             </div>
           ) : null}
 
@@ -211,40 +209,7 @@ export default function CreateFormPage() {
               <label htmlFor="template-select">
                 Start from a template <span className="muted">(optional)</span>
               </label>
-              <select
-                id="template-select"
-                value={selectedTemplate}
-                onChange={(e) => setSelectedTemplate(e.target.value)}
-                style={{
-                  width: "100%",
-                  border: "1px solid var(--color-border-strong)",
-                  borderRadius: 12,
-                  padding: "13px 14px",
-                  color: "var(--color-text)",
-                  background: "var(--color-surface)",
-                }}
-              >
-                <option value="">Blank form</option>
-                {builtInTemplates.length > 0 ? (
-                  <optgroup label="Templates">
-                    {builtInTemplates.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name} — {t.description} ({t.questionCount} questions)
-                      </option>
-                    ))}
-                  </optgroup>
-                ) : null}
-                {customTemplates.length > 0 ? (
-                  <optgroup label="Your workspace templates">
-                    {customTemplates.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
-                        {t.description ? ` — ${t.description}` : ""} ({t.questionCount} questions)
-                      </option>
-                    ))}
-                  </optgroup>
-                ) : null}
-              </select>
+              <Select id="template-select" value={selectedTemplate} onChange={setSelectedTemplate} options={templateOptions} />
             </div>
           ) : null}
 

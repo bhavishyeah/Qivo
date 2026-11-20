@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { api, ApiRequestError } from "../lib/api";
+import Select, { type SelectOption } from "../components/Select";
 import type { WorkspaceRecord } from "../types";
 
 type Member = {
@@ -9,6 +10,11 @@ type Member = {
   user: { id: string; name: string; email: string; avatarUrl?: string | null };
 };
 
+const ROLE_OPTIONS: SelectOption[] = [
+  { value: "ADMIN", label: "Admin" },
+  { value: "EDITOR", label: "Editor" },
+  { value: "VIEWER", label: "Viewer" },
+];
 const ROLE_DESCRIPTIONS: Record<string, string> = {
   ADMIN: "Can manage forms, invite members, and approve content.",
   EDITOR: "Can create and edit forms, view responses.",
@@ -472,16 +478,7 @@ export default function TeamPage() {
             </div>
             <div className="field field-fixed">
               <label className="field-label" htmlFor="invite-role">Role</label>
-              <select
-                id="invite-role"
-                className="input input-auto"
-                value={inviteRole}
-                onChange={(e) => setInviteRole(e.target.value as "ADMIN" | "EDITOR" | "VIEWER")}
-              >
-                <option value="ADMIN">Admin</option>
-                <option value="EDITOR">Editor</option>
-                <option value="VIEWER">Viewer</option>
-              </select>
+              <Select id="invite-role" fullWidth={false} value={inviteRole} onChange={(v) => setInviteRole(v as "ADMIN" | "EDITOR" | "VIEWER")} options={ROLE_OPTIONS} />
             </div>
             <button className="btn btn-primary" type="submit" disabled={inviting || !inviteEmail.trim()}>
               {inviting ? "Inviting..." : "Invite"}
@@ -522,16 +519,7 @@ export default function TeamPage() {
                     <span className="badge badge-status-published">OWNER</span>
                   ) : canManage ? (
                     <>
-                      <select
-                        className="input input-sm input-auto"
-                        aria-label={`Role for ${member.user.name}`}
-                        value={member.role}
-                        onChange={(e) => void handleRoleChange(member.id, e.target.value)}
-                      >
-                        <option value="ADMIN">Admin</option>
-                        <option value="EDITOR">Editor</option>
-                        <option value="VIEWER">Viewer</option>
-                      </select>
+                      <Select size="sm" fullWidth={false} aria-label={`Role for ${member.user.name}`} value={member.role} onChange={(v) => void handleRoleChange(member.id, v)} options={ROLE_OPTIONS} />
                       <button
                         className="btn btn-danger btn-sm"
                         type="button"

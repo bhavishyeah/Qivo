@@ -6,6 +6,8 @@ import "./styles/shell.css";
 import "./styles/editor.css";
 import "./styles/auth.css";
 import "./styles/pages.css";
+import "./styles/select.css";
+import "./styles/panels.css";
 
 import AuthGuard from "./components/AuthGuard";
 import AppLayout from "./components/AppLayout";

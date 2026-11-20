@@ -31,6 +31,13 @@ const EVENT_OPTIONS = [
   "form.closed",
 ] as const;
 
+/** One-line hint shown under each event option. */
+const EVENT_HINTS: Record<(typeof EVENT_OPTIONS)[number], string> = {
+  "response.created": "Each time someone submits the form.",
+  "form.published": "When the form goes live.",
+  "form.closed": "When the form stops accepting responses.",
+};
+
 function statusBadgeStyle(status: WebhookDelivery["status"]): React.CSSProperties {
   const palette: Record<WebhookDelivery["status"], { bg: string; fg: string }> = {
     delivered: { bg: "var(--color-success-tint)", fg: "var(--color-success-text)" },
@@ -176,7 +183,7 @@ export default function WebhooksTabPanel({ formId }: { formId: string }) {
   }
 
   return (
-    <section className="editor-card" style={{ maxWidth: 980, margin: "0 auto" }}>
+    <section className="editor-card wh-card">
       <div className="editor-card-header">
         <div>
           <p className="eyebrow">Webhooks</p>
@@ -184,68 +191,82 @@ export default function WebhooksTabPanel({ formId }: { formId: string }) {
         </div>
       </div>
 
-      <p style={{ color: "var(--color-text-muted)", marginTop: 0 }}>
-        Qivo POSTs each new response to the endpoints you configure here. Every
-        request is signed with the webhook&apos;s secret (header{" "}
-        <code>X-Qivo-Signature: sha256=&lt;hex&gt;</code>) so your receiver can
-        verify it. Failed deliveries retry automatically with backoff.
+      <p className="wh-intro">
+        Qivo POSTs each new response to the endpoints you configure here. Every request is signed with the
+        webhook&apos;s secret so your receiver can verify it. Failed deliveries retry automatically with backoff.
       </p>
+      <code className="wh-signature">X-Qivo-Signature: sha256=&lt;hex&gt;</code>
 
-      {error ? <p className="submit-error">{error}</p> : null}
-      {message ? <p style={{ color: "var(--color-success-text)" }}>{message}</p> : null}
+      {error ? <p className="submit-error" role="alert">{error}</p> : null}
+      {message ? <p className="wh-note is-success" role="status">{message}</p> : null}
 
       {/* Add webhook */}
-      <form onSubmit={handleAdd} style={{ display: "grid", gap: 10, marginBottom: 24 }}>
-        <label style={{ display: "grid", gap: 4 }}>
-          <span style={{ fontWeight: 600 }}>Endpoint URL</span>
+      <form className="wh-form" onSubmit={handleAdd}>
+        <div className="field">
+          <label className="field-label" htmlFor="wh-url">Endpoint URL</label>
           <input
+            id="wh-url"
+            className="input wh-mono"
             type="url"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             placeholder="https://example.com/webhooks/qivo"
             required
           />
-        </label>
-        <label style={{ display: "grid", gap: 4 }}>
-          <span style={{ fontWeight: 600 }}>Description (optional)</span>
+          <p className="field-help">Qivo sends a signed POST request to this URL.</p>
+        </div>
+        <div className="field">
+          <label className="field-label" htmlFor="wh-desc">
+            Description <span className="muted">(optional)</span>
+          </label>
           <input
+            id="wh-desc"
+            className="input"
             type="text"
             value={description}
             maxLength={200}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="e.g. Zapier intake"
           />
-        </label>
-        <fieldset style={{ display: "grid", gap: 6, border: "none", padding: 0, margin: 0 }}>
-          <span style={{ fontWeight: 600 }}>Events</span>
+        </div>
+        <fieldset className="wh-events">
+          <legend className="field-label">Events</legend>
           {EVENT_OPTIONS.map((event) => (
-            <label
-              key={event}
-              style={{ display: "flex", gap: 8, alignItems: "center", fontWeight: 400 }}
-            >
+            <label key={event} className="wh-event">
               <input
+                className="check"
                 type="checkbox"
                 checked={events.includes(event)}
                 onChange={() => toggleEvent(event)}
               />
-              <span>{EVENT_LABELS[event]}</span>
+              <span className="wh-event-text">
+                <span className="wh-event-title">{EVENT_LABELS[event]}</span>
+                <span className="wh-event-hint">{EVENT_HINTS[event]}</span>
+              </span>
             </label>
           ))}
         </fieldset>
-        <div>
-          <button type="submit" className="secondary-button" disabled={adding}>
+        <div className="wh-form-actions">
+          <button type="submit" className="btn btn-primary" disabled={adding}>
             {adding ? "Adding..." : "Add webhook"}
           </button>
         </div>
       </form>
 
       {/* List */}
+      <h3 className="wh-list-title">Your webhooks</h3>
       {loading ? (
-        <p style={{ color: "var(--color-text-subtle)" }}>Loading webhooks...</p>
+        <p className="field-help">Loading webhooks...</p>
       ) : webhooks.length === 0 ? (
-        <p style={{ color: "var(--color-text-subtle)" }}>No webhooks yet. Add one above.</p>
+        <div className="wh-empty">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+            <path d="M10 13a5 5 0 0 0 7.07 0l2.83-2.83a5 5 0 0 0-7.07-7.07l-1.14 1.14" />
+            <path d="M14 11a5 5 0 0 0-7.07 0L4.1 13.83a5 5 0 0 0 7.07 7.07l1.13-1.13" />
+          </svg>
+          <p>No webhooks yet. Add one above.</p>
+        </div>
       ) : (
-        <div style={{ display: "grid", gap: 16 }}>
+        <div className="wh-list">
           {webhooks.map((webhook) => (
             <WebhookRow
               key={webhook.id}
@@ -306,81 +327,63 @@ function WebhookRow({
   }
 
   return (
-    <div
-      className="editor-card"
-      style={{ padding: 16, margin: 0, border: "1px solid var(--color-border)" }}
-    >
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
-        <div style={{ minWidth: 0 }}>
-          <p style={{ margin: 0, fontWeight: 600, wordBreak: "break-all" }}>{webhook.url}</p>
-          {webhook.description ? (
-            <p style={{ margin: "4px 0 0", color: "var(--color-text-subtle)" }}>{webhook.description}</p>
-          ) : null}
-          <p style={{ margin: "6px 0 0", color: "var(--color-text-subtle)", fontSize: 13 }}>
-            Events:{" "}
-            {webhook.events.length > 0
-              ? webhook.events.map((e) => EVENT_LABELS[e] ?? e).join(", ")
-              : "None"}
-          </p>
+    <div className="wh-item">
+      <div className="wh-item-head">
+        <div className="wh-item-main">
+          <p className="wh-item-url">{webhook.url}</p>
+          {webhook.description ? <p className="wh-item-desc">{webhook.description}</p> : null}
+          <div className="wh-chips">
+            {webhook.events.length > 0 ? (
+              webhook.events.map((e) => (
+                <span key={e} className="badge">{EVENT_LABELS[e] ?? e}</span>
+              ))
+            ) : (
+              <span className="badge">No events</span>
+            )}
+          </div>
         </div>
-        <label className="settings-toggle" style={{ flexShrink: 0 }}>
-          <input type="checkbox" checked={webhook.enabled} onChange={onToggle} />
+        <label className="wh-switch">
+          <input className="switch" type="checkbox" checked={webhook.enabled} onChange={onToggle} />
           <span>{webhook.enabled ? "Enabled" : "Disabled"}</span>
         </label>
       </div>
 
       {/* Secret */}
-      <div style={{ marginTop: 12, display: "grid", gap: 6 }}>
-        <span style={{ fontWeight: 600, fontSize: 13 }}>Signing secret</span>
-        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          <code
-            style={{
-              background: "var(--color-surface-sunken)",
-              padding: "6px 10px",
-              borderRadius: 6,
-              fontSize: 13,
-              wordBreak: "break-all",
-              flex: "1 1 240px",
-            }}
-          >
-            {showSecret ? webhook.secret : "•".repeat(32)}
-          </code>
-          <button type="button" className="secondary-button compact" onClick={() => setShowSecret((s) => !s)}>
+      <div className="wh-secret">
+        <span className="field-label">Signing secret</span>
+        <div className="wh-secret-row">
+          <code className="wh-secret-value">{showSecret ? webhook.secret : "\u2022".repeat(32)}</code>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowSecret((s) => !s)}>
             {showSecret ? "Hide" : "Show"}
           </button>
-          <button type="button" className="secondary-button compact" onClick={onCopy}>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={onCopy}>
             Copy
           </button>
-          <button type="button" className="secondary-button compact" onClick={onRegenerate}>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={onRegenerate}>
             Regenerate
           </button>
         </div>
       </div>
 
       {/* Actions */}
-      <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <button type="button" className="secondary-button compact" onClick={() => void toggleDeliveries()}>
+      <div className="wh-item-actions">
+        <button type="button" className="btn btn-secondary btn-sm" onClick={() => void toggleDeliveries()}>
           {showDeliveries ? "Hide deliveries" : "Recent deliveries"}
         </button>
-        <button
-          type="button"
-          className="secondary-button compact"
-          onClick={onDelete}
-          style={{ color: "var(--color-danger-text)" }}
-        >
+        <button type="button" className="btn btn-ghost btn-sm wh-danger" onClick={onDelete}>
           Delete
         </button>
       </div>
 
       {/* Deliveries */}
       {showDeliveries ? (
-        <div style={{ marginTop: 12 }}>
+        <div className="wh-table-wrap">
           {loadingDeliveries ? (
-            <p style={{ color: "var(--color-text-subtle)" }}>Loading deliveries...</p>
+            <p className="field-help">Loading deliveries...</p>
           ) : deliveriesError ? (
             <p className="submit-error">{deliveriesError}</p>
           ) : deliveries.length === 0 ? (
-            <p style={{ color: "var(--color-text-subtle)" }}>No deliveries yet.</p>
+            <p className="field-help">No deliveries yet.</p>
           ) : (
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <thead>
@@ -399,7 +402,7 @@ function WebhookRow({
                     </td>
                     <td style={{ padding: "6px 8px" }}>{d.attempts}</td>
                     <td style={{ padding: "6px 8px" }}>
-                      {d.lastResponseStatus != null ? d.lastResponseStatus : d.lastError ? "—" : ""}
+                      {d.lastResponseStatus != null ? d.lastResponseStatus : d.lastError ? "\u2014" : ""}
                     </td>
                     <td style={{ padding: "6px 8px" }}>
                       {formatRelativeTime(d.deliveredAt ?? d.createdAt)}

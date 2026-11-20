@@ -1,7 +1,14 @@
 import type { ManualPaymentRecord, ManualPaymentStatus } from "../types";
 import { formatInr, formatSummary } from "../lib/manualUpi";
 import { isImageUrl } from "../lib/upload";
+import Select, { type SelectOption } from "./Select";
 
+const FILTER_OPTIONS: SelectOption[] = [
+  { value: "", label: "All responses" },
+  { value: "pending", label: "Pending" },
+  { value: "verified", label: "Verified" },
+  { value: "rejected", label: "Rejected" },
+];
 const STATUS_LABEL: Record<ManualPaymentStatus, string> = {
   pending: "Pending",
   verified: "Verified",
@@ -131,16 +138,7 @@ export function ManualPaymentSummaryBar({
       <label htmlFor={id} className="manual-upi-filter-label">
         Show
       </label>
-      <select
-        id={id}
-        value={filter}
-        onChange={(e) => onFilterChange(e.target.value as "" | ManualPaymentStatus)}
-      >
-        <option value="">All responses</option>
-        <option value="pending">Pending</option>
-        <option value="verified">Verified</option>
-        <option value="rejected">Rejected</option>
-      </select>
+      <Select id={id} size="sm" fullWidth={false} value={filter} onChange={(v) => onFilterChange(v as "" | ManualPaymentStatus)} options={FILTER_OPTIONS} />
     </div>
   );
 }

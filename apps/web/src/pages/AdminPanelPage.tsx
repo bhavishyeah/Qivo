@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import Select from "../components/Select";
 import { api, ApiRequestError } from "../lib/api";
 import type { WorkspaceRecord } from "../types";
 
@@ -102,14 +103,7 @@ export default function AdminPanelPage() {
           <p className="page-sub">Overview of your workspace activity and usage.</p>
         </div>
         {workspaces.length > 1 ? (
-          <select
-            className="input input-auto"
-            aria-label="Workspace"
-            value={selectedWs}
-            onChange={(e) => void switchWorkspace(e.target.value)}
-          >
-            {workspaces.map((ws) => <option key={ws.id} value={ws.id}>{ws.name}</option>)}
-          </select>
+          <Select aria-label="Workspace" fullWidth={false} value={selectedWs} onChange={(v) => void switchWorkspace(v)} options={workspaces.map((ws) => ({ value: ws.id, label: ws.name }))} />
         ) : null}
       </header>
 

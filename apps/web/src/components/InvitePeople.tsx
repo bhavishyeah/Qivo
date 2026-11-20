@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { api, ApiRequestError } from "../lib/api";
+import Select from "./Select";
 import type { FormShare, FormShareRole } from "../types";
 
 // eslint-disable-next-line react-refresh/only-export-components -- shared constant/helper kept next to its component; moving it would change module layout
@@ -149,16 +150,7 @@ export function InvitePeople({ formId, embedded = false }: { formId: string; emb
             >
               Role
             </label>
-            <select
-              id="share-role"
-              value={inviteRole}
-              onChange={(e) => setInviteRole(e.target.value as FormShareRole)}
-              style={{ border: "1px solid var(--color-border-strong)", borderRadius: 10, padding: "10px 12px" }}
-            >
-              <option value="RESPONDER">Responder</option>
-              <option value="EDITOR">Editor</option>
-              <option value="VIEWER">Viewer</option>
-            </select>
+            <Select id="share-role" fullWidth={false} value={inviteRole} onChange={(v) => setInviteRole(v as FormShareRole)} options={[{ value: "RESPONDER", label: "Responder" }, { value: "EDITOR", label: "Editor" }, { value: "VIEWER", label: "Viewer" }]} />
             <p style={{ margin: "6px 0 0", fontSize: "0.75rem", color: "var(--color-text-subtle)", maxWidth: 240 }}>
               {SHARE_ROLE_DESCRIPTIONS[inviteRole]}
             </p>

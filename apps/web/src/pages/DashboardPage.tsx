@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, ApiRequestError } from "../lib/api";
 import { answerableQuestions } from "../lib/questionKinds";
 import PopoverMenu from "../components/PopoverMenu";
+import Select, { type SelectOption } from "../components/Select";
 import Tooltip from "../components/Tooltip";
 import { EmptyState, ErrorState, SkeletonTile } from "../components/States";
 import { useToast } from "../components/Toast";
@@ -14,6 +15,19 @@ type FormWithCount = FormRecord & { responseCount?: number };
 type SortOption = "updatedAt" | "createdAt" | "title";
 type StatusFilter = "ALL" | "DRAFT" | "PENDING_REVIEW" | "PUBLISHED" | "CLOSED" | "ARCHIVED";
 
+const STATUS_OPTIONS: SelectOption[] = [
+  { value: "ALL", label: "All statuses" },
+  { value: "DRAFT", label: "Draft" },
+  { value: "PENDING_REVIEW", label: "Pending review" },
+  { value: "PUBLISHED", label: "Published" },
+  { value: "CLOSED", label: "Closed" },
+  { value: "ARCHIVED", label: "Archived" },
+];
+const SORT_OPTIONS: SelectOption[] = [
+  { value: "updatedAt", label: "Recently updated" },
+  { value: "createdAt", label: "Recently created" },
+  { value: "title", label: "Name (A\u2013Z)" },
+];
 type FolderRecord = {
   id: string;
   name: string;
@@ -237,16 +251,7 @@ export default function DashboardPage() {
         <div className="dash-header-actions">
           {/* Workspace switcher */}
           {workspaces.length > 1 ? (
-            <select
-              className="dash-select"
-              aria-label="Workspace"
-              value={activeWorkspaceId}
-              onChange={(e) => void switchWorkspace(e.target.value)}
-            >
-              {workspaces.map((ws) => (
-                <option key={ws.id} value={ws.id}>{ws.name}</option>
-              ))}
-            </select>
+            <Select size="sm" fullWidth={false} aria-label="Workspace" value={activeWorkspaceId} onChange={(v) => void switchWorkspace(v)} options={workspaces.map((ws) => ({ value: ws.id, label: ws.name }))} />
           ) : null}
 
           <button className="btn btn-primary" type="button" onClick={() => navigate("/forms/new")}>
@@ -302,30 +307,9 @@ export default function DashboardPage() {
               />
             </div>
 
-            <select
-              className="dash-select"
-              aria-label="Status"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-            >
-              <option value="ALL">All statuses</option>
-              <option value="DRAFT">Draft</option>
-              <option value="PENDING_REVIEW">Pending review</option>
-              <option value="PUBLISHED">Published</option>
-              <option value="CLOSED">Closed</option>
-              <option value="ARCHIVED">Archived</option>
-            </select>
+            <Select size="sm" fullWidth={false} aria-label="Status" value={statusFilter} onChange={(v) => setStatusFilter(v as StatusFilter)} options={STATUS_OPTIONS} />
 
-            <select
-              className="dash-select"
-              aria-label="Sort"
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as SortOption)}
-            >
-              <option value="updatedAt">Recently updated</option>
-              <option value="createdAt">Recently created</option>
-              <option value="title">Name (A{"\u2013"}Z)</option>
-            </select>
+            <Select size="sm" fullWidth={false} aria-label="Sort" value={sortBy} onChange={(v) => setSortBy(v as SortOption)} options={SORT_OPTIONS} />
 
             <span className="dash-count" style={{ margin: 0, whiteSpace: "nowrap" }}>
               {filteredForms.length} form{filteredForms.length !== 1 ? "s" : ""}

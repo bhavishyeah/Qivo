@@ -31,6 +31,8 @@ import QuestionTypeSelect from "../components/QuestionTypeSelect";
 import { GridEditor } from "../components/GridEditor";
 import { IMAGE_SIZES } from "../components/QuestionImage";
 import Modal from "../components/Modal";
+import Select from "../components/Select";
+import ColorField from "../components/ColorField";
 import { InvitePeople } from "../components/InvitePeople";
 import { defaultSettingsFor, isGridType } from "../lib/questionTypes";
 import {
@@ -1580,11 +1582,7 @@ export default function FormEditorPage() {
               {reviewers.length === 0
                 ? <p className="muted">No eligible reviewers found (needs Owner or Admin role).</p>
                 : (
-                  <select id="reviewer-select" value={selectedReviewer} onChange={(e) => setSelectedReviewer(e.target.value)} style={{ width: "100%", border: "1px solid var(--color-border-strong)", borderRadius: 10, padding: "10px 12px", background: "var(--color-surface)" }}>
-                    {reviewers.map((r) => (
-                      <option key={r.user.id} value={r.user.id}>{r.user.name} — {r.role}</option>
-                    ))}
-                  </select>
+                  <Select id="reviewer-select" value={selectedReviewer} onChange={setSelectedReviewer} options={reviewers.map((r) => ({ value: r.user.id, label: r.user.name, meta: r.role }))} />
                 )}
             </div>
             <div className="question-field">
@@ -1733,11 +1731,7 @@ export default function FormEditorPage() {
             </div>
             <div>
               <label htmlFor="new-question-type">Type</label>
-              <select id="new-question-type" value={newQuestionType} onChange={(e) => setNewQuestionType(e.target.value as QuestionType)}>
-                {(Object.keys(QUESTION_TYPE_LABELS) as QuestionType[]).filter((t) => isAnswerable({ type: t })).map((t) => (
-                  <option key={t} value={t}>{QUESTION_TYPE_LABELS[t]}</option>
-                ))}
-              </select>
+              <Select id="new-question-type" value={newQuestionType} onChange={(v) => setNewQuestionType(v as QuestionType)} options={(Object.keys(QUESTION_TYPE_LABELS) as QuestionType[]).filter((t) => isAnswerable({ type: t })).map((t) => ({ value: t, label: QUESTION_TYPE_LABELS[t] }))} />
             </div>
             <div className="add-question-actions">
               <button className="secondary-button compact" type="submit" disabled={addingQuestion || !newQuestionLabel.trim()}>
@@ -1940,7 +1934,7 @@ export default function FormEditorPage() {
               <label className="settings-toggle"><input type="checkbox" checked={allowPartialSave} onChange={(e) => setAllowPartialSave(e.target.checked)} /><span><strong>Let respondents save and resume later</strong><small>They get a link to come back and finish.</small></span></label>
               <label className="settings-toggle"><input type="checkbox" checked={quizMode} onChange={(e) => setQuizMode(e.target.checked)} /><span><strong>Quiz mode</strong><small>Enable scoring — set correct answers per question.</small></span></label>
               {quizMode ? (<label className="settings-toggle"><input type="checkbox" checked={showScore} onChange={(e) => setShowScore(e.target.checked)} /><span><strong>Show score after submission</strong><small>Respondent sees their score.</small></span></label>) : null}
-              <div className="question-field"><label htmlFor="s-response-notification">Email me about new responses</label><select id="s-response-notification" value={responseNotification} onChange={(e) => setResponseNotification(e.target.value as "off" | "immediate" | "daily")} style={{ width: "100%", border: "1px solid var(--color-border-strong)", borderRadius: 10, padding: "10px 12px" }}><option value="off">Off</option><option value="immediate">Immediately</option><option value="daily">Daily digest</option></select><small className="muted">Get notified by email when this form receives responses.</small></div>
+              <div className="question-field"><label htmlFor="s-response-notification">Email me about new responses</label><Select id="s-response-notification" value={responseNotification} onChange={(v) => setResponseNotification(v as "off" | "immediate" | "daily")} options={[{ value: "off", label: "Off" }, { value: "immediate", label: "Immediately" }, { value: "daily", label: "Daily digest" }]} /><small className="muted">Get notified by email when this form receives responses.</small></div>
               <label className="settings-toggle" style={collectEmail ? undefined : { opacity: 0.5 }}><input type="checkbox" checked={sendConfirmationEmail} disabled={!collectEmail} onChange={(e) => setSendConfirmationEmail(e.target.checked)} /><span><strong>Send respondents a confirmation email</strong><small>{collectEmail ? "Email respondents a copy of their submission." : "Turn on 'Collect email addresses' to enable."}</small></span></label>
             </SettingsGroup>
             <SettingsGroup title="Access & Schedule" description="When the form opens and closes" summary={`${scheduledPublishAt ? "Scheduled" : "Manual publish"} · ${scheduledCloseAt ? "Auto-close set" : "No close date"}`}>
@@ -1948,7 +1942,7 @@ export default function FormEditorPage() {
                 <div className="question-field" style={{ flex: 1, minWidth: 200 }}><label htmlFor="s-publish">Scheduled publish</label><input id="s-publish" type="datetime-local" value={scheduledPublishAt} onChange={(e) => setScheduledPublishAt(e.target.value)} style={{ width: "100%", border: "1px solid var(--color-border-strong)", borderRadius: 10, padding: "10px 12px" }} /><small className="muted">Form becomes public at this time.</small></div>
                 <div className="question-field" style={{ flex: 1, minWidth: 200 }}><label htmlFor="s-close">Scheduled close</label><input id="s-close" type="datetime-local" value={scheduledCloseAt} onChange={(e) => setScheduledCloseAt(e.target.value)} style={{ width: "100%", border: "1px solid var(--color-border-strong)", borderRadius: 10, padding: "10px 12px" }} /><small className="muted">Stops accepting responses at this time.</small></div>
               </div>
-              <div className="question-field"><label htmlFor="s-response-editing">Let respondents edit their response</label><select id="s-response-editing" value={responseEditing} onChange={(e) => setResponseEditing(e.target.value as "disabled" | "timed" | "until_close")} style={{ width: "100%", border: "1px solid var(--color-border-strong)", borderRadius: 10, padding: "10px 12px" }}><option value="disabled">Off</option><option value="timed">Allow editing for a few minutes</option><option value="until_close">Allow editing until the form closes</option></select><small className="muted">Respondents can correct their own just-submitted response in the same session.</small></div>
+              <div className="question-field"><label htmlFor="s-response-editing">Let respondents edit their response</label><Select id="s-response-editing" value={responseEditing} onChange={(v) => setResponseEditing(v as "disabled" | "timed" | "until_close")} options={[{ value: "disabled", label: "Off" }, { value: "timed", label: "Allow editing for a few minutes" }, { value: "until_close", label: "Allow editing until the form closes" }]} /><small className="muted">Respondents can correct their own just-submitted response in the same session.</small></div>
               {responseEditing === "timed" ? (<div className="question-field"><label htmlFor="s-response-edit-minutes">Editing window (minutes)</label><input id="s-response-edit-minutes" type="number" min={1} max={1440} value={responseEditMinutes} onChange={(e) => setResponseEditMinutes(Math.max(1, Math.min(1440, Number(e.target.value) || 1)))} style={{ width: "100%", border: "1px solid var(--color-border-strong)", borderRadius: 10, padding: "10px 12px" }} /><small className="muted">How long after submitting a respondent can edit (1–1440).</small></div>) : null}
             </SettingsGroup>
             <SettingsGroup title="Presentation" description="What respondents see after submitting" summary={confirmationMessage ? "Custom message set" : "Default message"}>
@@ -1968,10 +1962,7 @@ export default function FormEditorPage() {
                 <>
                   <div className="question-field">
                     <label htmlFor="s-payment-mode">Payment amount</label>
-                    <select id="s-payment-mode" value={paymentMode} onChange={(e) => setPaymentMode(e.target.value as "fixed" | "respondent")} style={{ width: "100%", border: "1px solid var(--color-border-strong)", borderRadius: 10, padding: "10px 12px" }}>
-                      <option value="fixed">Fixed amount</option>
-                      <option value="respondent">Respondent enters amount</option>
-                    </select>
+                    <Select id="s-payment-mode" value={paymentMode} onChange={(v) => setPaymentMode(v as "fixed" | "respondent")} options={[{ value: "fixed", label: "Fixed amount" }, { value: "respondent", label: "Respondent enters amount" }]} />
                     <small className="muted">{paymentMode === "respondent" ? "The respondent types the amount they pay (donations / pay-what-you-want)." : "Every respondent pays the same amount you set."}</small>
                   </div>
                   {paymentMode === "fixed" ? (
@@ -2066,101 +2057,91 @@ export default function FormEditorPage() {
             {/* Controls */}
             <div className="appearance-controls">
               {/* Cover image */}
-              <div className="question-field">
-                <label>Cover image</label>
-                <small className="muted" style={{ display: "block", marginBottom: 8 }}>
-                  Shown as a banner at the top of the form.
-                </small>
+              <div className="ap-field">
+                <span className="field-label" id="a-cover-label">Cover image</span>
+                <p className="field-help">Shown as a banner at the top of the form.</p>
                 {form.status === "PUBLISHED" ? (
-                  <input
-                    type="file"
-                    accept="image/*"
-                    disabled={uploadingCover}
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) void handleCoverUpload(file);
-                      e.target.value = "";
-                    }}
-                  />
+                  <div className="ap-file">
+                    <input
+                      id="a-cover-file"
+                      className="ap-file-input"
+                      type="file"
+                      accept="image/*"
+                      aria-labelledby="a-cover-label"
+                      disabled={uploadingCover}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) void handleCoverUpload(file);
+                        e.target.value = "";
+                      }}
+                    />
+                    <label htmlFor="a-cover-file" className="btn btn-secondary">
+                      {uploadingCover ? "Uploading\u2026" : "Upload image"}
+                    </label>
+                    <span className="ap-file-name" title={coverImageUrl || undefined}>
+                      {coverImageUrl ? coverFileName(coverImageUrl) : "No image selected"}
+                    </span>
+                    {coverImageUrl ? (
+                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => setCoverImageUrl("")}>
+                        Remove
+                      </button>
+                    ) : null}
+                  </div>
                 ) : (
-                  <small className="muted">
-                    Publish the form to upload a cover image, or paste an image URL below.
-                  </small>
+                  <div className="ap-file">
+                    <p className="field-help">Publish the form to upload a cover image, or paste an image URL below.</p>
+                    {coverImageUrl ? (
+                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => setCoverImageUrl("")}>
+                        Remove
+                      </button>
+                    ) : null}
+                  </div>
                 )}
-                {uploadingCover ? <small className="muted">Uploading…</small> : null}
-                {coverError ? <p className="submit-error" role="alert">{coverError}</p> : null}
+                {coverError ? <p className="submit-error ap-error" role="alert">{coverError}</p> : null}
                 <input
+                  className="input ap-url"
                   type="url"
+                  aria-label="Cover image URL"
                   value={coverImageUrl}
                   onChange={(e) => setCoverImageUrl(e.target.value)}
                   placeholder="https://example.com/cover.jpg"
-                  style={{ width: "100%", border: "1px solid var(--color-border-strong)", borderRadius: 10, padding: "10px 12px", marginTop: 8 }}
                 />
-                {coverImageUrl ? (
-                  <button type="button" className="secondary-button compact" style={{ marginTop: 8 }} onClick={() => setCoverImageUrl("")}>
-                    Remove cover
-                  </button>
-                ) : null}
               </div>
 
-              {/* Accent color */}
-              <div className="question-field">
-                <label htmlFor="a-accent">Accent color</label>
-                <small className="muted" style={{ display: "block", marginBottom: 8 }}>
-                  Overrides the workspace brand color for this form.
-                </small>
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <input
-                    id="a-accent"
-                    type="color"
-                    value={accentColor || DEFAULT_ACCENT}
-                    onChange={(e) => setAccentColor(e.target.value)}
-                  />
-                  <span className="muted">{accentColor || "Inherit workspace color"}</span>
-                  {accentColor ? (
-                    <button type="button" className="secondary-button compact" onClick={() => setAccentColor("")}>
-                      Reset to workspace color
-                    </button>
-                  ) : null}
-                </div>
-              </div>
+              <ColorField
+                id="a-accent"
+                label="Accent color"
+                help="Overrides the workspace brand color for this form."
+                value={accentColor}
+                fallback={DEFAULT_ACCENT}
+                onChange={setAccentColor}
+                resetLabel="Reset to workspace color"
+                placeholder="Workspace color"
+              />
 
-              {/* Background */}
-              <div className="question-field">
-                <label htmlFor="a-bg">Background color</label>
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <input
-                    id="a-bg"
-                    type="color"
-                    value={backgroundColor || "#f8fafc"}
-                    onChange={(e) => setBackgroundColor(e.target.value)}
-                  />
-                  <span className="muted">{backgroundColor || "Default"}</span>
-                  {backgroundColor ? (
-                    <button type="button" className="secondary-button compact" onClick={() => setBackgroundColor("")}>
-                      Reset
-                    </button>
-                  ) : null}
-                </div>
-              </div>
+              <ColorField
+                id="a-bg"
+                label="Background color"
+                value={backgroundColor}
+                fallback="#f8fafc"
+                onChange={setBackgroundColor}
+                placeholder="Default"
+              />
 
               {/* Font */}
-              <div className="question-field">
-                <label htmlFor="a-font">Font</label>
-                <select
+              <div className="ap-field">
+                <label className="field-label" htmlFor="a-font">Font</label>
+                <Select
                   id="a-font"
                   value={fontFamily}
-                  onChange={(e) => setFontFamily(e.target.value)}
-                  style={{ width: "100%", border: "1px solid var(--color-border-strong)", borderRadius: 10, padding: "10px 12px" }}
-                >
-                  <option value="">Default</option>
-                  {FONT_ALLOW_LIST.map((f) => (
-                    <option key={f} value={f}>{f}</option>
-                  ))}
-                </select>
+                  onChange={setFontFamily}
+                  options={[
+                    { value: "", label: "Default" },
+                    ...FONT_ALLOW_LIST.map((f) => ({ value: f, label: f, labelStyle: fontPreviewStyle(f) })),
+                  ]}
+                />
               </div>
             </div>
-
             {/* Live preview */}
             <AppearancePreview
               title={form.title}
@@ -2175,6 +2156,23 @@ export default function FormEditorPage() {
 
     </main>
   );
+}
+
+/** File name shown next to the cover picker: the last path segment of the image URL. */
+function coverFileName(url: string): string {
+  try {
+    const last = new URL(url).pathname.split("/").filter(Boolean).pop();
+    return last ? decodeURIComponent(last) : url;
+  } catch {
+    return url;
+  }
+}
+
+/** Shows a font option in its own face when the browser already has it, plain otherwise. */
+function fontPreviewStyle(family: string): Record<string, string> | undefined {
+  const stack = resolveTheme({ fontFamily: family }).fontFamily;
+  if (!stack || typeof document === "undefined" || !document.fonts?.check(`16px "${family}"`)) return undefined;
+  return { fontFamily: stack };
 }
 
 /**

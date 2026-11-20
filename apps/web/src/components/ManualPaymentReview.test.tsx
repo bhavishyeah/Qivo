@@ -95,6 +95,6 @@ describe("ManualPaymentSummaryBar", () => {
     );
     expect(html).toContain("12 verified · 3 pending · 1 rejected");
     expect(html).toContain("2 duplicate UTRs");
-    expect(html).toContain('<option value="verified">');
+    expect(html).toContain('aria-haspopup="listbox"');
   });
 });
