@@ -165,6 +165,7 @@ export function InvitePeople({ formId, embedded = false }: { formId: string; emb
                   style={{
                     display: "flex",
                     alignItems: "center",
+                    flexWrap: "wrap",
                     gap: 10,
                     padding: "10px 12px",
                     border: "1px solid var(--color-border)",
@@ -172,7 +173,7 @@ export function InvitePeople({ formId, embedded = false }: { formId: string; emb
                     background: "var(--color-surface-sunken)",
                   }}
                 >
-                  <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ flex: "1 1 160px", minWidth: 0, overflowWrap: "anywhere" }}>
                     <strong style={{ color: "var(--color-text)", display: "block" }}>{label}</strong>
                     {share.user ? (
                       <span style={{ color: "var(--color-text-subtle)", fontSize: "0.82rem" }}>

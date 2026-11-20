@@ -153,6 +153,7 @@ export default function FormSharePage() {
               value={publicUrl}
               style={{
                 flex: 1,
+                minWidth: 0,
                 border: "1px solid var(--color-border-strong)",
                 borderRadius: 10,
                 padding: "12px 14px",

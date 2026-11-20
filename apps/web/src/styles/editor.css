@@ -363,7 +363,24 @@ form.invite-form {
   margin-bottom: var(--space-4);
 }
 
+@media (pointer: coarse) {
+  .editor-tab {
+    min-height: 40px;
+  }
+}
+
 @media (max-width: 560px) {
+  .settings-group-header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .settings-group-header > div:first-child {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+  .settings-group-summary {
+    white-space: normal;
+  }
   .invite-form,
   form.invite-form {
     grid-template-columns: minmax(0, 1fr);
