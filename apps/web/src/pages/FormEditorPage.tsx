@@ -35,6 +35,8 @@ import Select from "../components/Select";
 import ColorField from "../components/ColorField";
 import { InvitePeople } from "../components/InvitePeople";
 import { defaultSettingsFor, isGridType } from "../lib/questionTypes";
+import ChoiceOptionsEditor from "../components/ChoiceOptionsEditor";
+import DateTimePicker from "../components/DateTimePicker";
 import {
   DuplicateIcon,
   GripIcon,
@@ -60,7 +62,6 @@ import {
   JUMP_TARGET_SUBMIT,
   type FormRecord,
   type Question,
-  type QuestionOption,
   type QuestionType,
   type ConditionRule,
   type SectionJumpRule,
@@ -1945,8 +1946,8 @@ export default function FormEditorPage() {
             </SettingsGroup>
             <SettingsGroup title="Access & Schedule" description="When the form opens and closes" summary={`${scheduledPublishAt ? "Scheduled" : "Manual publish"} · ${scheduledCloseAt ? "Auto-close set" : "No close date"}`}>
               <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-                <div className="question-field" style={{ flex: 1, minWidth: 200 }}><label htmlFor="s-publish">Scheduled publish</label><input id="s-publish" type="datetime-local" value={scheduledPublishAt} onChange={(e) => setScheduledPublishAt(e.target.value)} style={{ width: "100%", border: "1px solid var(--color-border-strong)", borderRadius: 10, padding: "10px 12px" }} /><small className="muted">Form becomes public at this time.</small></div>
-                <div className="question-field" style={{ flex: 1, minWidth: 200 }}><label htmlFor="s-close">Scheduled close</label><input id="s-close" type="datetime-local" value={scheduledCloseAt} onChange={(e) => setScheduledCloseAt(e.target.value)} style={{ width: "100%", border: "1px solid var(--color-border-strong)", borderRadius: 10, padding: "10px 12px" }} /><small className="muted">Stops accepting responses at this time.</small></div>
+                <div className="question-field" style={{ flex: 1, minWidth: 200 }}><label htmlFor="s-publish">Scheduled publish</label><DateTimePicker id="s-publish" value={scheduledPublishAt} onChange={setScheduledPublishAt} /><small className="muted">Form becomes public at this time.</small></div>
+                <div className="question-field" style={{ flex: 1, minWidth: 200 }}><label htmlFor="s-close">Scheduled close</label><DateTimePicker id="s-close" value={scheduledCloseAt} onChange={setScheduledCloseAt} {...(scheduledPublishAt ? { min: scheduledPublishAt } : {})} /><small className="muted">Stops accepting responses at this time.</small></div>
               </div>
               <div className="question-field"><label htmlFor="s-response-editing">Let respondents edit their response</label><Select id="s-response-editing" value={responseEditing} onChange={(v) => setResponseEditing(v as "disabled" | "timed" | "until_close")} options={[{ value: "disabled", label: "Off" }, { value: "timed", label: "Allow editing for a few minutes" }, { value: "until_close", label: "Allow editing until the form closes" }]} /><small className="muted">Respondents can correct their own just-submitted response in the same session.</small></div>
               {responseEditing === "timed" ? (<div className="question-field"><label htmlFor="s-response-edit-minutes">Editing window (minutes)</label><input id="s-response-edit-minutes" type="number" min={1} max={1440} value={responseEditMinutes} onChange={(e) => setResponseEditMinutes(Math.max(1, Math.min(1440, Number(e.target.value) || 1)))} style={{ width: "100%", border: "1px solid var(--color-border-strong)", borderRadius: 10, padding: "10px 12px" }} /><small className="muted">How long after submitting a respondent can edit (1–1440).</small></div>) : null}
@@ -2228,8 +2229,7 @@ function AppearancePreview({
             style={{ width: "100%", height: "auto", borderRadius: 8, marginBottom: 12, objectFit: "cover" }}
           />
         ) : null}
-        <p className="eyebrow" style={{ color: previewAccent, margin: 0 }}>Your workspace</p>
-        <h3 style={{ margin: "4px 0 12px" }}>{title || "Form title"}</h3>
+        <h3 style={{ margin: "0 0 12px" }}>{title || "Form title"}</h3>
         <div className="question-field" style={{ marginBottom: 12 }}>
           <label><span className="question-label">Sample question</span></label>
           <input type="text" placeholder="Your answer..." disabled style={{ width: "100%", border: "1px solid var(--color-border-strong)", borderRadius: 10, padding: "10px 12px" }} />
@@ -2339,27 +2339,6 @@ function QuestionCard({
     (q) => q.id !== question.id && !isGridType(q.type) && allQuestions.indexOf(q) < allQuestions.indexOf(question),
   );
   const conditionCount = question.conditions?.length ?? 0;
-
-  function addOption() {
-    const existing = question.options ?? [];
-    const newOption: QuestionOption = {
-      value: `option_${Date.now()}`,
-      label: `Option ${existing.length + 1}`,
-    };
-    onChange(question.id, { options: [...existing, newOption] });
-  }
-
-  function updateOption(idx: number, label: string) {
-    const updated = (question.options ?? []).map((o, i) =>
-      i === idx ? { ...o, label, value: label.toLowerCase().replace(/\s+/g, "_") || o.value } : o,
-    );
-    onChange(question.id, { options: updated });
-  }
-
-  function removeOption(idx: number) {
-    const updated = (question.options ?? []).filter((_, i) => i !== idx);
-    onChange(question.id, { options: updated });
-  }
 
   // "Other" is free text, so it exists for multiple choice and checkboxes only.
   const allowsOther = question.type === "SINGLE_CHOICE" || question.type === "MULTIPLE_CHOICE";
@@ -2653,80 +2632,16 @@ function QuestionCard({
 
             {/* Choice options editor */}
             {isChoice ? (
-              <div className="editor-options">
-                {(question.options ?? []).map((option, idx) => (
-                  <div key={option.value} className="editor-option-row">
-                    <span className={`editor-option-marker ${question.type === "MULTIPLE_CHOICE" ? "is-square" : ""}`} aria-hidden="true" />
-                    <input
-                      type="text"
-                      className="editor-option-input"
-                      value={option.label}
-                      onChange={(e) => updateOption(idx, e.target.value)}
-                      onClick={(e) => e.stopPropagation()}
-                      placeholder={`Option ${idx + 1}`}
-                      aria-label={`Option ${idx + 1}`}
-                    />
-                    {(question.options ?? []).length > 1 ? (
-                      <button
-                        type="button"
-                        className="editor-option-remove"
-                        onClick={(e) => { e.stopPropagation(); removeOption(idx); }}
-                        title="Remove option"
-                        aria-label="Remove option"
-                      >
-                        {"\u00d7"}
-                      </button>
-                    ) : null}
-                  </div>
-                ))}
-                {allowsOther && otherOn ? (
-                  <div className="editor-option-row">
-                    <span className={`editor-option-marker ${question.type === "MULTIPLE_CHOICE" ? "is-square" : ""}`} aria-hidden="true" />
-                    <span className="editor-option-other">Other...</span>
-                    <button
-                      type="button"
-                      className="editor-option-remove"
-                      onClick={(e) => { e.stopPropagation(); setAllowOther(false); }}
-                      title='Remove "Other"'
-                      aria-label='Remove "Other" option'
-                    >
-                      {"\u00d7"}
-                    </button>
-                  </div>
-                ) : null}
-                <div className="editor-option-row">
-                  <span className={`editor-option-marker is-ghost ${question.type === "MULTIPLE_CHOICE" ? "is-square" : ""}`} aria-hidden="true" />
-                  <button
-                    type="button"
-                    className="editor-add-option"
-                    onClick={(e) => { e.stopPropagation(); addOption(); }}
-                  >
-                    Add option
-                  </button>
-                  {allowsOther && !otherOn ? (
-                    <>
-                      <span className="editor-option-or">or</span>
-                      <button
-                        type="button"
-                        className="editor-add-option"
-                        onClick={(e) => { e.stopPropagation(); setAllowOther(true); }}
-                      >
-                        add &quot;Other&quot;
-                      </button>
-                    </>
-                  ) : null}
-                </div>
-                {shuffleOn ? (
-                  <label className="editor-inline-toggle" onClick={(e) => e.stopPropagation()}>
-                    <input
-                      type="checkbox"
-                      checked
-                      onChange={() => setShuffleOptions(false)}
-                    />
-                    <span>Shuffle option order{allowsOther && otherOn ? ' ("Other" stays last)' : ""}</span>
-                  </label>
-                ) : null}
-              </div>
+              <ChoiceOptionsEditor
+                type={question.type}
+                options={question.options ?? []}
+                allowsOther={allowsOther}
+                otherOn={otherOn}
+                shuffleOn={shuffleOn}
+                onOptionsChange={(options) => onChange(question.id, { options })}
+                onAllowOther={setAllowOther}
+                onShuffleOff={() => setShuffleOptions(false)}
+              />
             ) : null}
 
             {/* Scale / rating settings */}

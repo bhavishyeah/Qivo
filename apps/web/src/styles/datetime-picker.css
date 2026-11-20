@@ -1,0 +1,261 @@
+/* Themed date/time picker (components/DateTimePicker.tsx). react-day-picker
+   supplies the calendar structure; every colour, radius and font here comes
+   from the design tokens, so dark mode follows the app chrome. The library's
+   own CSS is imported by the component; rules below use higher specificity
+   (.dtp-panel .rdp-*) so they win regardless of load order. */
+.popover-menu.dtp-panel {
+  z-index: 1100;
+  display: grid;
+  gap: var(--space-3);
+  width: 320px;
+  max-width: calc(100vw - 16px);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+}
+.popover-menu.dtp-panel.is-sheet {
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  max-width: none;
+  padding-bottom: calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
+  border-bottom: 0;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+.dtp-trigger-text {
+  font-variant-numeric: tabular-nums;
+}
+.dtp-trigger > svg {
+  transform: none !important;
+}
+
+/* Calendar */
+.dtp-panel .rdp-root {
+  --rdp-accent-color: var(--color-primary);
+  --rdp-accent-background-color: var(--color-selected);
+  --rdp-day-height: 40px;
+  --rdp-day-width: 40px;
+  --rdp-day_button-height: 38px;
+  --rdp-day_button-width: 38px;
+  --rdp-day_button-border: 0;
+  --rdp-day_button-border-radius: var(--radius-md);
+  --rdp-selected-border: 0;
+  --rdp-today-color: var(--color-text);
+  --rdp-nav_button-height: 32px;
+  --rdp-nav_button-width: 32px;
+  --rdp-nav-height: 32px;
+  --rdp-weekday-opacity: 1;
+  --rdp-outside-opacity: 0.5;
+  --rdp-disabled-opacity: 0.35;
+  margin: 0;
+  font-family: inherit;
+}
+.dtp-panel .rdp-months {
+  max-width: 100%;
+}
+.dtp-panel .rdp-month_caption {
+  height: 32px;
+  margin-bottom: var(--space-2);
+}
+.dtp-panel .rdp-caption_label {
+  color: var(--color-text);
+  font-family: var(--font-display);
+  font-size: var(--text-md);
+  font-weight: 700;
+  letter-spacing: var(--tracking-heading);
+}
+.dtp-panel .rdp-button_previous,
+.dtp-panel .rdp-button_next {
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+.dtp-panel .rdp-button_previous:hover:not([aria-disabled="true"]),
+.dtp-panel .rdp-button_next:hover:not([aria-disabled="true"]) {
+  background: var(--color-tint);
+  color: var(--color-text);
+}
+.dtp-panel .rdp-chevron {
+  fill: currentColor;
+}
+.dtp-panel .rdp-weekday {
+  color: var(--color-text-subtle);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  text-transform: uppercase;
+}
+.dtp-panel .rdp-day_button {
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.dtp-panel .rdp-day_button:hover:not(:disabled) {
+  background: var(--color-selected);
+  color: var(--color-text);
+}
+.dtp-panel .rdp-day_button:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 1px;
+}
+.dtp-panel .rdp-today:not(.rdp-outside) .rdp-day_button {
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+  font-weight: 700;
+}
+.dtp-panel .rdp-selected .rdp-day_button,
+.dtp-panel .rdp-selected .rdp-day_button:hover:not(:disabled) {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-weight: 700;
+}
+.dtp-panel .rdp-disabled .rdp-day_button {
+  cursor: not-allowed;
+  text-decoration: line-through;
+}
+
+/* Time */
+.dtp-time {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+.dtp-time-label {
+  margin-right: auto;
+  color: var(--color-text-subtle);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+.dtp-time-colon {
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+}
+.dtp-stepper {
+  display: grid;
+  justify-items: center;
+}
+.dtp-step-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 22px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+.dtp-step-btn:hover:not(:disabled) {
+  background: var(--color-tint);
+  color: var(--color-text);
+}
+.dtp-step-value {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 36px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-input-bg);
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: var(--text-md);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.dtp-step-value:focus-visible {
+  border-color: var(--color-focus);
+  box-shadow: 0 0 0 3px var(--color-focus-halo);
+  outline: none;
+}
+.dtp-period {
+  display: inline-flex;
+  margin-left: var(--space-1);
+  padding: 2px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+}
+.dtp-period-btn {
+  min-width: 40px;
+  min-height: 32px;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.dtp-period-btn[aria-pressed="true"] {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+/* Footer */
+.dtp-footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+.dtp-link-btn {
+  min-height: 36px;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-link);
+  font: inherit;
+  font-size: var(--text-base);
+  font-weight: 600;
+  cursor: pointer;
+}
+.dtp-link-btn:hover {
+  background: var(--color-tint);
+}
+.dtp-done {
+  min-height: 36px;
+  margin-left: auto;
+  padding: 0 var(--space-5);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font: inherit;
+  font-size: var(--text-base);
+  font-weight: 700;
+  cursor: pointer;
+}
+.dtp-done:hover {
+  background: var(--color-primary-hover);
+}
+.dtp-panel :is(.dtp-link-btn, .dtp-done, .dtp-period-btn, .dtp-step-btn, .rdp-button_previous, .rdp-button_next):focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+@media (pointer: coarse) {
+  .dtp-link-btn,
+  .dtp-done,
+  .dtp-period-btn {
+    min-height: 44px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dtp-panel .rdp-day_button {
+    transition: none;
+  }
+}

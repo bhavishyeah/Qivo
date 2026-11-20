@@ -7,6 +7,7 @@ import "./styles/editor.css";
 import "./styles/auth.css";
 import "./styles/pages.css";
 import "./styles/select.css";
+import "./styles/datetime-picker.css";
 import "./styles/panels.css";
 
 import AuthGuard from "./components/AuthGuard";
