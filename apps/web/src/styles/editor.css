@@ -227,3 +227,49 @@
 .app-root .auth-card form {
   padding: 0;
 }
+
+.app-root .auth-card .eyebrow,
+.app-root .status-card .eyebrow {
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-weight: 500;
+  letter-spacing: var(--tracking-label);
+}
+
+.app-root .auth-card .submit-button {
+  border-radius: var(--radius-md);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.app-root .auth-card .submit-button:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+  transform: none;
+}
+
+.app-root .auth-card .secondary-button {
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.app-root .auth-card .secondary-button:hover:not(:disabled) {
+  background: var(--color-hover);
+}
+
+/* Legacy page wrapper (create form, share, accept invite, auth loading). */
+.app-root .page-shell,
+.app-root.page-shell {
+  background: var(--color-bg);
+}
+
+.app-root .empty-state p {
+  color: var(--color-text-muted);
+}
+
+.app-root .responses-header-actions {
+  flex-shrink: 0;
+  justify-content: flex-end;
+}
