@@ -232,6 +232,7 @@ export default function FormReportsPage() {
   const hasData = report !== null;
   useEffect(() => {
     if (!formId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- data fetch on mount/dependency change; setState happens after await
       setError("Form ID is missing.");
       setLoading(false);
       return;

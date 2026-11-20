@@ -97,7 +97,7 @@ export default function LandingPage() {
               </li>
               <li>
                 <Link to="/signup" className="btn btn-sm l-nav-cta">
-                  Start free
+                  Get started
                 </Link>
               </li>
             </ul>
@@ -113,7 +113,7 @@ export default function LandingPage() {
               </p>
               <div className="l-actions">
                 <Link to="/signup" className="btn btn-accent btn-lg">
-                  Start free
+                  Get started
                 </Link>
                 <a href="#how" className="btn btn-lg l-btn-outline">
                   See how it works
@@ -213,7 +213,7 @@ export default function LandingPage() {
             <p className="l-lede">Set up a registration form, share the link, and watch the responses come in.</p>
             <div className="l-actions">
               <Link to="/signup" className="btn btn-accent btn-lg">
-                Start free
+                Get started
               </Link>
               <Link to="/login" className="btn btn-lg l-btn-outline">
                 Log in
@@ -233,7 +233,7 @@ export default function LandingPage() {
               <Link to="/login">Log in</Link>
             </li>
             <li>
-              <Link to="/signup">Start free</Link>
+              <Link to="/signup">Get started</Link>
             </li>
             <li>
               <Link to="/forgot-password">Reset password</Link>

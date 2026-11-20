@@ -94,6 +94,7 @@ export default function WebhooksTabPanel({ formId }: { formId: string }) {
   }, [formId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- data fetch on mount/dependency change; setState happens after await
     void load();
   }, [load]);
 

@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import type { ImageAlign } from "../types";
 
 /** Size choices offered in the image menu. `null` keeps the original size. */
+// eslint-disable-next-line react-refresh/only-export-components -- shared constant/helper kept next to its component; moving it would change module layout
 export const IMAGE_SIZES: ReadonlyArray<{ id: string; label: string; width: number | null }> = [
   { id: "small", label: "Small", width: 25 },
   { id: "medium", label: "Medium", width: 50 },
@@ -20,6 +21,7 @@ const FLEX_ALIGN: Record<ImageAlign, CSSProperties["alignItems"]> = {
  * alignment does not depend on inherited text-align or the parent's layout, and
  * the caption sits in the same box as the image so it follows the same side.
  */
+// eslint-disable-next-line react-refresh/only-export-components -- shared constant/helper kept next to its component; moving it would change module layout
 export function imageLayout(
   align: ImageAlign | undefined,
   width: number | undefined | null,

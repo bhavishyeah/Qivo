@@ -19,6 +19,7 @@ export type StatCardsData = {
 };
 
 // Format a second count as a compact human duration (e.g. "2m 05s", "45s").
+// eslint-disable-next-line react-refresh/only-export-components -- shared constant/helper kept next to its component; moving it would change module layout
 export function formatDuration(seconds: number | null): string {
   if (seconds === null || !Number.isFinite(seconds) || seconds < 0) return "—";
   const total = Math.round(seconds);

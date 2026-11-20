@@ -28,6 +28,7 @@ export default function SharedWithMePage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/immutability -- load is a hoisted function declaration, safe to call from the mount effect
     void loadSharedForms();
   }, []);
 

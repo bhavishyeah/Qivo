@@ -236,6 +236,7 @@ export default function ResponseDashboardPage() {
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- data fetch on mount/dependency change; setState happens after await
     void loadResponses();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formId]);

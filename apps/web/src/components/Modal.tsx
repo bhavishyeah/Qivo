@@ -24,6 +24,7 @@ export default function Modal({
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
+  // eslint-disable-next-line react-hooks/refs -- latest-callback ref pattern; avoids re-subscribing the effect when onClose changes
   onCloseRef.current = onClose;
 
   useEffect(() => {

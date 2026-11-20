@@ -273,3 +273,7 @@
   flex-shrink: 0;
   justify-content: flex-end;
 }
+
+/* Section title input may shrink so the Delete button stays inside the card on narrow screens. */
+.app-root .editor-section-header > input { min-width: 0; }
+.app-root .editor-question-list { grid-template-columns: minmax(0, 1fr); }

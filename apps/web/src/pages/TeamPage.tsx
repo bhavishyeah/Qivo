@@ -46,6 +46,7 @@ export default function TeamPage() {
   const [savingBrand, setSavingBrand] = useState(false);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/immutability -- load is a hoisted function declaration, safe to call from the mount effect
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

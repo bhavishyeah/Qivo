@@ -31,6 +31,7 @@ export function useManualPaymentReview<R extends Row>(
   }, [formId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- data fetch on mount/dependency change; setState happens after await
     if (enabled) void refreshSummary();
   }, [enabled, refreshSummary]);
 

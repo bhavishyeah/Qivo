@@ -1,8 +1,18 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 
-/** Slot for the future SVG icon. Set it here and every wordmark picks it up. */
-export const LOGO_ICON: ReactNode = null;
+/**
+ * Icon slot. Drop the SVG at apps/web/src/assets/logo-icon.svg (square-ish
+ * viewBox, transparent background, ideally under 5KB) and every wordmark shows
+ * it before the text. With no file there, only the wordmark renders.
+ * PWA/favicon icons are separate files in apps/web/public.
+ */
+const iconFiles = import.meta.glob<string>("../assets/logo-icon.svg", {
+  eager: true,
+  query: "?url",
+  import: "default",
+});
+const ICON_URL: string | undefined = Object.values(iconFiles)[0];
 
 type LogoProps = {
   to?: string;
@@ -17,7 +27,7 @@ export default function Logo({
   to,
   size = "md",
   tone = "auto",
-  icon = LOGO_ICON,
+  icon,
   className,
   ariaLabel = "Qivo",
 }: LogoProps) {
@@ -30,6 +40,8 @@ export default function Logo({
         <span className="logo-icon" aria-hidden="true">
           {icon}
         </span>
+      ) : ICON_URL ? (
+        <img className="logo-icon" src={ICON_URL} alt="" aria-hidden="true" width={24} height={24} />
       ) : null}
       <span className="logo-word">Qivo</span>
     </>

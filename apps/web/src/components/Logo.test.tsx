@@ -27,6 +27,17 @@ describe("Logo", () => {
     expect(html).toMatch(/<span class="logo-icon" aria-hidden="true"><svg/);
   });
 
+  it("shows the logo-icon.svg asset only when that file exists", () => {
+    const hasAsset = Object.keys(import.meta.glob("../assets/logo-icon.svg", { query: "?url" })).length > 0;
+    const html = render(<Logo />);
+    expect(html).toContain(">Qivo<");
+    if (hasAsset) {
+      expect(html).toMatch(/<img class="logo-icon"[^>]*alt=""[^>]*aria-hidden="true"/);
+    } else {
+      expect(html).not.toContain("<img");
+      expect(html).not.toContain("logo-icon");
+    }
+  });
   it("applies size and tone classes", () => {
     const html = render(<Logo size="lg" tone="on-indigo" />);
     expect(html).toContain("logo-lg");

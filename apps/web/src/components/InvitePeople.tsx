@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { api, ApiRequestError } from "../lib/api";
 import type { FormShare, FormShareRole } from "../types";
 
+// eslint-disable-next-line react-refresh/only-export-components -- shared constant/helper kept next to its component; moving it would change module layout
 export const SHARE_ROLE_DESCRIPTIONS: Record<FormShareRole, string> = {
   RESPONDER: "Gets the public form link by email.",
   EDITOR: "Can edit this form.",

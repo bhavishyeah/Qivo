@@ -34,6 +34,7 @@ export default function AdminPanelPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/immutability -- load is a hoisted function declaration, safe to call from the mount effect
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
