@@ -118,7 +118,7 @@ export default function FormSharePage() {
 
   return (
     <main className="page-shell">
-      <section className="auth-card" style={{ maxWidth: 640 }}>
+      <section className="auth-card" style={{ width: "min(100%, 640px)", maxWidth: 640 }}>
         <p className="eyebrow">Share & QR</p>
 
         <h1 style={{ fontSize: "clamp(1.8rem, 4vw, 2.5rem)" }}>

@@ -66,7 +66,7 @@ html:has(.app-shell) body {
 
 /* ---------- Scrollbars ----------
    Global on purpose: scrollbars are browser chrome, so the respondent form gets them too.
-   Chromium and Safari use the ::-webkit-scrollbar rules (rounded thumb with an inset edge so it
+   Chromium and Safari use the ::-webkit-scrollbar rules (square 6px thumb with a 1px inset edge so it
    stays visible on light surfaces). Chrome 121+ ignores those rules when scrollbar-color is set,
    so the standard properties are gated to engines without ::-webkit-scrollbar (Firefox). */
 @supports not selector(::-webkit-scrollbar) {
@@ -77,25 +77,29 @@ html:has(.app-shell) body {
   }
 }
 ::-webkit-scrollbar {
-  width: 12px;
-  height: 12px;
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
 }
 ::-webkit-scrollbar-track {
+  border-radius: 0;
   background: var(--scrollbar-track);
 }
 ::-webkit-scrollbar-thumb {
-  min-height: 36px;
-  min-width: 36px;
-  border: 2px solid var(--scrollbar-track);
-  border-radius: 999px;
+  min-height: 32px;
+  min-width: 32px;
+  border-radius: 0;
   background: var(--scrollbar-thumb);
-  background-clip: padding-box;
   box-shadow: inset 0 0 0 1px var(--scrollbar-edge);
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--scrollbar-thumb-hover);
-  background-clip: padding-box;
 }
 ::-webkit-scrollbar-corner {
-  background: var(--scrollbar-track);
+  border-radius: 0;
+  background: transparent;
 }

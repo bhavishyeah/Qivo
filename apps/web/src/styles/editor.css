@@ -265,6 +265,22 @@
   background: var(--color-bg);
 }
 
+/* App pages start just below the navbar: no vertical centering, no big card margin. */
+.app-root .page-shell {
+  min-height: 0;
+  padding: var(--space-6) var(--space-5);
+}
+
+.app-root .page-shell > .auth-card {
+  margin: 0 auto;
+}
+
+@media (max-width: 640px) {
+  .app-root .page-shell {
+    padding: var(--space-4);
+  }
+}
+
 .app-root .empty-state p {
   color: var(--color-text-muted);
 }
@@ -277,3 +293,85 @@
 /* Section title input may shrink so the Delete button stays inside the card on narrow screens. */
 .app-root .editor-section-header > input { min-width: 0; }
 .app-root .editor-question-list { grid-template-columns: minmax(0, 1fr); }
+
+/* Invite people: label on top, controls share one baseline, helper text under the row. */
+.invite-intro {
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-base);
+}
+
+.invite-form,
+form.invite-form {
+  padding: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px auto;
+  gap: var(--space-1) var(--space-3);
+  align-items: end;
+  margin-bottom: var(--space-5);
+}
+
+.invite-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.invite-field label {
+  font-weight: 700;
+  font-size: var(--text-base);
+  color: var(--color-text);
+}
+
+.invite-input {
+  width: 100%;
+  height: 40px;
+  box-sizing: border-box;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-input-bg);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-md);
+}
+
+.invite-send {
+  height: 40px;
+  min-height: 40px;
+  padding-block: 0;
+  white-space: nowrap;
+}
+
+.invite-help {
+  grid-column: 2 / 3;
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--color-text-subtle);
+}
+
+.invite-access-title {
+  margin: 0 0 var(--space-3);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+  font-size: 0.95rem;
+  font-weight: 750;
+  color: var(--color-text);
+}
+
+.invite-people.is-embedded .invite-form {
+  margin-bottom: var(--space-4);
+}
+
+@media (max-width: 560px) {
+  .invite-form,
+  form.invite-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .invite-help {
+    grid-column: auto;
+  }
+  .invite-send {
+    width: 100%;
+  }
+}

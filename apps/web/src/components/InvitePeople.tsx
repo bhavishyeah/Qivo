@@ -99,17 +99,20 @@ export function InvitePeople({ formId, embedded = false }: { formId: string; emb
   }, [formId]);
 
   return (
-      <section className={embedded ? "invite-people is-embedded" : "auth-card"} style={embedded ? undefined : { maxWidth: 640, marginTop: 24 }}>
-        <p className="eyebrow">Invite people</p>
-        <h2 style={{ fontSize: "clamp(1.3rem, 3vw, 1.7rem)", marginBottom: 6 }}>
-          Share this form
-        </h2>
-        <p className="muted" style={{ marginBottom: 20, fontSize: "0.9rem" }}>
+      <section className={embedded ? "invite-people is-embedded" : "auth-card"} style={embedded ? undefined : { width: "min(100%, 640px)", maxWidth: 640, marginTop: 24 }}>
+        {embedded ? null : (
+          <>
+            <p className="eyebrow">Invite people</p>
+            <h2 style={{ fontSize: "clamp(1.3rem, 3vw, 1.7rem)", marginBottom: 6 }}>
+              Share this form
+            </h2>
+          </>
+        )}
+        <p className="muted invite-intro">
           Email the form to a responder, or give an editor/viewer access to this
           form only. New people get a sign-up link; existing Qivo users are added
           right away.
         </p>
-
         {shareMessage ? (
           <p className="editor-message" role="status" style={{ marginBottom: 16 }}>
             {shareMessage}
@@ -122,17 +125,9 @@ export function InvitePeople({ formId, embedded = false }: { formId: string; emb
           </p>
         ) : null}
 
-        <form
-          onSubmit={handleSendInvite}
-          style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "end", marginBottom: 24 }}
-        >
-          <div style={{ flex: 1, minWidth: 200 }}>
-            <label
-              htmlFor="share-email"
-              style={{ display: "block", marginBottom: 7, fontWeight: 750, fontSize: "0.86rem" }}
-            >
-              Email address
-            </label>
+        <form onSubmit={handleSendInvite} className="invite-form">
+          <div className="invite-field">
+            <label htmlFor="share-email">Email address</label>
             <input
               id="share-email"
               type="email"
@@ -140,27 +135,20 @@ export function InvitePeople({ formId, embedded = false }: { formId: string; emb
               onChange={(e) => setInviteEmail(e.target.value)}
               placeholder="person@example.com"
               required
-              style={{ width: "100%", border: "1px solid var(--color-border-strong)", borderRadius: 10, padding: "10px 12px" }}
+              className="invite-input"
             />
           </div>
-          <div>
-            <label
-              htmlFor="share-role"
-              style={{ display: "block", marginBottom: 7, fontWeight: 750, fontSize: "0.86rem" }}
-            >
-              Role
-            </label>
-            <Select id="share-role" fullWidth={false} value={inviteRole} onChange={(v) => setInviteRole(v as FormShareRole)} options={[{ value: "RESPONDER", label: "Responder" }, { value: "EDITOR", label: "Editor" }, { value: "VIEWER", label: "Viewer" }]} />
-            <p style={{ margin: "6px 0 0", fontSize: "0.75rem", color: "var(--color-text-subtle)", maxWidth: 240 }}>
-              {SHARE_ROLE_DESCRIPTIONS[inviteRole]}
-            </p>
+          <div className="invite-field">
+            <label htmlFor="share-role">Role</label>
+            <Select id="share-role" value={inviteRole} onChange={(v) => setInviteRole(v as FormShareRole)} options={[{ value: "RESPONDER", label: "Responder" }, { value: "EDITOR", label: "Editor" }, { value: "VIEWER", label: "Viewer" }]} />
           </div>
-          <button className="secondary-button" type="submit" disabled={inviting || !inviteEmail.trim()}>
+          <button className="secondary-button invite-send" type="submit" disabled={inviting || !inviteEmail.trim()}>
             {inviting ? "Sending..." : "Send invite"}
           </button>
+          <p className="invite-help">{SHARE_ROLE_DESCRIPTIONS[inviteRole]}</p>
         </form>
 
-        <h3 style={{ fontSize: "0.95rem", fontWeight: 750, color: "var(--color-text)", marginBottom: 12 }}>
+        <h3 className="invite-access-title">
           People with access
         </h3>
         {shares.length === 0 ? (
