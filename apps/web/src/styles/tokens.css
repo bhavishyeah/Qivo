@@ -1,0 +1,227 @@
+/* Qivo design tokens. Only custom properties live here.
+   Every colour is a literal hex so contrast.test.ts can read it.
+   Dark mode is driven by data-color-scheme="dark" on <html> (public/color-scheme.js). */
+
+:root {
+  /* Brand palette (theme independent) */
+  --brand-olive: #484a1c;
+  --brand-moss: #8da920;
+  --brand-cream: #daf68d;
+  --brand-lime: #b2fd00;
+  --brand-orchid: #c96bdb;
+  --brand-stone: #675540;
+  --brand-berry: #552a4f;
+  --brand-indigo: #42005f;
+  --brand-indigo-deep: #2d0042;
+
+  /* Semantic colours, light */
+  --color-bg: #fafbf5;
+  --color-surface: #ffffff;
+  --color-surface-raised: #ffffff;
+  --color-surface-sunken: #f1f3e6;
+  --color-hover: #f1f3e6;
+  --color-selected: #daf68d;
+  --color-tint: #f4f8e2;
+  --color-border: #dfe2cf;
+  --color-border-strong: #85866d;
+  --color-text: #484a1c;
+  --color-text-muted: #675540;
+  --color-text-subtle: #6f6852;
+  --color-primary: #42005f;
+  --color-primary-hover: #552a4f;
+  --color-primary-active: #2d0042;
+  --color-on-primary: #ffffff;
+  --color-link: #42005f;
+  --color-nav-indicator: #42005f;
+  --color-marker: #b2fd00;
+  --color-accent: #b2fd00;
+  --color-on-accent: #42005f;
+  --color-focus: #42005f;
+  --color-focus-halo: rgb(201 107 219 / 35%);
+  --color-input-bg: #ffffff;
+  --color-overlay: rgb(18 0 26 / 55%);
+  --color-success-text: #2f5d12;
+  --color-success-tint: #daf68d;
+  --color-warning-text: #7a4a00;
+  --color-warning-tint: #fbefcf;
+  --color-danger-text: #a8201a;
+  --color-danger-tint: #fce9e7;
+  --color-danger: #a8201a;
+  --color-on-danger: #ffffff;
+  --color-danger-hover: #8c1a15;
+
+  /* Status strips and chips */
+  --status-draft-strip: #484a1c;
+  --status-draft-bg: #e9ebd9;
+  --status-draft-fg: #484a1c;
+  --status-pending-strip: #c96bdb;
+  --status-pending-bg: #fbefcf;
+  --status-pending-fg: #7a4a00;
+  --status-published-strip: #42005f;
+  --status-published-bg: #daf68d;
+  --status-published-fg: #42005f;
+  --status-closed-strip: #675540;
+  --status-closed-bg: #efe9e0;
+  --status-closed-fg: #675540;
+  --status-archived-strip: #8da920;
+  --status-archived-bg: #e9ebd9;
+  --status-archived-fg: #675540;
+  --status-tag-bg: #f3dcf8;
+  --status-tag-fg: #552a4f;
+
+  /* Folder swatches (decorative, always next to the folder name) */
+  --folder-indigo: #42005f;
+  --folder-olive: #484a1c;
+  --folder-stone: #675540;
+  --folder-berry: #552a4f;
+  --folder-orchid: #c96bdb;
+  --folder-moss: #5f7a0a;
+
+  /* Chart series */
+  --chart-1: #42005f;
+  --chart-2: #5f7a0a;
+  --chart-3: #a63bbb;
+  --chart-4: #675540;
+  --chart-5: #484a1c;
+  --chart-6: #7a8f10;
+  --chart-grid: var(--color-border);
+  --chart-axis: var(--color-text-muted);
+
+  /* Spacing (4px base) */
+  --space-0: 0;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+  --space-9: 96px;
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-pill: 999px;
+
+  /* Shadow */
+  --shadow-1: 0 1px 2px rgb(18 0 26 / 6%);
+  --shadow-2: 0 6px 20px rgb(18 0 26 / 12%);
+  --shadow-3: 0 18px 48px rgb(18 0 26 / 22%);
+
+  /* Type */
+  --font-display: "Fraunces", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --font-body: "Schibsted Grotesk", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.25rem;
+  --text-xl: 1.75rem;
+  --text-2xl: 2.5rem;
+  --text-display: clamp(2.75rem, 1rem + 7vw, 5rem);
+  --leading-tight: 1.1;
+  --leading-snug: 1.3;
+  --leading-normal: 1.5;
+  --tracking-display: -0.035em;
+  --tracking-heading: -0.02em;
+  --tracking-label: 0.06em;
+
+  /* Layering */
+  --z-base: 0;
+  --z-sticky: 10;
+  --z-toolbar: 20;
+  --z-nav: 30;
+  --z-banner: 40;
+  --z-modal: 50;
+  --z-popover: 60;
+  --z-tooltip: 70;
+
+  /* Motion */
+  --dur-fast: 120ms;
+  --dur: 180ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Layout */
+  --container: 1180px;
+  --container-wide: 1200px;
+  --nav-h: 56px;
+
+  /* Fallback accent inside .editor-themed so unthemed canvases match the public form */
+  --form-default-accent: #2563eb;
+}
+
+[data-color-scheme="dark"] {
+  --color-bg: #12001a;
+  --color-surface: #1b0626;
+  --color-surface-raised: #2a1228;
+  --color-surface-sunken: #0c0012;
+  --color-hover: #3d2040;
+  --color-selected: #2c3a10;
+  --color-tint: #240a30;
+  --color-border: #3e2a48;
+  --color-border-strong: #7b6586;
+  --color-text: #f3f5df;
+  --color-text-muted: #cfc8b8;
+  --color-text-subtle: #a89fb0;
+  --color-primary: #b2fd00;
+  --color-primary-hover: #c6ff3d;
+  --color-primary-active: #9ee000;
+  --color-on-primary: #42005f;
+  --color-link: #daf68d;
+  --color-nav-indicator: #daf68d;
+  --color-marker: #daf68d;
+  --color-accent: #b2fd00;
+  --color-on-accent: #42005f;
+  --color-focus: #b2fd00;
+  --color-focus-halo: rgb(201 107 219 / 45%);
+  --color-input-bg: #0c0012;
+  --color-overlay: rgb(0 0 0 / 65%);
+  --color-success-text: #b8e86a;
+  --color-success-tint: #2a3a12;
+  --color-warning-text: #f2c35c;
+  --color-warning-tint: #3a2a0a;
+  --color-danger-text: #ff9d94;
+  --color-danger-tint: #4a1418;
+  --color-danger: #ff9d94;
+  --color-on-danger: #12001a;
+  --color-danger-hover: #ffb4ad;
+
+  --status-draft-strip: #a89fb0;
+  --status-draft-bg: #2a1228;
+  --status-draft-fg: #cfc8b8;
+  --status-pending-strip: #c96bdb;
+  --status-pending-bg: #3a2a0a;
+  --status-pending-fg: #f2c35c;
+  --status-published-strip: #daf68d;
+  --status-published-bg: #2a3a12;
+  --status-published-fg: #daf68d;
+  --status-closed-strip: #e3cfae;
+  --status-closed-bg: #33231a;
+  --status-closed-fg: #e3cfae;
+  --status-archived-strip: #8da920;
+  --status-archived-bg: #0c0012;
+  --status-archived-fg: #a89fb0;
+  --status-tag-bg: #3b1840;
+  --status-tag-fg: #e7b8f1;
+
+  --folder-indigo: #b99ad0;
+  --folder-olive: #a8aa5c;
+  --folder-stone: #c4a982;
+  --folder-berry: #d58ac9;
+  --folder-orchid: #c96bdb;
+  --folder-moss: #8da920;
+
+  --chart-1: #b2fd00;
+  --chart-2: #c96bdb;
+  --chart-3: #daf68d;
+  --chart-4: #8da920;
+  --chart-5: #e0a3ec;
+  --chart-6: #a89fb0;
+
+  --shadow-1: 0 1px 2px rgb(0 0 0 / 12%);
+  --shadow-2: 0 6px 20px rgb(0 0 0 / 24%);
+  --shadow-3: 0 18px 48px rgb(0 0 0 / 44%);
+}

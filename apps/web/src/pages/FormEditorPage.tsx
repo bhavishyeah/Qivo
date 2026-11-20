@@ -26,6 +26,7 @@ import {
 import { useManualPaymentReview } from "../lib/useManualPaymentReview";
 import { answerableQuestions, displayNumber, isAnswerable } from "../lib/questionKinds";
 import PopoverMenu, { type PopoverMenuItem } from "../components/PopoverMenu";
+import Logo from "../components/Logo";
 import QuestionTypeSelect from "../components/QuestionTypeSelect";
 import { GridEditor } from "../components/GridEditor";
 import { IMAGE_SIZES } from "../components/QuestionImage";
@@ -1383,7 +1384,7 @@ export default function FormEditorPage() {
         <div className="editor-topnav-inner">
           {/* Left: logo + title */}
           <div className="editor-topnav-left">
-            <Link to="/dashboard" className="editor-topnav-logo" aria-label="Qivo - back to forms" title="Back to forms">Qivo</Link>
+            <Link to="/dashboard" className="editor-topnav-logo" aria-label="Qivo - back to forms" title="Back to forms"><Logo size="md" /></Link>
             {editingTitle ? (
               <input
                 className="editor-topnav-title-input"

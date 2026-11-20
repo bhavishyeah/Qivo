@@ -147,7 +147,7 @@ export default function PopoverMenu({ label, trigger, items, triggerClassName }:
               id={menuId}
               role="menu"
               aria-label={label}
-              className="popover-menu"
+              className="popover-menu app-root"
               style={{
                 position: "fixed",
                 top: pos?.top ?? 0,

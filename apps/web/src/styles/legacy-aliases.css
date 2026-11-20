@@ -1,0 +1,46 @@
+/* Old --qivo-* names mapped onto the new tokens, for the app chrome only.
+   Defined on .app-root (a descendant of :root), so these win over the inherited
+   public-form values regardless of file order and never reach the public pages. */
+
+.app-root {
+  --qivo-primary: var(--color-primary);
+  --qivo-primary-hover: var(--color-primary-hover);
+  --qivo-text: var(--color-text);
+  --qivo-text-secondary: var(--color-text-muted);
+  --qivo-text-muted: var(--color-text-subtle);
+  --qivo-border: var(--color-border);
+  --qivo-border-hover: var(--color-border-strong);
+  --qivo-border-strong: var(--color-border-strong);
+  --qivo-bg-canvas: var(--color-bg);
+  --qivo-page-bg: var(--color-bg);
+  --qivo-bg-card: var(--color-surface);
+  --qivo-card-bg: var(--color-surface);
+  --qivo-bg-hover: var(--color-hover);
+  --qivo-surface: var(--color-surface-sunken);
+  --qivo-surface-2: var(--color-tint);
+  --qivo-input-bg: var(--color-input-bg);
+  --qivo-input-border: var(--color-border-strong);
+  --qivo-placeholder: var(--color-text-subtle);
+  --qivo-error-text: var(--color-danger-text);
+  --qivo-focus-ring: var(--color-focus-halo);
+  --qivo-danger: var(--color-danger-text);
+  --qivo-success: var(--color-success-text);
+  --qivo-radius-card: var(--radius-lg);
+  --qivo-radius-control: var(--radius-md);
+  --qivo-radius-pill: var(--radius-pill);
+  --qivo-shadow-sm: var(--shadow-1);
+  --qivo-shadow-md: var(--shadow-1);
+  --qivo-shadow-lg: var(--shadow-2);
+  --qivo-shadow-xl: var(--shadow-3);
+  --qivo-transition: var(--dur) var(--ease);
+  --qivo-transition-slow: var(--dur) var(--ease);
+  --qivo-font-title: var(--text-xl);
+  --qivo-font-section: var(--text-lg);
+  --qivo-font-label: var(--text-md);
+  --qivo-font-helper: var(--text-base);
+  --qivo-font-micro: var(--text-xs);
+}
+
+[data-color-scheme="dark"] .app-root {
+  --qivo-surface: var(--color-surface-raised);
+}

@@ -1,0 +1,201 @@
+/* Shared primitives for the app chrome: buttons, badges, cards, logo.
+   All class names are new; none is used by the public form. */
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 36px;
+  padding: 0 var(--space-4);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font: inherit;
+  font-size: var(--text-base);
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+
+.btn:disabled,
+.btn[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn[aria-busy="true"] {
+  cursor: progress;
+}
+
+.btn-primary {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+
+.btn-primary:active:not(:disabled) {
+  background: var(--color-primary-active);
+}
+
+.btn-secondary {
+  background: transparent;
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--color-hover);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--color-text);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background: var(--color-hover);
+}
+
+.btn-danger {
+  background: var(--color-danger);
+  color: var(--color-on-danger);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: var(--color-danger-hover);
+}
+
+/* Slime Lime fill, only on Indigo areas (hero, closing band, auth panel). */
+.btn-accent {
+  background: var(--brand-lime);
+  color: var(--brand-indigo);
+}
+
+.btn-accent:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+  color: var(--color-on-primary);
+}
+
+.btn-sm {
+  min-height: 28px;
+  padding: 0 var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.btn-lg {
+  min-height: 44px;
+  padding: 0 var(--space-5);
+  font-size: var(--text-md);
+}
+
+@media (pointer: coarse) {
+  .btn {
+    min-height: 44px;
+  }
+}
+
+/* Badges: mono 12px labels. Status pairs come from tokens.css. */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+  background: var(--status-draft-bg);
+  color: var(--status-draft-fg);
+}
+
+.badge-status-draft {
+  background: var(--status-draft-bg);
+  color: var(--status-draft-fg);
+}
+
+.badge-status-pending {
+  background: var(--status-pending-bg);
+  color: var(--status-pending-fg);
+}
+
+.badge-status-published {
+  background: var(--status-published-bg);
+  color: var(--status-published-fg);
+}
+
+.badge-status-closed {
+  background: var(--status-closed-bg);
+  color: var(--status-closed-fg);
+}
+
+.badge-status-archived {
+  background: var(--status-archived-bg);
+  color: var(--status-archived-fg);
+}
+
+.badge-tag {
+  background: var(--status-tag-bg);
+  color: var(--status-tag-fg);
+}
+
+/* Cards */
+.card {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+}
+
+.card-interactive {
+  transition: border-color var(--dur) var(--ease);
+}
+
+.card-interactive:hover {
+  border-color: var(--color-border-strong);
+}
+
+/* Logo wordmark (see components/Logo.tsx) */
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-link);
+  text-decoration: none;
+}
+
+.logo-icon {
+  display: inline-flex;
+  align-items: center;
+}
+
+.logo-word {
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: var(--tracking-heading);
+  line-height: 1;
+}
+
+.logo-sm .logo-word {
+  font-size: var(--text-md);
+}
+
+.logo-md .logo-word {
+  font-size: var(--text-lg);
+}
+
+.logo-lg .logo-word {
+  font-size: var(--text-xl);
+}
+
+.logo-on-indigo {
+  color: var(--brand-cream);
+}

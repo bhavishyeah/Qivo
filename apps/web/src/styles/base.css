@@ -1,0 +1,65 @@
+/* Chrome base. Every rule is scoped to .app-root, so the public form
+   (which never renders .app-root) keeps its current look. */
+
+.app-root {
+  font-family: var(--font-body);
+  font-optical-sizing: auto;
+  font-synthesis: none;
+  color: var(--color-text);
+  color-scheme: light;
+}
+
+[data-color-scheme="dark"] .app-root {
+  color-scheme: dark;
+}
+
+.app-root :is(h1, h2),
+.app-root .display {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: var(--tracking-heading);
+}
+
+.app-root :is(.mono, .kicker, .badge, .counter, code) {
+  font-family: var(--font-mono);
+}
+
+.app-root :focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* Links are underlined only where prose-like text contains them (WCAG 1.4.1). */
+.app-root .link,
+.app-root :where(.prose, .notice, .field-help, .auth-footer, .landing-copy, .modal-body p) a {
+  color: var(--color-link);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+}
+
+.app-root .link:hover,
+.app-root :where(.prose, .notice, .field-help, .auth-footer, .landing-copy, .modal-body p) a:hover {
+  text-decoration-thickness: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-root,
+  .app-root *,
+  .app-root *::before,
+  .app-root *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto;
+  }
+}
+
+/* Page sizing and background live here, never on .app-root (portals carry .app-root too). */
+.app-shell {
+  min-height: 100dvh;
+  background: var(--color-bg);
+}
+
+html:has(.app-shell) body {
+  background: var(--color-bg);
+}

@@ -1597,6 +1597,7 @@ form {
 
 .app-content {
   flex: 1;
+  min-height: 0;
 }
 
 /* Skeleton loading */
@@ -2879,89 +2880,7 @@ form {
    DESIGN SYSTEM — Consistent tokens
    ══════════════════════════════════════════════════════════════════ */
 
-:root {
-  /* Colors */
-  --qivo-primary: #2563eb;
-  --qivo-primary-hover: #1d4ed8;
-  --qivo-text: #1e293b;
-  --qivo-text-secondary: #64748b;
-  --qivo-text-muted: #94a3b8;
-  --qivo-border: #e2e8f0;
-  --qivo-border-hover: #93c5fd;
-  --qivo-bg-canvas: #f8fafc;
-  --qivo-bg-card: #ffffff;
-  --qivo-bg-hover: #f1f5f9;
-  --qivo-danger: #dc2626;
-  --qivo-success: #16a34a;
-
-  /* Radius */
-  --qivo-radius-card: 12px;
-  --qivo-radius-control: 8px;
-  --qivo-radius-pill: 999px;
-
-  /* Shadows */
-  --qivo-shadow-sm: 0 1px 3px rgb(0 0 0 / 5%);
-  --qivo-shadow-md: 0 4px 12px rgb(30 64 175 / 8%);
-  --qivo-shadow-lg: 0 8px 32px rgb(30 64 175 / 12%);
-  --qivo-shadow-xl: 0 16px 60px rgb(30 64 175 / 15%);
-
-  /* Transitions */
-  --qivo-transition: 150ms ease;
-  --qivo-transition-slow: 200ms ease;
-
-  /* Typography */
-  --qivo-font-title: 2rem;
-  --qivo-font-section: 1.25rem;
-  --qivo-font-label: 1rem;
-  --qivo-font-helper: 0.875rem;
-  --qivo-font-micro: 0.75rem;
-
-  /* ── Public-form semantic surface tokens (light = today's hex) ──
-     Dark mode (FEAT-001) flips ONLY these in the
-     [data-color-scheme="dark"] block below. Per-form accent
-     (--qivo-primary / inline accent) is never redefined there. */
-  --qivo-page-bg: #f4f7fb;
-  --qivo-card-bg: #ffffff;
-  --qivo-surface: #f8fafc;
-  --qivo-surface-2: #eff6ff;
-  --qivo-text: #1e293b;
-  --qivo-text-secondary: #64748b;
-  --qivo-text-muted: #94a3b8;
-  --qivo-border: #e2e8f0;
-  --qivo-border-strong: #cbd5e1;
-  --qivo-input-bg: #ffffff;
-  --qivo-input-border: #cbd5e1;
-  --qivo-placeholder: #94a3b8;
-  --qivo-error-text: #b91c1c;
-  --qivo-focus-ring: rgb(37 99 235 / 14%);
-}
-
-/* ── Dark mode (FEAT-001) ──────────────────────────────────────────
-   Driven by document.documentElement[data-color-scheme="dark"]
-   (set synchronously by the inline script in index.html, then by the
-   ColorSchemeToggle). Redefines ONLY neutrals/surfaces/text/borders to
-   WCAG-AA dark values. Per-form accentColor still wins via inline style
-   and --qivo-primary is intentionally untouched. */
-[data-color-scheme="dark"] {
-  --qivo-page-bg: #0f172a;
-  --qivo-card-bg: #1e293b;
-  --qivo-surface: #1e293b;
-  --qivo-surface-2: #111827;
-  --qivo-text: #f1f5f9;
-  --qivo-text-secondary: #cbd5e1;
-  --qivo-text-muted: #94a3b8;
-  --qivo-border: #334155;
-  --qivo-border-strong: #475569;
-  --qivo-input-bg: #111827;
-  --qivo-input-border: #475569;
-  --qivo-placeholder: #94a3b8;
-  --qivo-error-text: #fca5a5;
-  --qivo-focus-ring: rgb(56 189 248 / 45%);
-  /* A per-form custom light backgroundColor is not shown in dark mode:
-     the shell reads --qivo-form-bg (set inline by the pages) but dark
-     overrides it with the dark page background so text stays readable. */
-  --qivo-form-bg: var(--qivo-page-bg);
-}
+/* Tokens now live in src/styles/ (tokens.css, legacy-aliases.css, public-form-freeze.css). */
 
 /* Apply design tokens to existing components */
 

@@ -1,6 +1,7 @@
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { api, setToken } from "../lib/api";
+import Logo from "./Logo";
 
 type UserInfo = { id: string; name: string; email: string };
 
@@ -68,11 +69,14 @@ export default function AppLayout({
   // The form editor renders its own compact header (logo, title, actions and
   // tabs), so the global top bar is hidden there to avoid a double navbar.
   const isEditorRoute = /^\/forms\/[^/]+\/edit\/?$/.test(location.pathname);
+  // The preview route renders the public form, which must stay outside .app-root.
+  const isPreviewRoute = /^\/forms\/[^/]+\/preview\/?$/.test(location.pathname);
 
   return (
     <div className="app-layout">
       {sessionExpired ? (
         <div
+          className="app-root"
           style={{
             position: "fixed",
             top: 0,
@@ -100,10 +104,10 @@ export default function AppLayout({
           </button>
         </div>
       ) : null}
-      {isEditorRoute ? null : <nav className="app-nav">
+      {isEditorRoute ? null : <nav className="app-nav app-root">
         <div className="app-nav-inner">
-          <Link to="/dashboard" className="app-nav-brand">
-            Qivo
+          <Link to="/dashboard" className="app-nav-brand" aria-label="Qivo">
+            <Logo size="md" />
           </Link>
 
           <div className="app-nav-links">
@@ -178,10 +182,10 @@ export default function AppLayout({
         </div>
       </nav>}
 
-      <div className="app-content">{children}</div>
+      <div className={isPreviewRoute ? "app-content" : "app-content app-root app-shell"}>{children}</div>
 
       {/* Mobile bottom nav */}
-      <nav className="app-bottom-nav">
+      <nav className="app-bottom-nav app-root">
         <Link
           to="/dashboard"
           className={`app-bottom-nav-item ${isActive("/dashboard") ? "active" : ""}`}

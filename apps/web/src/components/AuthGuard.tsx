@@ -46,7 +46,7 @@ export default function AuthGuard({
 
   if (checking) {
     return (
-      <main className="page-shell">
+      <main className="page-shell app-root app-shell">
         <div className="status-card">
           <div className="skeleton-block" style={{ width: 200, height: 20 }} />
         </div>

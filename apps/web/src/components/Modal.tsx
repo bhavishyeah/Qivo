@@ -62,7 +62,7 @@ export default function Modal({
   }, []);
 
   return createPortal(
-    <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="modal-backdrop app-root" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div
         ref={panelRef}
         className={`modal-panel${wide ? " is-wide" : ""}`}

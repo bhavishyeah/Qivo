@@ -1,6 +1,12 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
+import './styles/tokens.css'
+import './styles/fonts.css'
+import './styles/base.css'
+import './styles/primitives.css'
+import './styles/legacy-aliases.css'
+import './styles/public-form-freeze.css'
 import App from './App.tsx'
 
 createRoot(document.getElementById('root')!).render(
