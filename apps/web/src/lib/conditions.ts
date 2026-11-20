@@ -1,4 +1,5 @@
 import type { AnswerValue, ConditionRule } from "../types";
+import { isOtherAnswer, otherText } from "./otherOption";
 
 /**
  * Evaluates whether a question should be visible based on its conditions.
@@ -29,9 +30,11 @@ export function evaluateConditions(
 
       case "contains":
         if (Array.isArray(answer)) {
-          return answer.some((a) => a.includes(rule.value ?? ""));
+          return answer.some((a) => (isOtherAnswer(a) ? otherText(a) : a).includes(rule.value ?? ""));
         }
-        return String(answer ?? "").toLowerCase().includes((rule.value ?? "").toLowerCase());
+        return (isOtherAnswer(answer) ? otherText(answer) : String(answer ?? ""))
+          .toLowerCase()
+          .includes((rule.value ?? "").toLowerCase());
 
       case "not_empty":
         if (Array.isArray(answer)) return answer.length > 0;

@@ -1,6 +1,7 @@
 // Helpers for the structured question kinds (linear scale, rating, time, grids).
 // Mirrors apps/api/src/modules/forms/questionTypes.ts.
 import type { AnswerValue, GridAnswer, Question, QuestionType } from "../types";
+import { isOtherAnswer, otherText } from "./otherOption";
 
 export const GRID_TYPES: readonly QuestionType[] = ["MULTIPLE_CHOICE_GRID", "CHECKBOX_GRID"];
 
@@ -75,7 +76,10 @@ export function isGridAnswerMissing(question: Question, value: AnswerValue | und
 /** True when a required question has no usable answer (shared by the form and preview). */
 export function isAnswerMissing(question: Question, answer: AnswerValue | undefined): boolean {
   if (isGridType(question.type)) return isGridAnswerMissing(question, answer);
-  if (Array.isArray(answer)) return answer.length === 0 || answer.every((e) => !e.trim());
+  if (Array.isArray(answer)) {
+    return answer.length === 0 || answer.every((e) => !e.trim() || (isOtherAnswer(e) && !otherText(e)));
+  }
+  if (isOtherAnswer(answer) && !otherText(answer)) return true;
   return answer === undefined || answer === null || answer === "";
 }
 

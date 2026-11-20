@@ -1,4 +1,5 @@
 import type { AnswerValue, Question } from "../types";
+import { otherAnswerProblem } from "./otherOption";
 import { isValidTime } from "./questionTypes";
 
 /**
@@ -140,6 +141,10 @@ export function validateQuestionFormat(
       return typeof value === "string" && isValidTime(value)
         ? null
         : "Please enter a valid time.";
+
+    case "SINGLE_CHOICE":
+    case "MULTIPLE_CHOICE":
+      return otherAnswerProblem(value);
 
     case "MULTI_ENTRY":
       // Non-blank entries only (mirrors the server). An all-blank array is

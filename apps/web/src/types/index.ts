@@ -41,6 +41,10 @@ export type QuestionSettings = {
   requireEachRow?: boolean;
   correctAnswer?: string;
   points?: number;
+  // Choice questions: add a free-text "Other" choice (not for dropdowns).
+  allowOther?: boolean;
+  // Choice questions: show options in a random order per respondent.
+  shuffleOptions?: boolean;
 };
 
 export type ConditionRule = {
@@ -102,6 +106,8 @@ export type FormSchema = {
     collectEmail: boolean;
     allowMultipleResponses: boolean;
     allowPartialSave?: boolean;
+    // Show questions in a random order within each section (per respondent).
+    shuffleQuestions?: boolean;
     scheduledPublishAt?: string | null;
     scheduledCloseAt?: string | null;
     quizMode?: boolean;

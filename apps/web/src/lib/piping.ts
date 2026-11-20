@@ -1,4 +1,5 @@
 import type { AnswerValue, Question } from "../types";
+import { isOtherAnswer, otherText } from "./otherOption";
 import { formatGridAnswer } from "./questionTypes";
 
 /**
@@ -40,7 +41,7 @@ function renderAnswerValue(question: Question, value: AnswerValue): string {
     if (question.type === "MULTIPLE_CHOICE") {
       const options = question.options ?? [];
       return entries
-        .map((v) => options.find((o) => o.value === v)?.label ?? v)
+        .map((v) => options.find((o) => o.value === v)?.label ?? (isOtherAnswer(v) ? otherText(v) : v))
         .join(", ");
     }
     // MULTI_ENTRY and any other string[] answer: join raw entries.
@@ -49,7 +50,7 @@ function renderAnswerValue(question: Question, value: AnswerValue): string {
 
   if (typeof value === "string") {
     if (question.type === "SINGLE_CHOICE" || question.type === "DROPDOWN") {
-      return question.options?.find((o) => o.value === value)?.label ?? value;
+      return question.options?.find((o) => o.value === value)?.label ?? (isOtherAnswer(value) ? otherText(value) : value);
     }
     if (question.type === "YES_NO") {
       return YES_NO_LABELS[value] ?? value;
