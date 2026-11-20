@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import { BrowserRouter, Route, Routes, Navigate, useLocation } from "react-router-dom";
 
 import "./App.css";
+import "./styles/shell.css";
 
 import AuthGuard from "./components/AuthGuard";
 import AppLayout from "./components/AppLayout";

@@ -3,6 +3,10 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, ApiRequestError } from "../lib/api";
 import { answerableQuestions } from "../lib/questionKinds";
 import PopoverMenu from "../components/PopoverMenu";
+import Tooltip from "../components/Tooltip";
+import { EmptyState, ErrorState, SkeletonTile } from "../components/States";
+import { useToast } from "../components/Toast";
+import { folderTone } from "../lib/folderTone";
 import type { FormRecord, WorkspaceRecord } from "../types";
 
 type FormWithCount = FormRecord & { responseCount?: number };
@@ -32,7 +36,7 @@ export default function DashboardPage() {
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [templateNotice, setTemplateNotice] = useState("");
+  const toast = useToast();
 
   // Filters (read folder from URL params)
   const [search, setSearch] = useState("");
@@ -118,6 +122,12 @@ export default function DashboardPage() {
     }
   }
 
+  function retryLoad() {
+    setError("");
+    setLoading(true);
+    void loadDashboard(activeWorkspaceId || undefined);
+  }
+
   async function switchWorkspace(wsId: string) {
     setLoading(true);
     setForms([]);
@@ -145,8 +155,7 @@ export default function DashboardPage() {
     try {
       await api.post(`/api/forms/${formId}/save-as-template`, { name: name.trim() });
       setError("");
-      setTemplateNotice(`Saved "${name.trim()}" as a template.`);
-      window.setTimeout(() => setTemplateNotice(""), 4000);
+      toast.show(`Saved "${name.trim()}" as a template.`);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : "Unable to save template.");
     }
@@ -194,52 +203,45 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <main className="dashboard-shell">
-        <div className="dashboard-header" style={{ maxWidth: 1180, margin: "0 auto 32px" }}>
-          <div className="skeleton-block" style={{ width: 280, height: 48 }} />
-          <div className="skeleton-block" style={{ width: 120, height: 40 }} />
+        <div className="dashboard-header" aria-busy="true">
+          <div className="skeleton-line skeleton-line-lg" style={{ width: 200, height: 36 }} />
+          <div className="skeleton-line" style={{ width: 110, height: 36 }} />
         </div>
-        <div className="forms-grid" style={{ maxWidth: 1180, margin: "0 auto" }}>
-          {[1, 2, 3, 4, 5, 6].map((i) => (
-            <div key={i} className="skeleton-card">
-              <div className="skeleton-block" style={{ width: "40%", height: 18, marginBottom: 14 }} />
-              <div className="skeleton-block" style={{ width: "70%", height: 24, marginBottom: 10 }} />
-              <div className="skeleton-block" style={{ width: "55%", height: 15, marginBottom: 20 }} />
-              <div className="skeleton-block" style={{ width: "30%", height: 13 }} />
-            </div>
-          ))}
+        <div className="dash-layout">
+          <div className="dash-grid" style={{ gridColumn: "1 / -1" }}>
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <SkeletonTile key={i} />
+            ))}
+          </div>
         </div>
       </main>
     );
   }
 
+  const hasFolders = folders.length > 0;
+
   return (
     <main className="dashboard-shell">
       <header className="dashboard-header">
         <div>
-          <p className="eyebrow">
+          <p className="dash-kicker">
             {workspaces.find((w) => w.id === activeWorkspaceId)?.name ?? "Workspace"}
           </p>
           <h1>Your forms</h1>
-          <p className="muted">
+          <p className="dash-count">
             {forms.length} form{forms.length !== 1 ? "s" : ""}
-            {folders.length > 0 ? ` · ${folders.length} folder${folders.length !== 1 ? "s" : ""}` : ""}
+            {folders.length > 0 ? ` \u00B7 ${folders.length} folder${folders.length !== 1 ? "s" : ""}` : ""}
           </p>
         </div>
 
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+        <div className="dash-header-actions">
           {/* Workspace switcher */}
           {workspaces.length > 1 ? (
             <select
+              className="dash-select"
+              aria-label="Workspace"
               value={activeWorkspaceId}
               onChange={(e) => void switchWorkspace(e.target.value)}
-              style={{
-                border: "1px solid #cbd5e1",
-                borderRadius: 10,
-                padding: "10px 12px",
-                background: "#fff",
-                fontSize: "0.88rem",
-                fontWeight: 600,
-              }}
             >
               {workspaces.map((ws) => (
                 <option key={ws.id} value={ws.id}>{ws.name}</option>
@@ -247,219 +249,218 @@ export default function DashboardPage() {
             </select>
           ) : null}
 
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={() => navigate("/forms/new")}
-            style={{ background: "#2563eb", color: "#fff", border: "none" }}
-          >
+          <button className="btn btn-primary" type="button" onClick={() => navigate("/forms/new")}>
             + New form
           </button>
         </div>
       </header>
 
       {error ? (
-        <section className="status-card error-card" style={{ maxWidth: 1180, margin: "0 auto 20px" }}>
-          <h2>Unable to load dashboard</h2>
-          <p>{error}</p>
-        </section>
+        <div style={{ maxWidth: "var(--container)", margin: "0 auto var(--space-4)" }}>
+          <ErrorState title="Unable to load dashboard" message={error} onRetry={retryLoad} />
+        </div>
       ) : null}
 
-      {templateNotice ? (
-        <section className="status-card" style={{ maxWidth: 1180, margin: "0 auto 20px" }} role="status">
-          <p>{templateNotice}</p>
-        </section>
-      ) : null}
-
-      {/* Filter bar */}
-      <section
-        style={{
-          display: "flex",
-          gap: 10,
-          flexWrap: "wrap",
-          alignItems: "center",
-          maxWidth: 1180,
-          margin: "0 auto 20px",
-        }}
-      >
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search forms..."
-          style={{ flex: 1, minWidth: 180, border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 14px", background: "#fff" }}
-        />
-
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-          style={{ border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px", background: "#fff" }}
-        >
-          <option value="ALL">All statuses</option>
-          <option value="DRAFT">Draft</option>
-          <option value="PENDING_REVIEW">Pending review</option>
-          <option value="PUBLISHED">Published</option>
-          <option value="CLOSED">Closed</option>
-          <option value="ARCHIVED">Archived</option>
-        </select>
-
-        {folders.length > 0 ? (
-          <select
-            value={folderFilter}
-            onChange={(e) => setFolderFilter(e.target.value)}
-            style={{ border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px", background: "#fff" }}
-          >
-            <option value="ALL">All folders</option>
-            <option value="NONE">No folder</option>
+      <div className="dash-layout">
+        {hasFolders ? (
+          <nav className="folder-rail" aria-label="Folders">
+            <p className="folder-rail-title">Folders</p>
+            <button type="button" className="folder-rail-item" aria-current={folderFilter === "ALL" ? "true" : undefined} onClick={() => setFolderFilter("ALL")}>
+              <span className="folder-dot folder-dot-none" aria-hidden="true" />
+              <span>All forms</span>
+            </button>
+            <button type="button" className="folder-rail-item" aria-current={folderFilter === "NONE" ? "true" : undefined} onClick={() => setFolderFilter("NONE")}>
+              <span className="folder-dot folder-dot-none" aria-hidden="true" />
+              <span>No folder</span>
+            </button>
             {folders.map((f) => (
-              <option key={f.id} value={f.id}>📁 {f.name}</option>
+              <button
+                key={f.id}
+                type="button"
+                className="folder-rail-item"
+                aria-current={folderFilter === f.id ? "true" : undefined}
+                onClick={() => setFolderFilter(f.id)}
+              >
+                <span className={`folder-dot folder-dot-${folderTone(f.id)}`} aria-hidden="true" />
+                <span>{f.name}</span>
+              </button>
             ))}
-          </select>
+          </nav>
         ) : null}
 
-        <select
-          value={sortBy}
-          onChange={(e) => setSortBy(e.target.value as SortOption)}
-          style={{ border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px", background: "#fff" }}
-        >
-          <option value="updatedAt">Recently updated</option>
-          <option value="createdAt">Recently created</option>
-          <option value="title">Name (A–Z)</option>
-        </select>
+        <div style={hasFolders ? undefined : { gridColumn: "1 / -1" }}>
+          {/* Filter bar */}
+          <section className="dash-filters" aria-label="Filters">
+            <div className="dash-search">
+              <input
+                className="dash-input"
+                type="search"
+                aria-label="Search forms"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search forms..."
+              />
+            </div>
 
-        <span className="muted" style={{ fontSize: "0.85rem", whiteSpace: "nowrap" }}>
-          {filteredForms.length} form{filteredForms.length !== 1 ? "s" : ""}
-        </span>
-      </section>
+            <select
+              className="dash-select"
+              aria-label="Status"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+            >
+              <option value="ALL">All statuses</option>
+              <option value="DRAFT">Draft</option>
+              <option value="PENDING_REVIEW">Pending review</option>
+              <option value="PUBLISHED">Published</option>
+              <option value="CLOSED">Closed</option>
+              <option value="ARCHIVED">Archived</option>
+            </select>
 
-      {/* Empty states */}
-      {!error && forms.length === 0 ? (
-        <section className="empty-dashboard">
-          <p className="eyebrow">No forms yet</p>
-          <h2>Create your first form.</h2>
-          <p className="muted">Start with a title and add questions from the editor.</p>
-        </section>
-      ) : null}
+            <select
+              className="dash-select"
+              aria-label="Sort"
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as SortOption)}
+            >
+              <option value="updatedAt">Recently updated</option>
+              <option value="createdAt">Recently created</option>
+              <option value="title">Name (A{"\u2013"}Z)</option>
+            </select>
 
-      {!error && forms.length > 0 && filteredForms.length === 0 ? (
-        <section className="empty-dashboard">
-          <p className="eyebrow">No matches</p>
-          <h2>No forms match your filters.</h2>
-          <p className="muted">Try adjusting your search or filters.</p>
-        </section>
-      ) : null}
+            <span className="dash-count" style={{ margin: 0, whiteSpace: "nowrap" }}>
+              {filteredForms.length} form{filteredForms.length !== 1 ? "s" : ""}
+            </span>
+          </section>
 
-      {/* Forms grid */}
-      <section className="forms-grid">
-        {filteredForms.map((form) => {
-          const questionCount =
-            form.schema?.sections?.reduce(
-      (total, s) => total + answerableQuestions(s.questions).length,
-      0,
-    ) ?? 0;
+          {/* Empty states */}
+          {!error && forms.length === 0 ? (
+            <EmptyState
+              art
+              title="Create your first form"
+              body="Start with a title, add questions in the editor, then share the link."
+              action={
+                <button className="btn btn-primary btn-lg" type="button" onClick={() => navigate("/forms/new")}>
+                  + New form
+                </button>
+              }
+            />
+          ) : null}
 
-          const folderName = form.folderId
-            ? folders.find((f) => f.id === form.folderId)?.name ?? null
-            : null;
+          {!error && forms.length > 0 && filteredForms.length === 0 ? (
+            <EmptyState title="No forms match your filters" body="Try adjusting your search or filters." />
+          ) : null}
 
-          const eventName = form.eventId
-            ? events.find((e) => e.id === form.eventId)?.name ?? null
-            : null;
+          {/* Forms grid */}
+          <section className="dash-grid" aria-label="Forms">
+            {filteredForms.map((form) => {
+              const questionCount =
+                form.schema?.sections?.reduce(
+                  (total, s) => total + answerableQuestions(s.questions).length,
+                  0,
+                ) ?? 0;
 
-          return (
-            <article className="form-tile" key={form.id}>
-              <div className="form-tile-top">
-                <span className={`status-pill status-${form.status.toLowerCase()}`}>
-                  {form.status.replace(/_/g, " ")}
-                </span>
-                <span className="muted form-tile-counts">
-                  {questionCount}Q
-                  {form.responseCount !== undefined ? ` \u00B7 ${form.responseCount}R` : ""}
-                </span>
-                {folderName ? (
-                  <span className="form-tile-badge" title="Folder">{"\uD83D\uDCC1"} {folderName}</span>
-                ) : null}
-                {eventName ? (
-                  <span className="form-tile-badge" title="Event">{"\uD83C\uDFAA"} {eventName}</span>
-                ) : null}
-              </div>
+              const folderName = form.folderId
+                ? folders.find((f) => f.id === form.folderId)?.name ?? null
+                : null;
 
-              <h2>
-                <Link className="form-tile-link" to={`/forms/${form.id}/edit`}>{form.title}</Link>
-              </h2>
+              const eventName = form.eventId
+                ? events.find((e) => e.id === form.eventId)?.name ?? null
+                : null;
 
-              {form.description ? <p className="form-tile-description">{form.description}</p> : null}
+              const statusKey = form.status.toLowerCase();
 
-              <p className="muted form-tile-date">
-                Updated {new Date(form.updatedAt).toLocaleDateString()}
-              </p>
+              return (
+                <article className={`form-card form-card-${statusKey}`} key={form.id}>
+                  <div className="form-card-meta">
+                    <span className={`badge badge-status-${statusKey === "pending_review" ? "pending" : statusKey}`}>
+                      {form.status.replace(/_/g, " ")}
+                    </span>
+                    {folderName ? <span className="badge badge-tag" title="Folder">{folderName}</span> : null}
+                    {eventName ? <span className="badge badge-tag" title="Event">{eventName}</span> : null}
+                    <span className="form-card-counts">
+                      {questionCount}Q
+                      {form.responseCount !== undefined ? ` \u00B7 ${form.responseCount}R` : ""}
+                    </span>
+                  </div>
 
-              <div className="form-tile-actions">
-                <Link
-                  className="form-tile-icon-button"
-                  to={`/forms/${form.id}/responses`}
-                  aria-label={`Responses for ${form.title}`}
-                  title="Responses"
-                >
-                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M3 3v18h18" />
-                    <path d="M8 16v-5M13 16V7M18 16v-8" />
-                  </svg>
-                </Link>
-                <Link
-                  className="form-tile-icon-button"
-                  to={`/forms/${form.id}/share`}
-                  aria-label={`Share ${form.title}`}
-                  title="Share"
-                >
-                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <circle cx="18" cy="5" r="3" />
-                    <circle cx="6" cy="12" r="3" />
-                    <circle cx="18" cy="19" r="3" />
-                    <path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" />
-                  </svg>
-                </Link>
-                <span className="form-tile-menu">
-                  <PopoverMenu
-                    label={`More actions for ${form.title}`}
-                    triggerClassName="form-tile-icon-button"
-                    trigger={
-                      <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
-                        <circle cx="12" cy="5" r="1.8" />
-                        <circle cx="12" cy="12" r="1.8" />
-                        <circle cx="12" cy="19" r="1.8" />
-                      </svg>
-                    }
-                    items={[
-                      { id: "edit", label: "Edit", href: `/forms/${form.id}/edit` },
-                      {
-                        id: "open",
-                        label: "Open public form",
-                        href: `/f/${form.slug}`,
-                        external: true,
-                        hidden: form.status !== "PUBLISHED",
-                      },
-                      { id: "duplicate", label: "Duplicate", onSelect: () => void duplicateForm(form.id) },
-                      {
-                        id: "move",
-                        label: "Move to folder",
-                        hidden: folders.length === 0,
-                        onSelect: () => openFolderDialog(form.id),
-                      },
-                      {
-                        id: "template",
-                        label: "Save as template",
-                        onSelect: () => void saveAsTemplate(form.id, form.title),
-                      },
-                    ]}
-                  />
-                </span>
-              </div>
-            </article>
-          );
-        })}
-      </section>
-      {assigningFolderId ? (
+                  <h2 className="form-card-title">
+                    <Link className="form-card-link" to={`/forms/${form.id}/edit`}>{form.title}</Link>
+                  </h2>
+
+                  {form.description ? <p className="form-card-desc">{form.description}</p> : null}
+
+                  <div className="form-card-foot">
+                    <p className="form-card-date">
+                      Updated {new Date(form.updatedAt).toLocaleDateString()}
+                    </p>
+                    <Tooltip text="Responses">
+                      <Link
+                        className="form-card-icon"
+                        to={`/forms/${form.id}/responses`}
+                        aria-label={`Responses for ${form.title}`}
+                      >
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M3 3v18h18" />
+                          <path d="M8 16v-5M13 16V7M18 16v-8" />
+                        </svg>
+                      </Link>
+                    </Tooltip>
+                    <Tooltip text="Share">
+                      <Link
+                        className="form-card-icon"
+                        to={`/forms/${form.id}/share`}
+                        aria-label={`Share ${form.title}`}
+                      >
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <circle cx="18" cy="5" r="3" />
+                          <circle cx="6" cy="12" r="3" />
+                          <circle cx="18" cy="19" r="3" />
+                          <path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" />
+                        </svg>
+                      </Link>
+                    </Tooltip>
+                    <span className="form-card-menu">
+                      <PopoverMenu
+                        label={`More actions for ${form.title}`}
+                        triggerClassName="form-card-icon"
+                        trigger={
+                          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
+                            <circle cx="12" cy="5" r="1.8" />
+                            <circle cx="12" cy="12" r="1.8" />
+                            <circle cx="12" cy="19" r="1.8" />
+                          </svg>
+                        }
+                        items={[
+                          { id: "edit", label: "Edit", href: `/forms/${form.id}/edit` },
+                          {
+                            id: "open",
+                            label: "Open public form",
+                            href: `/f/${form.slug}`,
+                            external: true,
+                            hidden: form.status !== "PUBLISHED",
+                          },
+                          { id: "duplicate", label: "Duplicate", onSelect: () => void duplicateForm(form.id) },
+                          {
+                            id: "move",
+                            label: "Move to folder",
+                            hidden: folders.length === 0,
+                            onSelect: () => openFolderDialog(form.id),
+                          },
+                          {
+                            id: "template",
+                            label: "Save as template",
+                            onSelect: () => void saveAsTemplate(form.id, form.title),
+                          },
+                        ]}
+                      />
+                    </span>
+                  </div>
+                </article>
+              );
+            })}
+          </section>
+        </div>
+      </div>      {assigningFolderId ? (
         <div className="folder-dialog-backdrop">
           <div ref={assignRef} className="folder-dialog" role="dialog" aria-modal="true" aria-label="Move to folder">
             <p className="folder-dialog-title">Move to folder</p>
@@ -483,7 +484,7 @@ export default function DashboardPage() {
                       aria-current={target?.folderId === folder.id ? "true" : undefined}
                       onClick={() => void moveToFolder(assigningFolderId, folder.id)}
                     >
-                      {"\uD83D\uDCC1"} {folder.name}
+                      <span className={`folder-dot folder-dot-${folderTone(folder.id)}`} aria-hidden="true" /> {folder.name}
                     </button>
                   ))}
                 </>

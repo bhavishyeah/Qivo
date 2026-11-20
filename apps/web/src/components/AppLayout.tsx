@@ -2,6 +2,17 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { api, setToken } from "../lib/api";
 import Logo from "./Logo";
+import UserMenu from "./UserMenu";
+import { ToastProvider } from "./Toast";
+
+const iconProps = { viewBox: "0 0 24 24", width: 22, height: 22, fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true } as const;
+const NavIcons = {
+  forms: <svg {...iconProps}><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M9 8h6M9 12h6M9 16h3" /></svg>,
+  folders: <svg {...iconProps}><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>,
+  create: <svg {...iconProps}><circle cx="12" cy="12" r="9" /><path d="M12 8v8M8 12h8" /></svg>,
+  alerts: <svg {...iconProps}><path d="M6 17V11a6 6 0 0 1 12 0v6l1.5 2h-15z" /><path d="M10 21h4" /></svg>,
+  more: <svg {...iconProps}><circle cx="5" cy="12" r="1.2" /><circle cx="12" cy="12" r="1.2" /><circle cx="19" cy="12" r="1.2" /></svg>,
+};
 
 type UserInfo = { id: string; name: string; email: string };
 
@@ -73,31 +84,16 @@ export default function AppLayout({
   const isPreviewRoute = /^\/forms\/[^/]+\/preview\/?$/.test(location.pathname);
 
   return (
+    <ToastProvider>
     <div className="app-layout">
       {sessionExpired ? (
-        <div
-          className="app-root"
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            zIndex: 100,
-            background: "#fef3c7",
-            borderBottom: "2px solid #f59e0b",
-            padding: "12px 24px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 16,
-          }}
-        >
-          <span style={{ color: "#92400e", fontWeight: 600, fontSize: "0.9rem" }}>
+        <div className="app-root notice-banner" role="alert">
+          <span>
             Your session has expired. Please log in again.
           </span>
           <button
             type="button"
-            className="secondary-button compact"
+            className="btn btn-secondary btn-sm"
             onClick={() => { setToken(null); navigate("/login"); }}
           >
             Log in
@@ -138,7 +134,6 @@ export default function AppLayout({
             <Link
               to="/notifications"
               className={`app-nav-link ${isActive("/notifications") ? "active" : ""}`}
-              style={{ position: "relative" }}
             >
               Notifications
               {unreadCount > 0 ? (
@@ -168,16 +163,7 @@ export default function AppLayout({
           </div>
 
           <div className="app-nav-user">
-            <Link to="/settings" className="app-nav-link">
-              {user.name}
-            </Link>
-            <button
-              type="button"
-              className="app-nav-logout"
-              onClick={() => void handleLogout()}
-            >
-              Log out
-            </button>
+            <UserMenu name={user.name} onLogout={() => void handleLogout()} />
           </div>
         </div>
       </nav>}
@@ -190,28 +176,28 @@ export default function AppLayout({
           to="/dashboard"
           className={`app-bottom-nav-item ${isActive("/dashboard") ? "active" : ""}`}
         >
-          <span className="app-bottom-nav-icon">📋</span>
+          <span className="app-bottom-nav-icon">{NavIcons.forms}</span>
           Forms
         </Link>
         <Link
           to="/folders"
           className={`app-bottom-nav-item ${isActive("/folders") ? "active" : ""}`}
         >
-          <span className="app-bottom-nav-icon">📁</span>
+          <span className="app-bottom-nav-icon">{NavIcons.folders}</span>
           Folders
         </Link>
         <Link
           to="/forms/new"
           className={`app-bottom-nav-item ${isActive("/forms/new") ? "active" : ""}`}
         >
-          <span className="app-bottom-nav-icon">➕</span>
+          <span className="app-bottom-nav-icon">{NavIcons.create}</span>
           Create
         </Link>
         <Link
           to="/notifications"
           className={`app-bottom-nav-item ${isActive("/notifications") ? "active" : ""}`}
         >
-          <span className="app-bottom-nav-icon">🔔</span>
+          <span className="app-bottom-nav-icon">{NavIcons.alerts}</span>
           Alerts
           {unreadCount > 0 ? <span className="app-bottom-nav-badge">{unreadCount > 9 ? "9+" : unreadCount}</span> : null}
         </Link>
@@ -219,10 +205,11 @@ export default function AppLayout({
           to="/settings"
           className={`app-bottom-nav-item ${isActive("/settings") ? "active" : ""}`}
         >
-          <span className="app-bottom-nav-icon">⚙️</span>
+          <span className="app-bottom-nav-icon">{NavIcons.more}</span>
           More
         </Link>
       </nav>
     </div>
+    </ToastProvider>
   );
 }
