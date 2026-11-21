@@ -93,6 +93,7 @@ function Protected({ children }: { children: (user: { id: string; name: string; 
 function App() {
   return (
     <BrowserRouter>
+      <ErrorBoundary fallback={<LandingLoadFailed />}>
       <Suspense fallback={<LazyFallback />}>
       <Routes>
         {/* Public routes */}
@@ -129,6 +130,7 @@ function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       </Suspense>
+      </ErrorBoundary>
     </BrowserRouter>
   );
 }
