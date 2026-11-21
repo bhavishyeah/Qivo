@@ -41,6 +41,8 @@ import {
   shouldShowSeatsCounter,
   seatsLeftLabel,
 } from "../lib/capacity";
+import { formatCloseLabel } from "../lib/closeTime";
+import ReviewBanner from "../components/ReviewBanner";
 import { clampResumeSection } from "../lib/resumeSection";
 import { resolvePipedLabel } from "../lib/piping";
 import { isImageUrl, uploadToCloudinary } from "../lib/upload";
@@ -911,6 +913,13 @@ export default function PublicFormPage() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  // Review mode: jump straight to a section; Back pops to where the user was.
+  function jumpToSection(index: number) {
+    if (index < 0 || index >= totalSections || index === currentSectionIndex) return;
+    setHistory((h) => [...h, index]);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   // ─── Loading ───────────────────────────────────────────────────────────────
 
   if (loading) {
@@ -1024,10 +1033,16 @@ export default function PublicFormPage() {
                 style={{ marginTop: 10, fontSize: "0.85rem" }}
               >
                 {editWindowExpiresAt === null
-                  ? "You can edit your response until this form closes."
-                  : `You can edit your response until ${new Date(
-                      editWindowExpiresAt,
-                    ).toLocaleTimeString()}.`}
+                  ? "You can edit your response from this page."
+                  : form?.schema.settings.responseEditing === "until_close"
+                    ? `You can edit your response until the form closes. ${formatCloseLabel(editWindowExpiresAt)}.`
+                    : `You can edit your response until ${new Date(
+                        editWindowExpiresAt,
+                      ).toLocaleTimeString([], {
+                        hour: "numeric",
+                        minute: "2-digit",
+                        timeZoneName: "short",
+                      })}.`}
               </p>
             </div>
           ) : null}
@@ -1155,6 +1170,7 @@ export default function PublicFormPage() {
               {currentSection?.title ? ` — ${currentSection.title}` : ""}
             </p>
           ) : null}
+          {isEditing ? (<ReviewBanner sections={sections} currentIndex={currentSectionIndex} onJump={jumpToSection} />) : null}
           {/* Seats-left counter. Shown only when capacity is on and seats remain
               (the fully-booked card above handles 0 seats). Read from the load
               payload; the authoritative gate is the atomic submit. */}
