@@ -10,7 +10,8 @@
 		"db:generate": "pnpm exec prisma generate",
 		"db:studio": "pnpm exec prisma studio",
 		"lint": "cd apps/web && pnpm lint",
-		"typecheck": "cd apps/api && pnpm exec tsc --noEmit && cd ../../apps/web && pnpm exec tsc --noEmit"
+		"typecheck": "cd apps/api && pnpm exec tsc --noEmit && cd ../../apps/web && pnpm exec tsc --noEmit",
+		"test:e2e": "cd apps/web && pnpm test:e2e"
 	},
 	"dependencies": {
 		"dotenv": "^17.4.2",

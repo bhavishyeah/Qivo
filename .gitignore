@@ -28,3 +28,7 @@ npm-debug.log*
 
 # Misc
 pwa-search-results.txt
+
+# Playwright
+test-results/
+playwright-report/

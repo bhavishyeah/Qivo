@@ -73,3 +73,16 @@ export default defineConfig([
 ])
 
 ```
+
+## E2E smoke tests (Playwright)
+
+The suite in `e2e/` drives the Vite dev app in the system Chrome (no browser download) against an
+in-memory fake API (`e2e/helpers/mockApi.ts`, installed with `page.route`), so no Postgres or API is needed.
+
+- Run everything: `pnpm test:e2e` (from the repo root or `apps/web`). It starts `vite` on port 5173 itself,
+  or reuses a server that is already running there.
+- One file: `pnpm test:e2e e2e/editor.spec.ts`. Debug UI: `pnpm exec playwright test --ui`.
+- Needs Google Chrome installed. Failure traces and screenshots go to `test-results/` (gitignored);
+  set `E2E_OUTPUT_DIR` to write them elsewhere.
+- A new endpoint used by a flow needs a handler in `mockApi.ts`; a request without one fails the test.
+- `pnpm test` (vitest) does not run these specs.
