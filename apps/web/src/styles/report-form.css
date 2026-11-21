@@ -1,0 +1,110 @@
+/* Report-this-form link and dialog. The link sits on the light public form and
+   follows its per-form text colour; the dialog uses the app chrome tokens. */
+.report-link {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 2px 4px;
+  font: inherit;
+  font-size: 0.8125rem;
+  color: var(--pf-muted, var(--qivo-text-muted, #5b6b80));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.report-link:hover {
+  color: var(--pf-text, var(--qivo-text, #1e293b));
+}
+.report-link:focus-visible {
+  outline: 2px solid var(--pf-accent, var(--qivo-primary, #2563eb));
+  outline-offset: 2px;
+}
+.report-footer {
+  display: flex;
+  justify-content: center;
+  margin-top: 4px;
+}
+.report-inline {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0;
+}
+.report-form {
+  display: grid;
+  gap: 16px;
+}
+.report-reasons {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.report-reasons legend {
+  padding: 0;
+  margin-bottom: 6px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+.report-reason {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 8px);
+  color: var(--color-text);
+  cursor: pointer;
+}
+.report-reason input {
+  accent-color: var(--color-primary);
+  margin: 0;
+}
+.report-reason:has(input:checked) {
+  background: var(--color-selected);
+  border-color: var(--color-primary);
+}
+.report-reason:has(input:focus-visible) {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+.report-field {
+  display: grid;
+  gap: 6px;
+}
+.report-field label {
+  font-weight: 600;
+  color: var(--color-text);
+}
+.report-field textarea,
+.report-field input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 12px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md, 8px);
+  background: var(--color-input-bg);
+  color: var(--color-text);
+  font: inherit;
+}
+.report-field textarea {
+  resize: vertical;
+}
+.report-count {
+  justify-self: end;
+  color: var(--color-text-subtle);
+}
+.report-hp {
+  position: absolute;
+  left: -10000px;
+  top: auto;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+.report-done p {
+  margin: 8px 0 0;
+  color: var(--color-text);
+}

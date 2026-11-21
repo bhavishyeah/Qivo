@@ -1,0 +1,45 @@
+.admin-reports-filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.admin-reports-scroll {
+  overflow-x: auto;
+}
+.admin-reports-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  color: var(--color-text);
+}
+.admin-reports-table th,
+.admin-reports-table td {
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--color-border);
+}
+.admin-reports-table th {
+  color: var(--color-text-muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.admin-reports-details {
+  max-width: 28ch;
+  overflow-wrap: anywhere;
+}
+.admin-reports-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.admin-reports-actions a {
+  text-decoration: none;
+}
+.admin-reports-pager {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 12px;
+}

@@ -47,6 +47,7 @@ import { isImageUrl, uploadToCloudinary } from "../lib/upload";
 import SignaturePad, { type SignaturePadHandle } from "../components/SignaturePad";
 import { useForceLightScheme } from "../lib/useForceLightScheme";
 import ManualUpiPayment from "../components/ManualUpiPayment";
+import ReportFormLink from "../components/ReportFormLink";
 import { formatInr, normalizeUtr, validateManualPayment } from "../lib/manualUpi";
 import { ensureFontLoaded, resolveTheme } from "../lib/theme";
 import { publicFormVars } from "../lib/publicFormTheme";
@@ -1091,6 +1092,12 @@ export default function PublicFormPage() {
     nextSectionAfter(sections, currentSectionIndex, answers).kind === "submit";
   const showManualUpi =
     form.manualUpi?.enabled === true && !isEditing && showsSubmitStep;
+  // Neutral warning on the payment step of a form respondents reported as a scam.
+  const showFlagBanner =
+    form.flagged === true &&
+    !isEditing &&
+    showsSubmitStep &&
+    (showManualUpi || form.payment?.required === true);
 
   return (
     <main
@@ -1268,6 +1275,26 @@ export default function PublicFormPage() {
             </div>
           ) : null}
 
+          {showFlagBanner ? (
+            <p className="public-flag-banner" role="note">
+              <svg
+                viewBox="0 0 24 24"
+                width="18"
+                height="18"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M12 3 2.5 20h19L12 3Z" />
+                <path d="M12 10v4" />
+                <path d="M12 17.2v.1" />
+              </svg>
+              <span>This form was reported. Verify the payee before paying.</span>
+            </p>
+          ) : null}
           {/* Respondent-entered payment amount — shown on the last section of a
               respondent-mode form (not while editing a saved response). */}
           {isRespondentPayment && isLastSection && !isEditing ? (
@@ -1575,6 +1602,9 @@ export default function PublicFormPage() {
         </form>
 
         <p className="public-form-brand">Powered by Qivo Forms</p>
+        <p className="report-footer">
+          <ReportFormLink slug={slug ?? null} />
+        </p>
       </div>
     </main>
   );

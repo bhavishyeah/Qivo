@@ -65,6 +65,7 @@ model User {
   formSharesInvited FormShare[]       @relation("FormShareInviter")
   formTemplates     FormTemplate[]    @relation("FormTemplateCreator")
   webhooks          Webhook[]         @relation("WebhookCreator")
+  formReportsReviewed FormReport[]    @relation("FormReportReviewer")
 }
 
 model Session {
@@ -148,6 +149,7 @@ model Form {
   updatedAt   DateTime   @updatedAt
   deletedAt   DateTime?
   lastDigestSentAt DateTime?
+  flaggedAt   DateTime?
 
   workspace Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   folder    Folder?        @relation(fields: [folderId], references: [id], onDelete: SetNull)
@@ -159,6 +161,7 @@ model Form {
   webhooks  Webhook[]
   payments  Payment[]
   drafts    FormDraft[]
+  reports   FormReport[]
 
   @@index([workspaceId])
   @@index([folderId])
@@ -290,6 +293,7 @@ enum NotificationType {
   RESPONSE_MILESTONE
   FORM_SHARED
   FORM_CLOSED
+  FORM_REPORTED
 }
 
 model Notification {
@@ -403,6 +407,39 @@ model Payment {
 
   form     Form          @relation(fields: [formId], references: [id], onDelete: Cascade)
   response FormResponse? @relation(fields: [responseId], references: [id], onDelete: SetNull)
+
+  @@index([formId])
+  @@index([status])
+}
+
+enum FormReportReason {
+  SCAM
+  SPAM
+  IMPERSONATION
+  OTHER
+}
+
+enum FormReportStatus {
+  OPEN
+  REVIEWED
+  DISMISSED
+}
+
+model FormReport {
+  id            String           @id @default(cuid())
+  formId        String
+  reason        FormReportReason
+  details       String?
+  reporterEmail String?
+  ipHash        String
+  userAgent     String?
+  status        FormReportStatus @default(OPEN)
+  createdAt     DateTime         @default(now())
+  reviewedAt    DateTime?
+  reviewedById  String?
+
+  form       Form  @relation(fields: [formId], references: [id], onDelete: Cascade)
+  reviewedBy User? @relation("FormReportReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
 
   @@index([formId])
   @@index([status])

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import Select from "../components/Select";
+import AdminReports from "../components/AdminReports";
 import { api, ApiRequestError } from "../lib/api";
 import type { WorkspaceRecord } from "../types";
 
@@ -143,6 +144,9 @@ export default function AdminPanelPage() {
           </section>
         </div>
       ) : null}
+      <div className="page-col">
+        <AdminReports />
+      </div>
     </main>
   );
 }

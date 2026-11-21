@@ -189,6 +189,8 @@ export type PublicForm = {
   slug: string;
   title: string;
   description?: string | null;
+  // True once enough respondents reported this form as a scam.
+  flagged?: boolean;
   branding?: {
     workspaceName: string;
     logoUrl?: string | null;

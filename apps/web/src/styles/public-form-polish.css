@@ -454,6 +454,23 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+.public-form-shell .public-flag-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border: 1px solid #f2c46d;
+  border-radius: 10px;
+  background: #fff8e6;
+  color: #7a3b05;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+.public-form-shell .public-flag-banner svg {
+  flex: none;
+  margin-top: 1px;
+}
 .public-form-shell .manual-upi-warning {
   display: flex;
   align-items: flex-start;

@@ -11,7 +11,8 @@ type NotificationType =
   | "MEMBER_REMOVED"
   | "RESPONSE_MILESTONE"
   | "FORM_SHARED"
-  | "FORM_CLOSED";
+  | "FORM_CLOSED"
+  | "FORM_REPORTED";
 
 export async function createNotification(input: {
   userId: string;
@@ -98,6 +99,7 @@ export async function notifyFormEvent(input: {
     RESPONSE_MILESTONE: `"${input.formTitle}" reached a response milestone.`,
     FORM_SHARED: `A form was shared with you.`,
     FORM_CLOSED: `"${input.formTitle}" has been closed.`,
+    FORM_REPORTED: `"${input.formTitle}" was reported by several respondents. Check the payee details.`,
   };
 
   const titles: Record<NotificationType, string> = {
@@ -111,6 +113,7 @@ export async function notifyFormEvent(input: {
     RESPONSE_MILESTONE: "Response milestone",
     FORM_SHARED: "Form shared with you",
     FORM_CLOSED: "Form closed",
+    FORM_REPORTED: "Form reported",
   };
 
   // Don't notify the actor themselves

@@ -3,6 +3,7 @@ import { QRCodeSVG } from "qrcode.react";
 import type { PublicManualUpi } from "../types";
 import { buildUpiUri, formatInr } from "../lib/manualUpi";
 import { uploadToCloudinary } from "../lib/upload";
+import ReportFormLink from "./ReportFormLink";
 
 const MAX_PROOF_BYTES = 5 * 1024 * 1024;
 
@@ -213,6 +214,11 @@ export default function ManualUpiPayment({
         </p>
       </div>
 
+      {!preview && slug ? (
+        <p className="report-inline">
+          <ReportFormLink slug={slug} />
+        </p>
+      ) : null}
       <hr className="manual-upi-divider" />
       <header className="manual-upi-head">
         <p className="manual-upi-step">Step 2 of 2</p>

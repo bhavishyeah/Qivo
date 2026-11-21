@@ -1853,6 +1853,8 @@ export async function getPublicForm(
     slug: form.slug,
     title: form.title,
     description: form.description,
+    // Boolean only: respondents see a neutral warning, never report details.
+    flagged: form.flaggedAt !== null,
     branding: {
       workspaceName: form.workspace.name,
       logoUrl: form.workspace.logoUrl,
