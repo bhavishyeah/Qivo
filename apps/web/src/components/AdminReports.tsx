@@ -113,7 +113,7 @@ export function ReportsTable({
   );
 }
 
-/** Platform-admin report queue. Renders nothing for accounts without access. */
+/** Platform-admin report queue. Renders nothing for accounts without access and until the first access check resolves. */
 export default function AdminReports() {
   const [filter, setFilter] = useState<StatusFilter>("OPEN");
   const [page, setPage] = useState(1);
@@ -156,6 +156,9 @@ export default function AdminReports() {
   }
 
   if (!allowed) return null;
+  // Hide the moderation chrome until the first access check resolves, so
+  // non-admins never see the reports section (not even a loading flash).
+  if (!data && !error) return null;
   const pages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
 
   return (

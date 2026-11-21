@@ -85,4 +85,14 @@ describe("AdminReports", () => {
     await waitFor(() => expect(api.get).toHaveBeenCalled());
     await waitFor(() => expect(container.innerHTML).toBe(""));
   });
+
+  it("hides the moderation chrome until the first access check resolves", async () => {
+    // In-flight access check that never settles: the Reports heading and filter
+    // buttons must not render at all, or non-admins would see them briefly.
+    api.get.mockImplementation(() => new Promise(() => {}));
+    render(<AdminReports />);
+    expect(screen.queryByRole("heading", { name: "Reports" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Report status" })).toBeNull();
+    expect(screen.queryByText("Loading reports...")).toBeNull();
+  });
 });
