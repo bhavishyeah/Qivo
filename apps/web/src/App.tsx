@@ -13,32 +13,35 @@ import "./styles/panels.css";
 import AuthGuard from "./components/AuthGuard";
 import AppLayout from "./components/AppLayout";
 import ErrorBoundary from "./components/ErrorBoundary";
+// First-hit routes (sign-in and the public form) stay in the main chunk: a lazy
+// chunk would add a network round trip before the page can render.
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
-import ForgotPasswordPage from "./pages/ForgotPasswordPage";
-import ResetPasswordPage from "./pages/ResetPasswordPage";
-import VerifyEmailPage from "./pages/VerifyEmailPage";
-import DashboardPage from "./pages/DashboardPage";
-import SharedWithMePage from "./pages/SharedWithMePage";
-import CreateFormPage from "./pages/CreateFormPage";
-import FormEditorPage from "./pages/FormEditorPage";
-import FormSharePage from "./pages/FormSharePage";
-import FormPreviewPage from "./pages/FormPreviewPage";
-import ResponseDashboardPage from "./pages/ResponseDashboardPage";
 import PublicFormPage from "./pages/PublicFormPage";
-import QRDisplayPage from "./pages/QRDisplayPage";
-import TeamPage from "./pages/TeamPage";
-import FoldersPage from "./pages/FoldersPage";
-import NotificationsPage from "./pages/NotificationsPage";
-import SettingsPage from "./pages/SettingsPage";
-import AuditLogPage from "./pages/AuditLogPage";
-import EventsPage from "./pages/EventsPage";
-import AdminPanelPage from "./pages/AdminPanelPage";
-import AcceptInvitePage from "./pages/AcceptInvitePage";
 import { getToken } from "./lib/api";
 import { guestRedirectPath } from "./lib/guestRedirect";
+const ForgotPasswordPage = lazy(() => import("./pages/ForgotPasswordPage"));
+const ResetPasswordPage = lazy(() => import("./pages/ResetPasswordPage"));
+const VerifyEmailPage = lazy(() => import("./pages/VerifyEmailPage"));
+const DashboardPage = lazy(() => import("./pages/DashboardPage"));
+const SharedWithMePage = lazy(() => import("./pages/SharedWithMePage"));
+const CreateFormPage = lazy(() => import("./pages/CreateFormPage"));
+const FormEditorPage = lazy(() => import("./pages/FormEditorPage"));
+const FormSharePage = lazy(() => import("./pages/FormSharePage"));
+const FormPreviewPage = lazy(() => import("./pages/FormPreviewPage"));
+const ResponseDashboardPage = lazy(() => import("./pages/ResponseDashboardPage"));
+const QRDisplayPage = lazy(() => import("./pages/QRDisplayPage"));
+const TeamPage = lazy(() => import("./pages/TeamPage"));
+const FoldersPage = lazy(() => import("./pages/FoldersPage"));
+const NotificationsPage = lazy(() => import("./pages/NotificationsPage"));
+const SettingsPage = lazy(() => import("./pages/SettingsPage"));
+const AuditLogPage = lazy(() => import("./pages/AuditLogPage"));
+const EventsPage = lazy(() => import("./pages/EventsPage"));
+const AdminPanelPage = lazy(() => import("./pages/AdminPanelPage"));
+const AcceptInvitePage = lazy(() => import("./pages/AcceptInvitePage"));
 
-// Lazy-loaded pages (heavy dependencies like recharts)
+// Every page is its own chunk so a route only downloads what it renders.
+// (FormReportsPage also pulls in recharts.)
 const FormReportsPage = lazy(() => import("./pages/FormReportsPage"));
 // Landing is guest-only, so logged-in users never download this chunk.
 const LandingPage = lazy(() => import("./pages/LandingPage"));
@@ -90,6 +93,7 @@ function Protected({ children }: { children: (user: { id: string; name: string; 
 function App() {
   return (
     <BrowserRouter>
+      <Suspense fallback={<LazyFallback />}>
       <Routes>
         {/* Public routes */}
         <Route path="/" element={<GuestOnly><ErrorBoundary fallback={<LandingLoadFailed />}><Suspense fallback={<div className="landing-boot" />}><LandingPage /></Suspense></ErrorBoundary></GuestOnly>} />
@@ -124,6 +128,7 @@ function App() {
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 }
